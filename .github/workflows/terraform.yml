@@ -6,10 +6,18 @@ on:
     paths:
       - 'infrastructure/**'
       - '.github/workflows/terraform.yml'
+      - 'config.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+      - '.github/workflows/terraform.yml'
+      - 'config.yaml'
   workflow_dispatch:  # Allow manual triggering
 
 env:
   TF_VERSION: '~> 1.13.4'
+  WORKING_DIR: ./infrastructure
 
 jobs:
   terraform-plan:
@@ -27,6 +35,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
+    - name: Load Config from YAML
+      id: read_config
+      run: |
+        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.gcp_region' $config.yaml)" >> $GITHUB_ENV
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
@@ -34,41 +48,42 @@ jobs:
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v1'
+      uses: 'google-github-actions/auth@v3'
       with:
-        workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
-        service_account: 'terraform-sa@nimble-acrobat-422115-q8.iam.gserviceaccount.com'
+        workload_identity_provider: 'projects/${{ env.GCP_PROJECT_ID }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+        service_account: 'terraform-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 
     - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
+      uses: 'google-github-actions/setup-gcloud@v3'
 
     - name: Terraform Init
       id: tf-init
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: |
         terraform init \
-          -backend-config="bucket=${{ secrets.GOOGLE_CLOUD_PROJECT_ID }}-terraform-state" \
+          -backend-config="bucket=${{ env.GCP_PROJECT_ID }}-terraform-state" \
           -backend-config="prefix=synapse"
 
     - name: Terraform Format Check
       id: tf-fmt
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: terraform fmt -check
       continue-on-error: true
 
     - name: Terraform Validate
       id: tf-validate
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: terraform validate -no-color
 
     - name: Terraform Plan
       id: tf-plan
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: |
         export exitcode=0
         terraform plan -detailed-exitcode -no-color -out tfplan \
-          -var="project_id=${{ secrets.GOOGLE_CLOUD_PROJECT_ID }}" \
-          -var="region=${{ secrets.REGION }}" \
+          -var="project_id=${{ env.GCP_PROJECT_ID }}" \
+          -var="region=${{ env.GCP_REGION }}" \
+          -var="github_repo=${{ env.GITHUB_REPO }}" # \
         || export exitcode=$?
         
         echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
@@ -80,34 +95,26 @@ jobs:
           exit 0
         fi
 
-    - name: Publish Terraform Plan
-      uses: actions/upload-artifact@v3
+    - name: Publish Terraform Plan Artifact
+      uses: actions/upload-artifact@v4
       with:
         name: tfplan
-        path: ./infrastructure/tfplan
+        path: ${{ env.WORKING_DIR }}/tfplan
 
-    - name: Create String Output
+    # This logic is simplified and corrected
+    - name: Publish Plan to Summary
       id: tf-plan-string
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: |
         TERRAFORM_PLAN=$(terraform show -no-color tfplan)
         
-        delimiter="$(openssl rand -hex 8)"
-        echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
-        echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
-        echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
-        echo "" >> $GITHUB_OUTPUT
-        echo '```terraform' >> $GITHUB_OUTPUT
-        echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
-        echo '```' >> $GITHUB_OUTPUT
-        echo "</details>" >> $GITHUB_OUTPUT
-        echo "${delimiter}" >> $GITHUB_OUTPUT
-
-    - name: Publish Terraform Plan to Task Summary
-      env:
-        SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
-      run: |
-        echo "$SUMMARY"
+        echo "## Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
+        echo "<details><summary>Click to expand</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```terraform' >> $GITHUB_STEP_SUMMARY
+        echo "$TERRAFORM_PLAN" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
 
   terraform-apply:
     name: Terraform Apply
@@ -121,7 +128,16 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
+
+    # This step is also new
+    # TODO: see if env.WORKING_DIR is necessary or makes any difference (I have it there and not there to test)
+    - name: Load Config from YAML
+      id: read_config
+      run: |
+        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' ${{ env.WORKING_DIR }}/config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.gcp_region' ${{ env.WORKING_DIR }}/config.yaml)" >> $GITHUB_ENV
+        echo "GITHUB_REPO=$(yq e '.github_repo' config.yaml)" >> $GITHUB_ENV 
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -130,34 +146,34 @@ jobs:
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v1'
+      uses: 'google-github-actions/auth@v3' # Updated to v3
       with:
-        workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
-        service_account: 'terraform-sa@nimble-acrobat-422115-q8.iam.gserviceaccount.com'
+        workload_identity_provider: 'projects/${{ env.GCP_PROJECT_ID }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+        service_account: 'terraform-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 
     - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
+      uses: 'google-github-actions/setup-gcloud@v2' # Updated to v2
 
     - name: Download Terraform Plan
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4 # Updated to v4
       with:
         name: tfplan
-        path: ./infrastructure
+        path: ${{ env.WORKING_DIR }}
 
     - name: Terraform Init
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: |
         terraform init \
-          -backend-config="bucket=${{ env.PROJECT_ID }}-terraform-state" \
+          -backend-config="bucket=${{ env.GCP_PROJECT_ID }}-terraform-state" \
           -backend-config="prefix=synapse"
 
     - name: Terraform Apply
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: terraform apply -auto-approve tfplan
 
     - name: Terraform Output
       id: tf-output
-      working-directory: ./infrastructure
+      working-directory: ${{ env.WORKING_DIR }}
       run: |
         echo "## Terraform Apply Completed Successfully! ✅" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
