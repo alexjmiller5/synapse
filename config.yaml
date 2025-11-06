@@ -1,3 +1,3 @@
-google_cloud_project_id: synapse-477401
+gcp_project_id: synapse-477401
 region: us-east-1
-github: alexjmiller/synapse
+github-repository: alexjmiller/synapse

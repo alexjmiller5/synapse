@@ -25,7 +25,7 @@ Synapse is a serverless application designed to eliminate the friction of manual
 
 ### Prerequisites
 
-1. **Python 3.12+**
+1. **Python 3.13+**
 2. **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager
 3. **Google Cloud SDK**
 4. **Terraform** (optional, for infrastructure management)
@@ -123,3 +123,4 @@ For project
 - create an automated solution / docs for updating the secrets in GCP so that it's documented and not solely based manually updating them in the UI
 - Also all i need for an ai summary is a cloud function webhook which is trigger by a notion automation every time a new task is made. or instead i could just have a webhook set up via the notion api that pings my cloud function when a new task is made. Then the cloud function can make a patch request to update the ai summarized title. This would be super useful because then every task would have an ai summarized title automatically
 - cut down the scripts in the scripts folder. -- they are kind of verbose with a lot of comments and I haven't looked through them in depth
+- add functionality where links are recognized by gemini and verified by code later to be actual links and then added to the list of links text proerpty in notion for tasks

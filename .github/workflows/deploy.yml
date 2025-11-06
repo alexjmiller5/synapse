@@ -19,7 +19,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: '3.15'
+        python-version: '3.13'
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
@@ -50,11 +50,12 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: 'Read configuration from config.yaml'
-      id: 'read_config'
+    - name: Load Configuration from YAML
+      id: read_config
       run: |
-        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.gcp_region' config.yaml)" >> $GITHUB_ENV
+        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.region' $config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.github-repository' $config.yaml)" >> $GITHUB_ENV
 
     - name: 'Authenticate to Google Cloud'
       id: 'auth'
