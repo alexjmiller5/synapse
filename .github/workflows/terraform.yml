@@ -38,9 +38,7 @@ jobs:
     - name: Load Configuration from YAML
       id: read_config
       run: |
-        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.region' $config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.github-repository' $config.yaml)" >> $GITHUB_ENV
+        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
