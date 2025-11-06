@@ -1,0 +1,1 @@
+# 7. Twice a day, Cloud Scheduler triggers the `reporting-function`, which queries recent activity logs from before the last summary was sent and sends a summary email.
