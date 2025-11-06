@@ -35,11 +35,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
-    - name: Load Config from YAML
+    - name: Load Configuration from YAML
       id: read_config
       run: |
         echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.gcp_region' $config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.region' $config.yaml)" >> $GITHUB_ENV
+        echo "GCP_REGION=$(yq e '.github-repository' $config.yaml)" >> $GITHUB_ENV
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
