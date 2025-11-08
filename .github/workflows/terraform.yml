@@ -35,12 +35,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
-    - name: Debug file paths
-      run: |
-        pwd
-        echo "---"
-        ls -R
-
     - name: Load Configuration from YAML
       id: read_config
       run: |
