@@ -35,10 +35,16 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
+    - name: Debug file paths
+      run: |
+        pwd
+        echo "---"
+        ls -R
+
     - name: Load Configuration from YAML
       id: read_config
       run: |
-        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' ../config.yml >> $GITHUB_ENV
+        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -130,11 +136,10 @@ jobs:
       uses: actions/checkout@v5
 
     # This step is also new
-    # TODO: see if env.WORKING_DIR is necessary or makes any difference (I have it there and not there to test)
     - name: Load Configuration from YAML
       id: read_config
       run: |
-        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' ../config.yml >> $GITHUB_ENV
+        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
