@@ -88,5 +88,5 @@ jobs:
             GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
           flags: >-
             ${{ matrix.service.trigger_topic && 
-                format('--trigger-topic={0} --no-allow-unauthenticated', matrix.service.trigger_topic) || 
+                '--no-allow-unauthenticated' || 
                 '--allow-unauthenticated' }}
