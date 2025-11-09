@@ -4,82 +4,115 @@ on:
   push:
     branches: [ main ]
     paths:
-      # These paths are now more specific to your service code
-      - 'services/**.py'
-      - 'services/**/pyproject.toml'
+      - 'services/**'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'config.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v5
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.13' # 3.13 might not be in buildpacks yet -- gotta check in the docs myself
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        version: "latest"
-    - name: Install dependencies
-      run: uv sync --dev
-    - name: Run tests
-      run: uv run pytest tests/ -v --cov=services
+permissions:
+  contents: read
+  id-token: write
 
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # 1. Discover services from filesystem + pyproject.toml
+  # ──────────────────────────────────────────────────────────────
+  discover-services:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Discover services
+        id: set-matrix
+        run: |
+          # Find all service dirs with pyproject.toml
+          services=$(find services -maxdepth 2 -name pyproject.toml -exec dirname {} \; | sort)
+          
+          matrix_json=$(echo "$services" | jq -R . | jq -s 'map({
+            name: (split("/")[-1]),
+            path: .,
+            # Extract entry_point from pyproject.toml [project.scripts] or metadata
+            entry_point: (
+              if test -f (./pyproject.toml) then
+                . as $path
+                | fromjson
+                | .project.scripts // empty
+                | to_entries[0].key
+              else empty end
+            ),
+            # Default triggers — override in pyproject.toml if needed
+            trigger_http: true,
+            trigger_topic: null
+          })')
+          
+          echo "matrix=$(echo "$matrix_json" | jq -c '{include: .}')" >> $GITHUB_OUTPUT
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. Test each service in parallel
+  # ──────────────────────────────────────────────────────────────
+  test:
+    needs: discover-services
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.discover-services.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.path }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install workspace + service
+        run: |
+          uv sync --frozen --all-extras
+
+      - name: Run tests
+        run: |
+          uv run pytest tests/ -v --cov=src --cov-report=term-missing
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. Deploy only on main
+  # ──────────────────────────────────────────────────────────────
   deploy:
     if: github.ref == 'refs/heads/main'
-    needs: test
+    needs: [discover-services, test]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
     strategy:
-      matrix:
-        service:
-          - name: 'processor'
-            path: 'services/processor'  # <-- ADDED: Path to the specific service's code
-            entry_point: 'process'  # <-- This must match your *real* function name
-            trigger_http: true
-          - name: 'reporter'
-            path: 'services/reporter' # <-- ADDED: Path to the specific service's code
-            entry_point: 'report' # <-- This must match your *real* function name
-            trigger_topic: 'reporter'
-
+      matrix: ${{ fromJson(needs.discover-services.outputs.matrix) }}
     steps:
-    - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-    - name: Load Configuration from yml
-      id: read_config
-      run: |
-        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
+      - name: Load config
+        run: |
+          yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
-    - name: 'Authenticate to Google Cloud'
-      id: 'auth'
-      uses: 'google-github-actions/auth@v3'
-      with:
-        workload_identity_provider: 'projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-        service_account: 'deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com'
+      - name: Auth GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: 'projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com'
 
-    - name: 'Deploy ${{ matrix.service.name }}'
-      id: 'deploy'
-      # --- CHANGED: Using the Cloud Run action ---
-      uses: 'google-github-actions/deploy-cloudrun@v2'
-      with:
-        # 'name' is now 'service'
-        service: ${{ matrix.service.name }}
-        region: ${{ env.region }}
-        
-        # 'source_dir' is now 'source' and points to our matrix path
-        source: ${{ matrix.service.path }}
-
-        # --- How the entry_point is set ---
-        # We pass the entry point as an env var that the
-        # Google Buildpack knows how to read.
-        env_vars: |
-          GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
+      - name: Deploy ${{ matrix.name }}
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ matrix.name }}
+          region: ${{ env.region }}
+          source: ${{ matrix.path }}
+          env_vars: |
+            GOOGLE_FUNCTION_TARGET=${{ matrix.entry_point }}
+          flags: >-
+            ${{ matrix.trigger_topic && 
+                format('--trigger-topic={0} --no-allow-unauthenticated', matrix.trigger_topic) || 
+                '--allow-unauthenticated' }}
