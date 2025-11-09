@@ -38,6 +38,7 @@ Synapse is a serverless application designed to eliminate the friction of manual
 1. **Set up local development environment :**
 
    ```bash
+   chmod +x ./scripts/setup-local-env.sh
    eval $(./scripts/setup_local_env.sh)
    ```
 
@@ -124,3 +125,4 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - refactor the setup local env script to work with python file structure / figure out how the functions framework works with local development and set it up with my project's structure. Do i want to have a bunch of duped pyproject.tomls???
 - Add authentication 2.0 to the cloud function so that not just anyone can ping it there's a firebase api and something else i'll need -- i'll add this after i get the pipeline working
 - make the terraform plan and apply step in the pipeline autmatically get the environment variables from the yaml file and set them as vars when they run instead of having them hardcoded
+- learn more about uv and consider how to use it instead of stupid uv pip install -e everywhere
