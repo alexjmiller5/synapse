@@ -83,32 +83,3 @@ jobs:
         # Google Buildpack knows how to read.
         env_vars: |
           GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
-
-    # --- ⬆️ END OF MAIN CHANGE ⬆️ ---
-
-    - name: 'Update Deployment Summary'
-      run: |
-        # Write the header only on the first run of the matrix
-        if [ ${{ strategy.job-index }} -eq 0 ]; then
-          echo "## Deployment Successful! ✅" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          # --- CHANGED: 'Function' to 'Service' ---
-          echo "| Service | Region | Trigger |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|---------|" >> $GITHUB_STEP_SUMMARY
-        fi
-
-        # Determine the trigger type for the summary table
-        TRIGGER_TYPE="HTTP (Public)" # <-- Updated for clarity
-        if [ -n "${{ matrix.service.trigger_topic }}" ]; then
-          TRIGGER_TYPE="Pub/Sub (${{ matrix.service.trigger_topic }})"
-        fi
-        
-        # --- CHANGED: 'function' to 'service' ---
-        echo "| **${{ matrix.service.name }}** | \`${{ env.region }}\` | ${TRIGGER_TYPE} |" >> $GITHUB_STEP_SUMMARY
-        
-        # If the service is HTTP-triggered, add its URL to the summary
-        if [ "${{ matrix.service.trigger_http }}" == "true" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 **${{ matrix.service.name }} URL:**" >> $GITHUB_STEP_SUMMARY
-            echo "\`${{ steps.deploy.outputs.url }}\`" >> $GITHUB_STEP_SUMMARY
-        fi
