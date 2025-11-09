@@ -9,3 +9,6 @@
 # Python cache files
 *.egg-info/
 __pycache__/
+
+# MacOS files
+.DS_Store
