@@ -72,7 +72,6 @@ jobs:
         run: |
           yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
-            - name: Generate requirements.txt for ${{ matrix.service.name }}
       - name: Generate requirements.txt
         run: |
           cd ${{ matrix.service.path }}
