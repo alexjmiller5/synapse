@@ -72,12 +72,13 @@ jobs:
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: terraform validate -no-color
 
+      # TODO: Make this get the terraform project variables dynamically from the config.yml
     - name: Terraform Plan
       id: tf-plan
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: |
         terraform plan \
-          -var="project_id=${{ env.gcp_project_id }}" \
+          -var="gcp_project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
           -var="github_repo=${{ env.github_repo }}" \
           -out=tfplan
