@@ -82,7 +82,7 @@ jobs:
         terraform plan -detailed-exitcode -no-color -out tfplan \
           -var="project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
-          -var="github_repo=${{ env.github_repo }}" \
+          -var="github_repo=${{ env.github_repo }}"
         || export exitcode=$?
         
         echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
