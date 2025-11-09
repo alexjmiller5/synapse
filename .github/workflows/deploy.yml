@@ -78,14 +78,11 @@ jobs:
         run: |
           cd ${{ matrix.service.path }}
           
-          # Install uv if not already available
-          pip install uv
-          
           if [ -f "pyproject.toml" ]; then
             echo "Exporting dependencies using uv..."
             
             # Use uv to export dependencies in requirements.txt format
-            uv pip compile pyproject.toml -o requirements.txt --no-dev
+            uv pip compile pyproject.toml -o requirements.txt
             
             echo "Generated requirements.txt:"
             cat requirements.txt
