@@ -20,8 +20,8 @@ env:
   INFRASTRUCTURE_DIR: ./infrastructure
 
 jobs:
-  terraform-apply:
-    name: Terraform Plan
+  terraform:
+    name: Terraform
     runs-on: ubuntu-latest
     outputs:
       tfplanExitCode: ${{ steps.tf-plan.outputs.exitcode }}
