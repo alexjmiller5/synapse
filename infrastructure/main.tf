@@ -1,7 +1,6 @@
 # Enable required APIs
 resource "google_project_service" "services" {
   for_each = toset([
-    "cloudfunctions.googleapis.com",
     "secretmanager.googleapis.com",
     "cloudscheduler.googleapis.com",
     "aiplatform.googleapis.com",
@@ -10,7 +9,8 @@ resource "google_project_service" "services" {
     "iam.googleapis.com",
     "cloudbuild.googleapis.com",
     "run.googleapis.com",       
-    "eventarc.googleapis.com"
+    "eventarc.googleapis.com",
+    "artifactregistry.googleapis.com"
   ])
 
   service            = each.value
@@ -21,7 +21,7 @@ resource "google_project_service" "services" {
 
 resource "google_storage_bucket" "terraform_state" {
   name     = "${var.project_id}-terraform-state"
-  location = var.gcs_region
+  location = var.region
 
   versioning {
     enabled = true
@@ -35,47 +35,6 @@ resource "google_storage_bucket" "terraform_state" {
       type = "Delete"
     }
   }
-}
-
-resource "google_storage_bucket" "function_bucket" {
-  name     = "${var.project_id}-synapse-functions"
-  location = var.gcs_region
-
-  depends_on = [google_project_service.services]
-}
-
-data "archive_file" "placeholder_zip" {
-  type        = "zip"
-  output_path = "${path.module}/placeholder.zip"
-
-  # Source 1: The new main.py
-  source {
-    filename = "main.py"
-    content  = <<-EOT
-    import functions_framework
-
-    @functions_framework.http
-    def placeholder_http(request):
-        """A minimal placeholder function."""
-        return 'Placeholder OK', 200
-    EOT
-  }
-
-  # Source 2: The requirements.txt file
-  source {
-    filename = "requirements.txt"
-    # This is the required library for GCF Gen 2
-    content  = "functions-framework"
-  }
-}
-
-
-# Create a placeholder zip file for initial deployment
-resource "google_storage_bucket_object" "placeholder_source" {
-  name   = "placeholder.zip"
-  bucket = google_storage_bucket.function_bucket.name
-  # Upload the zip file created by the archive_file data source
-  source = data.archive_file.placeholder_zip.output_path
 }
 
 # --- Secrets ---
@@ -100,24 +59,76 @@ resource "google_secret_manager_secret" "secrets" {
   depends_on = [google_project_service.services]
 }
 
-# --- Reporting Function Infrastructure ---
+# --- Eventarc Trigger for Reporter Service ---
 
-resource "google_pubsub_topic" "reporting_topic" {
-  name = "synapse-reporting"
+resource "google_eventarc_trigger" "reporter_trigger" {
+  name     = "reporter-trigger"
+  location = var.region
+  project  = var.project_id
+
+  # 1. The event to listen for
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.pubsub.topic.v1.messagePublished"
+  }
+
+  # 2. The topic to listen on
+  transport {
+    pubsub {
+      topic = google_pubsub_topic.reporter_topic.id
+    }
+  }
+
+  # 3. The service to send the event to
+  destination {
+    cloud_run_service {
+      service = module.reporter_service.service_name
+      region  = var.region
+    }
+  }
+
+  # 4. The service account for the trigger itself
+  service_account = google_service_account.function_sa.email
+}
+
+# Allow the reporter service to be invoked by Eventarc
+resource "google_cloud_run_service_iam_member" "reporter_invoker" {
+  service  = module.reporter_service.service_name
+  location = var.region
+  project  = var.project_id
+  role     = "roles/run.invoker"
+  
+  # This member is the SA that Eventarc uses
+  member   = "serviceAccount:${google_service_account.function_sa.email}" 
+}
+
+# Allow the processor service to be invoked by the public
+resource "google_cloud_run_service_iam_member" "processor_invoker" {
+  service  = module.processor_service.service_name
+  location = var.region
+  project  = var.project_id
+  role     = "roles/run.invoker"
+  member   = "allUsers" 
+}
+
+# --- Reporter Function Infrastructure ---
+
+resource "google_pubsub_topic" "reporter_topic" {
+  name = "reporter"
 
   depends_on = [google_project_service.services]
 }
 
-resource "google_cloud_scheduler_job" "reporting_job" {
+resource "google_cloud_scheduler_job" "reporter_job" {
   name        = "synapse-daily-report"
-  description = "Trigger daily Synapse reporting"
+  description = "Trigger daily Synapse reporter"
   schedule    = "0 8,20 * * *" # 8 AM and 8 PM daily
   time_zone   = "UTC"
   region      = var.region
   attempt_deadline = "180s"
 
   pubsub_target {
-    topic_name = google_pubsub_topic.reporting_topic.id
+    topic_name = google_pubsub_topic.reporter_topic.id
     data       = base64encode(jsonencode({}))
   }
 
@@ -195,12 +206,11 @@ resource "google_project_iam_member" "terraform_sa_roles" {
   member  = google_service_account.terraform_sa.member
 }
 
-resource "google_project_iam_member" "deploy_sa_cloudfunctions" {
+resource "google_project_iam_member" "deploy_sa_run_admin" {
   project = var.project_id
-  role    = "roles/cloudfunctions.developer"
+  role    = "roles/run.admin" # <-- This is the new role
   member  = google_service_account.deploy_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_iam_user" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
@@ -233,37 +243,29 @@ resource "google_project_iam_member" "function_monitoring" {
 # with two small, clean module calls.
 #
 
-module "ingestion_function" {
-  source = "./modules/cloud-functions"
+module "processor_service" {
+  source = "./modules/cloud-service" # <-- Note the new path
 
-  # --- Inputs ---
-  name                   = "synapse-ingestion"
-  entry_point            = "placeholder_http"
+  name                   = "processor"
   location               = var.region
   project_id             = var.project_id
   service_account_email  = google_service_account.function_sa.email
-  source_bucket_name     = google_storage_bucket.function_bucket.name
   max_instance_count     = 10
   available_memory       = "512Mi"
-  # event_trigger_topic_id is left unset (defaults to null)
-  
 
   depends_on = [google_project_service.services]
 }
 
-module "reporting_function" {
-  source = "./modules/cloud-functions"
+module "reporter_service" {
+  source = "./modules/cloud-service" # <-- Note the new path
 
   # --- Inputs ---
-  name                   = "synapse-reporting"
-  entry_point            = "placeholder_http"
+  name                   = "reporter" 
   location               = var.region
   project_id             = var.project_id
   service_account_email  = google_service_account.function_sa.email
-  source_bucket_name     = google_storage_bucket.function_bucket.name
   max_instance_count     = 1
   available_memory       = "256Mi"
-  event_trigger_topic_id = google_pubsub_topic.reporting_topic.id # This function gets a trigger
 
   depends_on = [google_project_service.services]
 }
