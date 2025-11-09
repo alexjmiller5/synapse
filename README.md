@@ -126,3 +126,6 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - Add authentication 2.0 to the cloud function so that not just anyone can ping it there's a firebase api and something else i'll need -- i'll add this after i get the pipeline working
 - make the terraform plan and apply step in the pipeline autmatically get the environment variables from the yaml file and set them as vars when they run instead of having them hardcoded
 - learn more about uv and consider how to use it instead of stupid uv pip install -e everywhere
+- Figure out why the terraform deployment service account doesn't have access to modify EVERYTHING -- it really should especailly iam roles
+- Figure out if there's a better way to deploy each coud function separate isntead of the matrix -- they seem to be edpendent on each other rn and shouldn't be -- I'm considering giving each its own deployment pipeline
+- add pertinent info to github step summary markdown file from pipeline
