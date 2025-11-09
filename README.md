@@ -129,3 +129,4 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - Figure out why the terraform deployment service account doesn't have access to modify EVERYTHING -- it really should especailly iam roles
 - Figure out if there's a better way to deploy each coud function separate isntead of the matrix -- they seem to be edpendent on each other rn and shouldn't be -- I'm considering giving each its own deployment pipeline
 - add pertinent info to github step summary markdown file from pipeline
+- pin my python version for my functions
