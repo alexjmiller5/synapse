@@ -6,13 +6,13 @@ on:
     paths:
       - 'infrastructure/**'
       - '.github/workflows/terraform.yml'
-      - 'config.yaml'
+      - 'config.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'infrastructure/**'
       - '.github/workflows/terraform.yml'
-      - 'config.yaml'
+      - 'config.yml'
   workflow_dispatch:  # Allow manual triggering
 
 env:
@@ -35,7 +35,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
-    - name: Load Configuration from YAML
+    - name: Load Configuration from yml
       id: read_config
       run: |
         yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
@@ -82,7 +82,7 @@ jobs:
         terraform plan -detailed-exitcode -no-color -out tfplan \
           -var="project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
-          -var="github_repo=${{ env.github_repository }}" # \
+          -var="github_repo=${{ env.github_repo }}" # \
         || export exitcode=$?
         
         echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
@@ -130,7 +130,7 @@ jobs:
       uses: actions/checkout@v5
 
     # This step is also new
-    - name: Load Configuration from YAML
+    - name: Load Configuration from yml
       id: read_config
       run: |
         yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV

@@ -77,7 +77,7 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 
 Use the scripts/manage_secrets.sh script to create and update secrets in Google Secret Manager.
 
-### Config variables in config.yaml
+### Config variables in config.yml
 
 - `gmail-sender-email`: Gmail address for sending reports
 - `gmail-recipient-email`: Email to receive reports
@@ -115,7 +115,7 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - I can still use some kinda script to validate that the requests actually make sense with some kinda json validator. Maybe I can start with a template for adding a new page to a database (this’ll be the most common request) and patching the quick notes as the fallback. Those are the two key capabilities and ai doesn’t really have to write that json instead of writing json and using requests actually ill just use the notion client for python and give it the proper input for allxthe properties I need. Just have to convert it from the ais way of interpreting it vs the programmatic json notion client way of seeing the data
 - something else good would be for this is making sure to store the logs of all the queries somewhere and how they were analyzed so i can manually mark them as success and failure. Also a marked on my notion on whether or no it was ai added.
 - add dependabot to keep dependencies up to date functionality -- this would be a nice to have functionality that I'll just let sit there and eventually old dependencies will be updated automatically over time and I'll learn about how it works
-- Add terragrunt to be able to manage the version of terraform in one place (the `config.yaml`) instead of two -- also it gives flexibility in the future if i have mulitple environments. It also has an autoinit feature where I don't have to run terraform init
+- Add terragrunt to be able to manage the version of terraform in one place (the `config.yml`) instead of two -- also it gives flexibility in the future if i have mulitple environments. It also has an autoinit feature where I don't have to run terraform init
 - terraform version is managed via the main.tf file in addition to the github actions env var -- those need to be kept in sync. Other dependency versions are just kept in the pyproject.toml
 - i should honestly' make a separate infra repo for the terraform code and dpeloyment script
 - Make it so that links are included in the links property if they're found in the quick note free test

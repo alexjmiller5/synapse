@@ -18,10 +18,10 @@ set -e
 #
 # The 'eval' is necessary to activate the virtual environment
 # in your current shell.
-#
+# Run me from the root directory of the project.
 
-CONFIG_FILE="../config.yaml"
-TF_VARS_FILE="../infrastructure/terraform.tfvars"
+CONFIG_FILE="config.yml"
+TF_VARS_FILE="./infrastructure/terraform.tfvars"
 VENV_DIR=".venv"
 
 # --- Helper Functions ---
@@ -35,7 +35,7 @@ check_command() {
     fi
 }
 
-# Function to read from config.yaml
+# Function to read from config.yml
 get_config() {
     yq e ".$1" "$CONFIG_FILE"
 }
@@ -62,15 +62,19 @@ setup_terraform() {
             echo "Error: 'infrastructure' directory not found. Please run this script from the root of your project." >&2
             exit 1
         fi
+
+        # TODO: Fix this to dynamically load all the yaml variables from the yaml file instead of hardcoding them
         
-        # Read values from config.yaml
+        # Read values from config.yml
         local project_id
         local region
+        local gcs_region
         local github_repo
         
-        project_id=$(get_config "google_cloud_project_id")
+        project_id=$(get_config "gcp_project_id")
         region=$(get_config "region")
-        github_repo=$(get_config "github_repo") # Assumes you added this to config.yaml
+        gcs_region=$(get_config "gcs_region")
+        github_repo=$(get_config "github_repo") # Assumes you added this to config.yml
 
         if [ -z "$github_repo" ] || [ "$github_repo" == "null" ]; then
             echo "Warning: 'github_repo' not found in $CONFIG_FILE. Using a placeholder." >&2
@@ -84,6 +88,7 @@ setup_terraform() {
 # DO NOT COMMIT THIS FILE. Add it to .gitignore.
 
 project_id  = "$project_id"
+gcs_region      = "$gcs_region"
 region      = "$region"
 github_repo = "$github_repo"
 EOF
