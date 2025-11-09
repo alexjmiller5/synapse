@@ -17,7 +17,7 @@ resource "google_project_service" "services" {
 }
 
 resource "google_storage_bucket" "terraform_state" {
-  name     = "${var.project_id}-terraform-state"
+  name     = "${var.gcp_project_id}-terraform-state"
   location = var.region
 
   versioning {
@@ -59,7 +59,7 @@ resource "google_secret_manager_secret" "secrets" {
 resource "google_eventarc_trigger" "reporter_trigger" {
   name     = "reporter-trigger"
   location = var.region
-  project  = var.project_id
+  project  = var.gcp_project_id
 
   # 1. The event to listen for
   matching_criteria {
@@ -90,7 +90,7 @@ resource "google_eventarc_trigger" "reporter_trigger" {
 resource "google_cloud_run_service_iam_member" "reporter_invoker" {
   service  = module.reporter_service.service_name
   location = var.region
-  project  = var.project_id
+  project  = var.gcp_project_id
   role     = "roles/run.invoker"
 
   # This member is the SA that Eventarc uses
@@ -101,7 +101,7 @@ resource "google_cloud_run_service_iam_member" "reporter_invoker" {
 resource "google_cloud_run_service_iam_member" "processor_invoker" {
   service  = module.processor_service.service_name
   location = var.region
-  project  = var.project_id
+  project  = var.gcp_project_id
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -141,13 +141,13 @@ resource "google_service_account" "function_sa" {
 # --- Workload Identity Federation (for GitHub Actions CI/CD) ---
 
 resource "google_iam_workload_identity_pool" "github_pool" {
-  project                   = var.project_id
+  project                   = var.gcp_project_id
   workload_identity_pool_id = "github-pool"
   display_name              = "GitHub Actions Pool"
 }
 
 resource "google_iam_workload_identity_pool_provider" "github_provider" {
-  project                            = var.project_id
+  project                            = var.gcp_project_id
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub Actions Provider"
@@ -166,13 +166,13 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
 # --- CI/CD Service Accounts & Permissions ---
 
 resource "google_service_account" "terraform_sa" {
-  project      = var.project_id
+  project      = var.gcp_project_id
   account_id   = "terraform-sa"
   display_name = "Terraform Service Account"
 }
 
 resource "google_service_account" "deploy_sa" {
-  project      = var.project_id
+  project      = var.gcp_project_id
   account_id   = "deploy-sa"
   display_name = "Deployment Service Account"
 }
@@ -194,60 +194,66 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
 }
 
 # --- Project-level Roles ---
+resource "google_project_iam_member" "cloud_build_artifact_writer" {
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
 resource "google_project_iam_member" "terraform_sa_iam_admin" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/resourcemanager.projectIamAdmin" # 
   member  = google_service_account.terraform_sa.member
 }
 
 resource "google_project_iam_member" "deploy_sa_artifact_writer" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/artifactregistry.writer"
   member  = google_service_account.deploy_sa.member
 }
 
 resource "google_project_iam_member" "terraform_sa_roles" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/editor" # TODO: Note: 'editor' is broad. Scope this down for production.
   member  = google_service_account.terraform_sa.member
 }
 
 resource "google_project_iam_member" "deploy_sa_run_admin" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/run.admin" # <-- This is the new role
   member  = google_service_account.deploy_sa.member
 }
 resource "google_project_iam_member" "deploy_sa_iam_user" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/iam.serviceAccountUser"
   member  = google_service_account.deploy_sa.member
 }
 
 # --- Function SA Roles ---
 resource "google_project_iam_member" "function_secrets" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
 resource "google_project_iam_member" "function_logging" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
 resource "google_project_iam_member" "function_monitoring" {
-  project = var.project_id
+  project = var.gcp_project_id
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
 module "processor_service" {
-  source = "./modules/cloud-service" # <-- Note the new path
+  source = "./modules/cloud-service"
 
   name                  = "processor"
   location              = var.region
-  project_id            = var.project_id
+  gcp_project_id        = var.gcp_project_id
   service_account_email = google_service_account.function_sa.email
   max_instance_count    = 10
   available_memory      = "512Mi"
@@ -258,12 +264,12 @@ module "processor_service" {
 }
 
 module "reporter_service" {
-  source = "./modules/cloud-service" # <-- Note the new path
+  source = "./modules/cloud-service"
 
   # --- Inputs ---
   name                  = "reporter"
   location              = var.region
-  project_id            = var.project_id
+  gcp_project_id        = var.gcp_project_id
   service_account_email = google_service_account.function_sa.email
   max_instance_count    = 1
   available_memory      = "256Mi"

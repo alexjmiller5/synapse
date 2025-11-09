@@ -1,7 +1,7 @@
 resource "google_cloud_run_service" "this" {
   name     = var.name
   location = var.location
-  project  = var.project_id
+  project  = var.gcp_project_id
 
   # This creates an "empty shell."
   # Your CI/CD pipeline will create the first revision

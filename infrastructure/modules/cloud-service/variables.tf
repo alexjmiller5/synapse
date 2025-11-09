@@ -8,7 +8,7 @@ variable "location" {
   type        = string
 }
 
-variable "project_id" {
+variable "gcp_project_id" {
   description = "The GCP project ID."
   type        = string
 }
