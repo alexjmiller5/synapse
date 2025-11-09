@@ -1,4 +1,3 @@
-# Enable required APIs
 resource "google_project_service" "services" {
   for_each = toset([
     "secretmanager.googleapis.com",
@@ -17,8 +16,6 @@ resource "google_project_service" "services" {
   disable_on_destroy = false
 }
 
-# --- Storage Buckets ---
-
 resource "google_storage_bucket" "terraform_state" {
   name     = "${var.project_id}-terraform-state"
   location = var.region
@@ -36,8 +33,6 @@ resource "google_storage_bucket" "terraform_state" {
     }
   }
 }
-
-# --- Secrets ---
 
 resource "google_secret_manager_secret" "secrets" {
   for_each = toset([
@@ -241,13 +236,6 @@ resource "google_project_iam_member" "function_monitoring" {
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
-
-#
-# ========== MODULE CALLS ==========
-#
-# Here is where we replace the two large resource blocks
-# with two small, clean module calls.
-#
 
 module "processor_service" {
   source = "./modules/cloud-service" # <-- Note the new path
