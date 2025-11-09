@@ -81,6 +81,7 @@ jobs:
           -var="gcp_project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
           -var="github_repo=${{ env.github_repo }}" \
+          -var="gcp_project_number=${{ env.gcp_project_number }}" \
           -out=tfplan
 
     - name: Terraform Apply
