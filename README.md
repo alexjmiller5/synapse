@@ -126,3 +126,5 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - set up a container only keep latest 10 images in artifact registry to save on costs
 - eventually I should set up the services to just call cloud run jobs in the background instead of cloud functions. This would be more scalable and I wouldn't have to worry about function timeouts. But for now functions are fine
 - eventually make environment variables in deploy.yml to be uppercase since they're lowercase rn since they take from the config.yml file
+- Add something about how when you add new config variables you gotta rerun the setup script to get them in the tfvars file
+- refactor the setup local env script to work with python file structure / figure out how the functions framework works with local development and set it up with my project's structure. Do i want to have a bunch of duped pyproject.tomls???
