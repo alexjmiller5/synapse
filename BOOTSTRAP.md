@@ -1,4 +1,4 @@
-### Bootstrap Process
+# Bootstrap Process
 
 1. **Authenticate as Admin:**
 
@@ -11,7 +11,7 @@
     * Commented out the entire `backend "gcs" {}` block in `infrastructure/terraform.tf`.
 
 3. **Initialize Local Backend:**
-    
+
     ```bash
     terraform init
     ```
@@ -32,6 +32,7 @@
       -backend-config="bucket=$(yq e '.google_cloud_project_id' ../config.yml)-terraform-state" \
       -backend-config="prefix=synapse"
     ```
+
     * Confirmed `yes` at the prompt.
 
 7. **Clean Up Local State:**
