@@ -5,15 +5,15 @@ set -e
 # Synapse Project - Interactive Secret Setter
 #
 # This script interactively updates the values of your GCP secrets.
-# It reads the project ID from config.yaml and prompts you
+# It reads the project ID from config.yml and prompts you
 # to update the specific secrets defined in the 'SECRET_NAMES' array.
 #
 # USAGE:
 # 1. Make it executable: chmod +x set_secrets.sh
 # 2. Run it: ./set_secrets.sh
-#
+# Run me from the root directory of the project.
 
-CONFIG_FILE="../config.yaml"
+CONFIG_FILE="config.yml"
 
 # --- Helper Functions ---
 
@@ -26,7 +26,7 @@ check_command() {
     fi
 }
 
-# Function to read from config.yaml
+# Function to read from config.yml
 get_config() {
     yq e ".$1" "$CONFIG_FILE"
 }

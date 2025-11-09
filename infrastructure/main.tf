@@ -7,7 +7,10 @@ resource "google_project_service" "services" {
     "aiplatform.googleapis.com",
     "pubsub.googleapis.com",
     "cloudresourcemanager.googleapis.com",
-    "iam.googleapis.com"
+    "iam.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "run.googleapis.com",       
+    "eventarc.googleapis.com"
   ])
 
   service            = each.value
@@ -18,7 +21,7 @@ resource "google_project_service" "services" {
 
 resource "google_storage_bucket" "terraform_state" {
   name     = "${var.project_id}-terraform-state"
-  location = var.region
+  location = var.gcs_region
 
   versioning {
     enabled = true
@@ -36,16 +39,43 @@ resource "google_storage_bucket" "terraform_state" {
 
 resource "google_storage_bucket" "function_bucket" {
   name     = "${var.project_id}-synapse-functions"
-  location = var.region
+  location = var.gcs_region
 
   depends_on = [google_project_service.services]
 }
 
+data "archive_file" "placeholder_zip" {
+  type        = "zip"
+  output_path = "${path.module}/placeholder.zip"
+
+  # Source 1: The new main.py
+  source {
+    filename = "main.py"
+    content  = <<-EOT
+    import functions_framework
+
+    @functions_framework.http
+    def placeholder_http(request):
+        """A minimal placeholder function."""
+        return 'Placeholder OK', 200
+    EOT
+  }
+
+  # Source 2: The requirements.txt file
+  source {
+    filename = "requirements.txt"
+    # This is the required library for GCF Gen 2
+    content  = "functions-framework"
+  }
+}
+
+
 # Create a placeholder zip file for initial deployment
 resource "google_storage_bucket_object" "placeholder_source" {
-  name    = "placeholder.zip"
-  bucket  = google_storage_bucket.function_bucket.name
-  content = base64decode("UEsDBAoAAAAIAAAAAACAAAAAAAAAAAAAAAAACAAAAG1haW4ucHlLycnPLFZIzMksyS9SSMPowSkpMrfSASkwAVBLBBQAAAAAAAAAAAAA")
+  name   = "placeholder.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  # Upload the zip file created by the archive_file data source
+  source = data.archive_file.placeholder_zip.output_path
 }
 
 # --- Secrets ---
@@ -84,6 +114,7 @@ resource "google_cloud_scheduler_job" "reporting_job" {
   schedule    = "0 8,20 * * *" # 8 AM and 8 PM daily
   time_zone   = "UTC"
   region      = var.region
+  attempt_deadline = "180s"
 
   pubsub_target {
     topic_name = google_pubsub_topic.reporting_topic.id
@@ -119,6 +150,8 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
     "attribute.actor"      = "assertion.actor"
     "attribute.repository" = "assertion.repository"
   }
+
+  attribute_condition = "assertion.repository == \"${var.github_repo}\""
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
@@ -143,6 +176,7 @@ resource "google_service_account_iam_member" "terraform_sa_wif_user" {
   service_account_id = google_service_account.terraform_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repo}"
+  depends_on = [google_iam_workload_identity_pool_provider.github_provider]
 }
 
 # Allow GitHub to impersonate the Deploy SA
@@ -150,6 +184,7 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
   service_account_id = google_service_account.deploy_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repo}"
+  depends_on = [google_iam_workload_identity_pool_provider.github_provider]
 }
 
 # --- Project-level Roles ---
@@ -199,11 +234,11 @@ resource "google_project_iam_member" "function_monitoring" {
 #
 
 module "ingestion_function" {
-  source = "./modules/cloud-function"
+  source = "./modules/cloud-functions"
 
   # --- Inputs ---
   name                   = "synapse-ingestion"
-  entry_point            = "ingestion_function"
+  entry_point            = "placeholder_http"
   location               = var.region
   project_id             = var.project_id
   service_account_email  = google_service_account.function_sa.email
@@ -211,16 +246,17 @@ module "ingestion_function" {
   max_instance_count     = 10
   available_memory       = "512Mi"
   # event_trigger_topic_id is left unset (defaults to null)
+  
 
   depends_on = [google_project_service.services]
 }
 
 module "reporting_function" {
-  source = "./modules/cloud-function"
+  source = "./modules/cloud-functions"
 
   # --- Inputs ---
   name                   = "synapse-reporting"
-  entry_point            = "reporting_function"
+  entry_point            = "placeholder_http"
   location               = var.region
   project_id             = var.project_id
   service_account_email  = google_service_account.function_sa.email

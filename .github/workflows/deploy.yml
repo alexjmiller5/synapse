@@ -7,7 +7,7 @@ on:
       - '**.py'
       - 'pyproject.toml'
       - 'uv.lock'
-      - 'config.yaml'
+      - 'config.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -50,13 +50,17 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Load Configuration from YAML
+    # - name: Load Configuration from yml
+    #   id: read_config
+    #   run: |
+    #     echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yml)" >> $GITHUB_ENV
+    #     echo "GCP_REGION=$(yq e '.region' $config.yml)" >> $GITHUB_ENV
+    #     echo "GCP_REGION=$(yq e '.github-repo' $config.yml)" >> $GITHUB_ENV
+
+    - name: Load Configuration from yml
       id: read_config
       run: |
-        echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.region' $config.yaml)" >> $GITHUB_ENV
-        echo "GCP_REGION=$(yq e '.github-repository' $config.yaml)" >> $GITHUB_ENV
-
+        yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
     - name: 'Authenticate to Google Cloud'
       id: 'auth'
       uses: 'google-github-actions/auth@v3'

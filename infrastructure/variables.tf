@@ -8,6 +8,11 @@ variable "region" {
   type        = string
 }
 
+variable "gcs_region" {
+  description = "GCS Region"
+  type        = string
+}
+
 variable "github_repo" {
   description = "The GitHub repository in 'owner/repo' format."
   type        = string
