@@ -1,17 +1,9 @@
 [project]
-name = "synapse"
+name = "synapse-processor"
 version = "1.0.0"
-description = "An intelligent middleware for capturing thoughts and organizing them in Notion"
 authors = [{name = "Alex Miller", email = "amiller06880@gmail.com"}]
-readme = "README.md"
-keywords = ["ai", "notion", "automation", "serverless"]
 
 dependencies = [
   "requests~=2.31.0",
   "functions_framework~=3.9.2"
 ]
-
-[project.urls]
-"Homepage" = "https://github.com/alexjmiller5/synapse"
-"Bug Reports" = "https://github.com/alexjmiller5/synapse/issues"
-"Source" = "https://github.com/alexjmiller5/synapse"
