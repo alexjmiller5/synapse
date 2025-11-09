@@ -27,11 +27,14 @@ variable "max_instance_count" {
 variable "available_memory" {
   description = "The amount of memory available to the service."
   type        = string
-  default     = "512Mi"
+}
+
+variable "available_cpu" {
+  description = "The amount of CPU available to the service."
+  type        = string
 }
 
 variable "timeout_seconds" {
   description = "The timeout for the service in seconds."
   type        = number
-  default     = 300
 }
