@@ -67,7 +67,6 @@ jobs:
       id: tf-fmt
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: terraform fmt -check
-      continue-on-error: true
 
     - name: Terraform Validate
       id: tf-validate
@@ -78,21 +77,10 @@ jobs:
       id: tf-plan
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: |
-        export exitcode=0
-        terraform plan -detailed-exitcode -no-color -out tfplan \
+        terraform plan \
           -var="project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
           -var="github_repo=${{ env.github_repo }}"
-        || export exitcode=$?
-        
-        echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
-        
-        if [ $exitcode -eq 1 ]; then
-          echo Terraform Plan Failed!
-          exit 1
-        else 
-          exit 0
-        fi
 
     - name: Publish Terraform Plan Artifact
       uses: actions/upload-artifact@v4

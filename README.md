@@ -128,3 +128,5 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - eventually make environment variables in deploy.yml to be uppercase since they're lowercase rn since they take from the config.yml file
 - Add something about how when you add new config variables you gotta rerun the setup script to get them in the tfvars file
 - refactor the setup local env script to work with python file structure / figure out how the functions framework works with local development and set it up with my project's structure. Do i want to have a bunch of duped pyproject.tomls???
+- Add authentication 2.0 to the cloud function so that not just anyone can ping it there's a firebase api and something else i'll need -- i'll add this after i get the pipeline working
+- make the terraform plan and apply step in the pipeline autmatically get the environment variables from the yaml file and set them as vars when they run instead of having them hardcoded
