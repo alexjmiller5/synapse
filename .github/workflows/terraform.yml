@@ -50,7 +50,7 @@ jobs:
       uses: 'google-github-actions/auth@v3'
       with:
         workload_identity_provider: 'projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-        service_account: 'terraform-sa@${{ env.gcp_project_number }}.iam.gserviceaccount.com'
+        service_account: 'terraform-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com'
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v3'
