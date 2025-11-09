@@ -1,4 +1,3 @@
 gcp_project_id: synapse-477401
-gcs_region: us-east1
-region: us-east-1
+region: us-east1
 github_repo: alexjmiller/synapse

@@ -4,7 +4,9 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '**.py'
+      # These paths are now more specific to your service code
+      - 'services/**.py'
+      - 'services/**/pyproject.toml'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'config.yml'
@@ -19,7 +21,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: '3.13'
+        python-version: '3.13' # 3.13 might not be in buildpacks yet -- gotta check in the docs myself
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
@@ -39,44 +41,50 @@ jobs:
 
     strategy:
       matrix:
-        function:
-          - name: 'synapse-ingestion'
-            entry_point: 'ingestion_function'
+        service:
+          - name: 'processor'
+            path: 'services/processor'  # <-- ADDED: Path to the specific service's code
+            entry_point: 'process'  # <-- This must match your *real* function name
             trigger_http: true
-          - name: 'synapse-reporting'
-            entry_point: 'reporting_function'
-            trigger_topic: 'synapse-reporting'
+          - name: 'reporter'
+            path: 'services/reporter' # <-- ADDED: Path to the specific service's code
+            entry_point: 'report' # <-- This must match your *real* function name
+            trigger_topic: 'reporter'
 
     steps:
     - uses: actions/checkout@v5
-
-    # - name: Load Configuration from yml
-    #   id: read_config
-    #   run: |
-    #     echo "GCP_PROJECT_ID=$(yq e '.gcp_project_id' $config.yml)" >> $GITHUB_ENV
-    #     echo "GCP_REGION=$(yq e '.region' $config.yml)" >> $GITHUB_ENV
-    #     echo "GCP_REGION=$(yq e '.github-repo' $config.yml)" >> $GITHUB_ENV
 
     - name: Load Configuration from yml
       id: read_config
       run: |
         yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yml >> $GITHUB_ENV
+
     - name: 'Authenticate to Google Cloud'
       id: 'auth'
       uses: 'google-github-actions/auth@v3'
       with:
-        workload_identity_provider: 'projects/${{ env.GCP_PROJECT_ID }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-        service_account: 'deploy-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+        workload_identity_provider: 'projects/${{ env.gcp_project_id }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+        service_account: 'deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com'
 
-    - name: 'Deploy ${{ matrix.function.name }}'
+    - name: 'Deploy ${{ matrix.service.name }}'
       id: 'deploy'
-      uses: 'google-github-actions/deploy-cloud-functions@v4'
+      # --- CHANGED: Using the Cloud Run action ---
+      uses: 'google-github-actions/deploy-cloudrun@v2'
       with:
-        name: ${{ matrix.function.name }}
-        entry_point: ${{ matrix.function.entry_point }}
-        region: ${{ env.GCP_REGION }}
-        runtime: 'python312'
-        source_dir: '.'
+        # 'name' is now 'service'
+        service: ${{ matrix.service.name }}
+        region: ${{ env.region }}
+        
+        # 'source_dir' is now 'source' and points to our matrix path
+        source: ${{ matrix.service.path }}
+
+        # --- How the entry_point is set ---
+        # We pass the entry point as an env var that the
+        # Google Buildpack knows how to read.
+        env_vars: |
+          GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
+
+    # --- ⬆️ END OF MAIN CHANGE ⬆️ ---
 
     - name: 'Update Deployment Summary'
       run: |
@@ -84,22 +92,23 @@ jobs:
         if [ ${{ strategy.job-index }} -eq 0 ]; then
           echo "## Deployment Successful! ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Function | Region | Trigger |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          # --- CHANGED: 'Function' to 'Service' ---
+          echo "| Service | Region | Trigger |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|---------|" >> $GITHUB_STEP_SUMMARY
         fi
 
         # Determine the trigger type for the summary table
-        TRIGGER_TYPE="HTTP"
-        if [ -n "${{ matrix.function.trigger_topic }}" ]; then
-          TRIGGER_TYPE="Pub/Sub (${{ matrix.function.trigger_topic }})"
+        TRIGGER_TYPE="HTTP (Public)" # <-- Updated for clarity
+        if [ -n "${{ matrix.service.trigger_topic }}" ]; then
+          TRIGGER_TYPE="Pub/Sub (${{ matrix.service.trigger_topic }})"
         fi
         
-        # Append a row for the currently deployed function
-        echo "| **${{ matrix.function.name }}** | \`${{ env.GCP_REGION }}\` | ${TRIGGER_TYPE} |" >> $GITHUB_STEP_SUMMARY
+        # --- CHANGED: 'function' to 'service' ---
+        echo "| **${{ matrix.service.name }}** | \`${{ env.region }}\` | ${TRIGGER_TYPE} |" >> $GITHUB_STEP_SUMMARY
         
-        # If the function is HTTP-triggered, add its URL to the summary
-        if [ "${{ matrix.function.trigger_http }}" == "true" ]; then
+        # If the service is HTTP-triggered, add its URL to the summary
+        if [ "${{ matrix.service.trigger_http }}" == "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 **${{ matrix.function.name }} URL:**" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 **${{ matrix.service.name }} URL:**" >> $GITHUB_STEP_SUMMARY
             echo "\`${{ steps.deploy.outputs.url }}\`" >> $GITHUB_STEP_SUMMARY
         fi
