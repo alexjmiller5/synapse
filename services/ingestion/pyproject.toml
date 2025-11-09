@@ -7,7 +7,7 @@ readme = "README.md"
 keywords = ["ai", "notion", "automation", "serverless"]
 
 dependencies = [
-FILL ME IN
+  "requests~=2.31.0"
 ]
 
 [project.urls]
