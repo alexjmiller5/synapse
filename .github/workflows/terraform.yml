@@ -79,7 +79,8 @@ jobs:
         terraform plan \
           -var="project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
-          -var="github_repo=${{ env.github_repo }}"
+          -var="github_repo=${{ env.github_repo }}" \
+          -out=tfplan
 
     - name: Terraform Apply
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
