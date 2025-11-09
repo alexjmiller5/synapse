@@ -8,7 +8,7 @@ resource "google_project_service" "services" {
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
     "cloudbuild.googleapis.com",
-    "run.googleapis.com",       
+    "run.googleapis.com",
     "eventarc.googleapis.com",
     "artifactregistry.googleapis.com"
   ])
@@ -97,9 +97,9 @@ resource "google_cloud_run_service_iam_member" "reporter_invoker" {
   location = var.region
   project  = var.project_id
   role     = "roles/run.invoker"
-  
+
   # This member is the SA that Eventarc uses
-  member   = "serviceAccount:${google_service_account.function_sa.email}" 
+  member = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
 # Allow the processor service to be invoked by the public
@@ -108,7 +108,7 @@ resource "google_cloud_run_service_iam_member" "processor_invoker" {
   location = var.region
   project  = var.project_id
   role     = "roles/run.invoker"
-  member   = "allUsers" 
+  member   = "allUsers"
 }
 
 # --- Reporter Function Infrastructure ---
@@ -120,11 +120,11 @@ resource "google_pubsub_topic" "reporter_topic" {
 }
 
 resource "google_cloud_scheduler_job" "reporter_job" {
-  name        = "synapse-daily-report"
-  description = "Trigger daily Synapse reporter"
-  schedule    = "0 8,20 * * *" # 8 AM and 8 PM daily
-  time_zone   = "UTC"
-  region      = var.region
+  name             = "synapse-daily-report"
+  description      = "Trigger daily Synapse reporter"
+  schedule         = "0 8,20 * * *" # 8 AM and 8 PM daily
+  time_zone        = "UTC"
+  region           = var.region
   attempt_deadline = "180s"
 
   pubsub_target {
@@ -187,7 +187,7 @@ resource "google_service_account_iam_member" "terraform_sa_wif_user" {
   service_account_id = google_service_account.terraform_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repo}"
-  depends_on = [google_iam_workload_identity_pool_provider.github_provider]
+  depends_on         = [google_iam_workload_identity_pool_provider.github_provider]
 }
 
 # Allow GitHub to impersonate the Deploy SA
@@ -195,7 +195,7 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
   service_account_id = google_service_account.deploy_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repo}"
-  depends_on = [google_iam_workload_identity_pool_provider.github_provider]
+  depends_on         = [google_iam_workload_identity_pool_provider.github_provider]
 }
 
 # --- Project-level Roles ---
@@ -246,13 +246,14 @@ resource "google_project_iam_member" "function_monitoring" {
 module "processor_service" {
   source = "./modules/cloud-service" # <-- Note the new path
 
-  name                   = "processor"
-  location               = var.region
-  project_id             = var.project_id
-  service_account_email  = google_service_account.function_sa.email
-  max_instance_count     = 10
-  available_memory       = "512Mi"
-  available_cpu          =  "1000m"
+  name                  = "processor"
+  location              = var.region
+  project_id            = var.project_id
+  service_account_email = google_service_account.function_sa.email
+  max_instance_count    = 10
+  available_memory      = "512Mi"
+  available_cpu         = "1000m"
+  timeout_seconds        = 300
 
   depends_on = [google_project_service.services]
 }
@@ -261,13 +262,14 @@ module "reporter_service" {
   source = "./modules/cloud-service" # <-- Note the new path
 
   # --- Inputs ---
-  name                   = "reporter" 
-  location               = var.region
-  project_id             = var.project_id
-  service_account_email  = google_service_account.function_sa.email
-  max_instance_count     = 1
-  available_memory       = "256Mi"
-  available_cpu          =  "1000m"
+  name                  = "reporter"
+  location              = var.region
+  project_id            = var.project_id
+  service_account_email = google_service_account.function_sa.email
+  max_instance_count    = 1
+  available_memory      = "256Mi"
+  available_cpu         = "1000m"
+  timeout_seconds        = 300
 
   depends_on = [google_project_service.services]
 }
