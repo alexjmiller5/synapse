@@ -74,6 +74,9 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+
+      # TODO: change the export command to not use dev dependencies 
+      # uv export --no-dev --format requirements-txt > requirements.txt
       - name: Generate requirements.txt
         run: |
           cd ${{ matrix.service.path }}
@@ -83,7 +86,6 @@ jobs:
             
             # Use uv to export dependencies in requirements.txt format
             uv pip compile pyproject.toml -o requirements.txt
-            
             echo "Generated requirements.txt:"
             cat requirements.txt
           else
@@ -109,6 +111,7 @@ jobs:
           env_vars: |
             GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
           flags: >-
+            --function=${{ matrix.service.entry_point }}
             ${{ matrix.service.trigger_topic && 
                 '--no-allow-unauthenticated' || 
                 '--allow-unauthenticated' }}
