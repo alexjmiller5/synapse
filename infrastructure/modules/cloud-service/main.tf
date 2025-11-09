@@ -15,6 +15,7 @@ resource "google_cloud_run_service" "this" {
       # We provide a placeholder image that will be immediately
       # replaced by your CI/CD pipeline on its first deploy.
       containers {
+        name  = var.name
         image = "gcr.io/google-samples/hello-app:1.0"
 
         resources {
