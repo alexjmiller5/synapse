@@ -1,0 +1,27 @@
+swagger: '2.0'
+info:
+  title: 'Processor API'
+  version: '1.0.0'
+schemes:
+  - https
+produces:
+  - application/json
+paths:
+  /process:
+    post:
+      summary: 'Process data'
+      operationId: 'process'
+      x-google-backend:
+        # This "DUMMY_URL" will be replaced by the CI/CD pipeline
+        address: DUMMY_URL
+        jwt_audience: DUMMY_URL
+      security:
+        - api_key_query: []
+      responses:
+        '200':
+          description: 'A successful response'
+securityDefinitions:
+  api_key_query:
+    type: 'apiKey'
+    name: 'key'
+    in: 'query'

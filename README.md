@@ -132,3 +132,5 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - pin my python version for my functions
 - write a custom dockerfile to use uv for my cloud function instead of using buildpack because buildpack only supports requirements.txt
 - add a min-instances=1 to the cloud run services to avoid cold starts -- this needs to be configured within terraform most likely
+- Whenever I set up a Dockerfile, set up cloud run to use tailscale so that I can enable public access only within my tailscale network
+- reorganize main.tf and delete unecessary comments

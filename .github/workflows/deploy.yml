@@ -115,3 +115,61 @@ jobs:
             ${{ matrix.service.trigger_topic && 
                 '--no-allow-unauthenticated' || 
                 '--allow-unauthenticated' }}
+
+      - name: Get Cloud Run service URL
+        id: get_url
+        if: matrix.service.api_spec_template != ''
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ matrix.service.name }} \
+            --region ${{ env.region }} \
+            --format 'value(status.url)')
+          echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          
+      - name: Deploy API Gateway
+        if: matrix.service.api_spec_template != ''
+        env:
+          # This email must match the SA you created in Terraform
+          GATEWAY_SA_EMAIL: "api-gateway-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
+          API_ID: "processor-api"
+          GATEWAY_ID: "processor-gateway"
+          CONFIG_ID: "config-${{ github.sha_short }}" # Create a unique config ID
+        run: |
+          echo "Deploying API Gateway for ${{ matrix.service.name }}..."
+          
+          # 1. Create the API (fails silently if it already exists)
+          gcloud beta api-gateway apis create ${API_ID} \
+            --project=${{ env.gcloud_project }} \
+            --location=${{ env.region }} || echo "API '${API_ID}' already exists."
+          
+          # 2. Prepare the spec file by replacing the DUMMY_URL
+          echo "Replacing placeholder in spec..."
+          sed "s|DUMMY_URL|${{ steps.get_url.outputs.service_url }}|g" \
+            ${{ matrix.service.api_spec_template }} > processed-spec.yaml
+
+          echo "--- Processed Spec---"
+          cat processed-spec.yaml
+          echo "---------------------"
+
+          # 3. Create the new API Config
+          gcloud beta api-gateway api-configs create ${CONFIG_ID} \
+            --api=${API_ID} \
+            --project=${{ env.gcloud_project }} \
+            --openapi-spec=processed-spec.yaml \
+            --backend-auth-service-account=${GATEWAY_SA_EMAIL}
+
+          # 4. Create or Update the Gateway to use the new config
+          # This command creates the gateway if it's missing,
+          # or updates it to the new config if it exists.
+          gcloud beta api-gateway gateways create ${GATEWAY_ID} \
+            --api=${API_ID} \
+            --api-config=${CONFIG_ID} \
+            --location=${{ env.region }} \
+            --project=${{ env.gcloud_project }} \
+            || \
+          gcloud beta api-gateway gateways update ${GATEWAY_ID} \
+            --api=${API_ID} \
+            --api-config=${CONFIG_ID} \
+            --location=${{ env.region }} \
+            --project=${{ env.gcloud_project }}
+            
+          echo "Gateway '${GATEWAY_ID}' deployed and updated to config '${CONFIG_ID}'"
