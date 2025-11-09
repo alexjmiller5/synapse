@@ -20,6 +20,7 @@ resource "google_cloud_run_service" "this" {
         resources {
           limits = {
             memory = var.available_memory
+            cpu    = var.available_cpu
           }
         }
       }
