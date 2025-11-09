@@ -252,6 +252,7 @@ module "processor_service" {
   service_account_email  = google_service_account.function_sa.email
   max_instance_count     = 10
   available_memory       = "512Mi"
+  available_cpu          =  "1000m"
 
   depends_on = [google_project_service.services]
 }
@@ -266,6 +267,7 @@ module "reporter_service" {
   service_account_email  = google_service_account.function_sa.email
   max_instance_count     = 1
   available_memory       = "256Mi"
+  available_cpu          =  "1000m"
 
   depends_on = [google_project_service.services]
 }
