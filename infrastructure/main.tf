@@ -229,6 +229,24 @@ resource "google_project_iam_member" "deploy_sa_iam_user" {
   member  = google_service_account.deploy_sa.member
 }
 
+resource "google_project_iam_member" "deploy_sa_run_developer" {
+  project = var.gcp_project_id
+  role    = "roles/run.developer"
+  member  = google_service_account.deploy_sa.member
+}
+
+resource "google_project_iam_member" "deploy_sa_artifact_admin" {
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.admin"
+  member  = google_service_account.deploy_sa.member
+}
+
+resource "google_project_iam_member" "deploy_sa_cloudbuild_editor" {
+  project = var.gcp_project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = google_service_account.deploy_sa.member
+}
+
 # --- Function SA Roles ---
 resource "google_project_iam_member" "function_secrets" {
   project = var.gcp_project_id
@@ -246,6 +264,63 @@ resource "google_project_iam_member" "function_monitoring" {
   project = var.gcp_project_id
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
+
+resource "google_project_iam_member" "cloud_build_run_invoker" {
+  project = var.gcp_project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "function_artifact_reader" {
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
+
+
+
+resource "google_project_iam_member" "deploy_sa_storage_admin" {
+  project = var.gcp_project_id
+  role    = "roles/storage.admin"
+  member  = google_service_account.deploy_sa.member
+}
+resource "google_project_iam_member" "deploy_sa_service_usage" {
+  project = var.gcp_project_id
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = google_service_account.deploy_sa.member
+}
+
+
+resource "google_project_iam_member" "cloud_build_service_usage" {
+  project = var.gcp_project_id
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloud_build_run_admin" {
+  project = var.gcp_project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloud_build_artifact_admin" {
+  project = var.gcp_project_id
+  role    = "roles/artifactregistry.admin"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "cloud_build_storage_admin" {
+  project = var.gcp_project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
+}
+
+# Allow Cloud Build to act as your function service account
+resource "google_service_account_iam_member" "cloud_build_sa_user" {
+  service_account_id = google_service_account.function_sa.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
 
 module "processor_service" {
