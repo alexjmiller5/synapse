@@ -7,8 +7,8 @@ readme = "README.md"
 keywords = ["ai", "notion", "automation", "serverless"]
 
 dependencies = [
-  "requests~=2.31.0"
-  "functions_framework~=3.4.0"
+  "requests~=2.31.0",
+  "functions_framework~=3.9.2"
 ]
 
 [project.urls]
