@@ -1,17 +1,4 @@
-[project]
-name = "synapse"
-version = "1.0.0"
-description = "An intelligent middleware for capturing thoughts and organizing them in Notion"
-authors = [{name = "Alex Miller", email = "amiller06880@gmail.com"}]
-readme = "README.md"
-keywords = ["ai", "notion", "automation", "serverless"]
-
 [tool.uv.workspace]
 members = ["services/*"]
 
 [tool.uv]
-
-[project.urls]
-"Homepage" = "https://github.com/alexjmiller5/synapse"
-"Bug Reports" = "https://github.com/alexjmiller5/synapse/issues"
-"Source" = "https://github.com/alexjmiller5/synapse"
