@@ -253,7 +253,7 @@ module "processor_service" {
   max_instance_count    = 10
   available_memory      = "512Mi"
   available_cpu         = "1000m"
-  timeout_seconds        = 300
+  timeout_seconds       = 300
 
   depends_on = [google_project_service.services]
 }
@@ -269,7 +269,7 @@ module "reporter_service" {
   max_instance_count    = 1
   available_memory      = "256Mi"
   available_cpu         = "1000m"
-  timeout_seconds        = 300
+  timeout_seconds       = 300
 
   depends_on = [google_project_service.services]
 }
