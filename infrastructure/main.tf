@@ -200,6 +200,12 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
 
 # --- Project-level Roles ---
 
+resource "google_project_iam_member" "deploy_sa_artifact_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = google_service_account.deploy_sa.member
+}
+
 resource "google_project_iam_member" "terraform_sa_roles" {
   project = var.project_id
   role    = "roles/editor" # TODO: Note: 'editor' is broad. Scope this down for production.
