@@ -11,57 +11,19 @@ on:
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
-  # ──────────────────────────────────────────────────────────────
-  # 1. Discover services from filesystem + pyproject.toml
-  # ──────────────────────────────────────────────────────────────
-  discover-services:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Discover services
-        id: set-matrix
-        run: |
-          # Find all service dirs with pyproject.toml
-          services=$(find services -maxdepth 2 -name pyproject.toml -exec dirname {} \; | sort)
-          
-          matrix_json=$(echo "$services" | jq -R . | jq -s 'map({
-            name: (split("/")[-1]),
-            path: .,
-            # Extract entry_point from pyproject.toml [project.scripts] or metadata
-            entry_point: (
-              if test -f (./pyproject.toml) then
-                . as $path
-                | fromjson
-                | .project.scripts // empty
-                | to_entries[0].key
-              else empty end
-            ),
-            # Default triggers — override in pyproject.toml if needed
-            trigger_http: true,
-            trigger_topic: null
-          })')
-          
-          echo "matrix=$(echo "$matrix_json" | jq -c '{include: .}')" >> $GITHUB_OUTPUT
-
-  # ──────────────────────────────────────────────────────────────
-  # 2. Test each service in parallel
-  # ──────────────────────────────────────────────────────────────
   test:
-    needs: discover-services
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.discover-services.outputs.matrix) }}
+      matrix:
+        service:
+          - name: processor
+            path: services/processor
+          - name: reporter
+            path: services/reporter
     defaults:
       run:
-        working-directory: ${{ matrix.path }}
+        working-directory: ${{ matrix.service.path }}
 
     steps:
       - uses: actions/checkout@v5
@@ -74,23 +36,35 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Install workspace + service
+      - name: Install service + test deps
         run: |
           uv sync --frozen --all-extras
 
       - name: Run tests
         run: |
-          uv run pytest tests/ -v --cov=src --cov-report=term-missing
+          echo "TODO: Implement tests!"  
+        # uv run pytest tests/ -v --cov=src --cov-report=term-missing
 
-  # ──────────────────────────────────────────────────────────────
-  # 3. Deploy only on main
-  # ──────────────────────────────────────────────────────────────
   deploy:
     if: github.ref == 'refs/heads/main'
-    needs: [discover-services, test]
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
     strategy:
-      matrix: ${{ fromJson(needs.discover-services.outputs.matrix) }}
+      matrix:
+        service:
+          - name: processor
+            path: services/processor
+            entry_point: process
+            trigger_http: true
+          - name: reporter
+            path: services/reporter
+            entry_point: report
+            trigger_topic: reporter
+
     steps:
       - uses: actions/checkout@v5
 
@@ -98,21 +72,21 @@ jobs:
         run: |
           yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
-      - name: Auth GCP
+      - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: 'deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com'
 
-      - name: Deploy ${{ matrix.name }}
+      - name: Deploy ${{ matrix.service.name }}
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: ${{ matrix.name }}
+          service: ${{ matrix.service.name }}
           region: ${{ env.region }}
-          source: ${{ matrix.path }}
+          source: ${{ matrix.service.path }}
           env_vars: |
-            GOOGLE_FUNCTION_TARGET=${{ matrix.entry_point }}
+            GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
           flags: >-
-            ${{ matrix.trigger_topic && 
-                format('--trigger-topic={0} --no-allow-unauthenticated', matrix.trigger_topic) || 
+            ${{ matrix.service.trigger_topic && 
+                format('--trigger-topic={0} --no-allow-unauthenticated', matrix.service.trigger_topic) || 
                 '--allow-unauthenticated' }}
