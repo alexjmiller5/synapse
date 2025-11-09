@@ -72,6 +72,8 @@ jobs:
         run: |
           yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
       - name: Generate requirements.txt
         run: |
           cd ${{ matrix.service.path }}
