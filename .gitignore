@@ -5,4 +5,7 @@
 *.tfstate
 *.tfstate.backup
 .terraform/
-*.zip
+
+# Python cache files
+*.egg-info/
+__pycache__/

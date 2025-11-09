@@ -20,7 +20,7 @@ env:
   INFRASTRUCTURE_DIR: ./infrastructure
 
 jobs:
-  terraform-plan:
+  terraform-apply:
     name: Terraform Plan
     runs-on: ubuntu-latest
     outputs:
@@ -76,48 +76,11 @@ jobs:
       id: tf-plan
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: |
-        export exitcode=0
-        # You were missing the "-detailed-exitcode" and "-out tfplan" flags
-        terraform plan -detailed-exitcode -no-color -out tfplan \
+        terraform plan \
           -var="project_id=${{ env.gcp_project_id }}" \
           -var="region=${{ env.region }}" \
-          -var="github_repo=${{ env.github_repo }}" || export exitcode=$?
-        
-        echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
-        
-        if [ $exitcode -eq 1 ]; then
-          echo Terraform Plan Failed!
-          exit 1
-        else 
-          exit 0
-        fi
-
-    # This logic is simplified and corrected
-    - name: Publish Plan to Summary
-      id: tf-plan-string
-      working-directory: ${{ env.INFRASTRUCTURE_DIR }}
-      run: |
-        TERRAFORM_PLAN=$(terraform show -no-color tfplan)
-        
-        echo "## Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
-        echo "<details><summary>Click to expand</summary>" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo '```terraform' >> $GITHUB_STEP_SUMMARY
-        echo "$TERRAFORM_PLAN" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "</details>" >> $GITHUB_STEP_SUMMARY
+          -var="github_repo=${{ env.github_repo }}"
 
     - name: Terraform Apply
       working-directory: ${{ env.INFRASTRUCTURE_DIR }}
       run: terraform apply -auto-approve tfplan
-
-    - name: Terraform Output
-      id: tf-output
-      working-directory: ${{ env.INFRASTRUCTURE_DIR }}
-      run: |
-        echo "## Terraform Apply Completed Successfully! ✅" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Outputs:" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        terraform output >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY

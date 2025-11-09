@@ -18,37 +18,34 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **Google Secret Manager** stores all keys (Notion token, Gmail password), accessed via IAM.
 - **Gmail**: Email reports sent by `reporter-function` via `smtplib` and a **Gmail App Password**.
 
+## Architecture Diagram
+<!-- TODO: Create an architecture diagram of the flow of my services -->
+<!-- ![Architecture Diagram](docs/synapse_architecture_diagram.png) -->
+
 ---
 
 ## Development Setup
 
-### Prerequisites
+### Required Tools
 
 1. **Python 3.13+**
-2. **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager
+2. **uv**
 3. **Google Cloud SDK**
-4. **Terraform** (optional, for infrastructure management)
+4. **Terraform**
 
 ### Local Development
 
-1. **Set up local dev environmnt:**
+1. **Set up local development environment :**
 
    ```bash
-   eval $(./local_setup.sh)
+   eval $(./scripts/setup_local_env.sh)
    ```
 
 2. **Test Functionality Locally:**
-<!-- TODO make me more accurrate as I actually begin writing and testing this project-->
 - **Run the function(s) you are interested in testing:**
 
 ```bash
-uv run functions_framework --target=processor --debug
-```
-
-or
-
-```bash
-uv run functions_framework --target=reporter --debug
+functions-framework --target=<name-of-python-function> --source=<path-to-python-service> --debug
 ```
 
 - **Test infrastructure changes with Terraform:**
@@ -81,8 +78,9 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 
 - `gmail-sender-email`: Gmail address for sending reports
 - `gmail-recipient-email`: Email to receive reports
-- `google-cloud-project-id`: GCP project ID
-- `region`: GCP region for Cloud Functions
+- `gcp-project-id`: GCP project ID
+- `github-repo`: GitHub repository URL
+- `region`: GCP region for cloud resources
 
 ---
 
@@ -92,10 +90,6 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 
 1. Push to the `main` branch
 2. GitHub Actions will automatically run tests and deploy
-
-### Manual Deployment
-
-- Don't manually deploy. Use the GitHub Actions CI/CD pipeline.
 
 ---
 
