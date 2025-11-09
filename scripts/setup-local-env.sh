@@ -145,7 +145,7 @@ check_gcloud_auth() {
 main() {
     check_dependencies >&2
     setup_terraform >&2
-    setup_python >&2
+    # setup_python >&2
     check_gcloud_auth >&2
     
     # These commands MUST go to stdout to be captured by eval
@@ -159,7 +159,7 @@ main() {
     echo "export GOOGLE_CLOUD_PROJECT=$project_id"
 
     echo "🎉 Local environment is configured!" >&2
-    echo "Python virtual env is active and GCP auth is verified." >&2
+    # echo "Python virtual env is active and GCP auth is verified." >&2
     echo "Your application code will now fetch secrets directly." >&2
 }
 
