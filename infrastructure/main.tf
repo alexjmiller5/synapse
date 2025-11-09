@@ -194,6 +194,11 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
 }
 
 # --- Project-level Roles ---
+resource "google_project_iam_member" "terraform_sa_iam_admin" {
+  project = var.project_id
+  role    = "roles/resourcemanager.projectIamAdmin" # 
+  member  = google_service_account.terraform_sa.member
+}
 
 resource "google_project_iam_member" "deploy_sa_artifact_writer" {
   project = var.project_id
