@@ -9,7 +9,10 @@ resource "google_project_service" "services" {
     "cloudbuild.googleapis.com",
     "run.googleapis.com",
     "eventarc.googleapis.com",
-    "artifactregistry.googleapis.com"
+    "artifactregistry.googleapis.com",
+    "apigateway.googleapis.com",
+    "servicemanagement.googleapis.com",
+    "servicecontrol.googleapis.com"
   ])
 
   service            = each.value
@@ -97,14 +100,14 @@ resource "google_cloud_run_service_iam_member" "reporter_invoker" {
   member = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
-# Allow the processor service to be invoked by the public
-resource "google_cloud_run_service_iam_member" "processor_invoker" {
-  service  = module.processor_service.service_name
-  location = var.region
-  project  = var.gcp_project_id
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
+# # Allow the processor service to be invoked by the public
+# resource "google_cloud_run_service_iam_member" "processor_invoker" {
+#   service  = module.processor_service.service_name
+#   location = var.region
+#   project  = var.gcp_project_id
+#   role     = "roles/run.invoker"
+#   member   = "allUsers"
+# }
 
 # --- Reporter Function Infrastructure ---
 
@@ -136,6 +139,37 @@ resource "google_cloud_scheduler_job" "reporter_job" {
 resource "google_service_account" "function_sa" {
   account_id   = "synapse-functions"
   display_name = "Synapse Cloud Functions Service Account"
+}
+
+resource "google_service_account" "api_gateway_sa" {
+  project      = var.gcp_project_id
+  account_id   = "api-gateway-sa"
+  display_name = "API Gateway Invoker SA"
+}
+
+# Grant the new SA permission to invoke the processor_service
+resource "google_cloud_run_service_iam_member" "processor_gateway_invoker" {
+  service  = module.processor_service.service_name
+  location = var.region
+  project  = var.gcp_project_id
+  role     = "roles/run.invoker"
+  member   = google_service_account.api_gateway_sa.member
+  
+  # Ensure the service exists before adding IAM
+  depends_on = [module.processor_service] 
+}
+
+resource "google_project_iam_member" "deploy_sa_apigateway_admin" {
+  project = var.gcp_project_id
+  role    = "roles/apigateway.admin"
+  member  = google_service_account.deploy_sa.member
+}
+
+# This lets your deploy_sa act as the api_gateway_sa during config creation
+resource "google_project_iam_member" "deploy_sa_api_gateway_sa_user" {
+  project = var.gcp_project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = google_service_account.deploy_sa.member
 }
 
 # --- Workload Identity Federation (for GitHub Actions CI/CD) ---
