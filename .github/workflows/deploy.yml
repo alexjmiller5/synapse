@@ -72,6 +72,30 @@ jobs:
         run: |
           yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yml >> $GITHUB_ENV
 
+            - name: Generate requirements.txt for ${{ matrix.service.name }}
+      - name: Generate requirements.txt
+        run: |
+          cd ${{ matrix.service.path }}
+          
+          # Install uv if not already available
+          pip install uv
+          
+          if [ -f "pyproject.toml" ]; then
+            echo "Exporting dependencies using uv..."
+            
+            # Use uv to export dependencies in requirements.txt format
+            uv pip compile pyproject.toml -o requirements.txt --no-dev
+            
+            echo "Generated requirements.txt:"
+            cat requirements.txt
+          else
+            echo "No pyproject.toml found, checking for existing requirements.txt..."
+            if [ ! -f "requirements.txt" ]; then
+              echo "❌ No dependency files found - deployment may fail"
+              exit 1
+            fi
+          fi
+      
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
         with:
