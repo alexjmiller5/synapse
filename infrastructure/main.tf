@@ -43,9 +43,7 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-api-token",
     "notion-tasks-db-id",
     "notion-quick-notes-last-block-id",
-    "gmail-sender-email",
     "gmail-app-password",
-    "gmail-recipient-email",
   ])
 
   secret_id = each.value
