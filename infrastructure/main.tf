@@ -154,9 +154,9 @@ resource "google_cloud_run_service_iam_member" "processor_gateway_invoker" {
   project  = var.gcp_project_id
   role     = "roles/run.invoker"
   member   = google_service_account.api_gateway_sa.member
-  
+
   # Ensure the service exists before adding IAM
-  depends_on = [module.processor_service] 
+  depends_on = [module.processor_service]
 }
 
 resource "google_project_iam_member" "deploy_sa_apigateway_admin" {
