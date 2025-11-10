@@ -60,7 +60,7 @@ jobs:
             path: services/processor
             entry_point: process
             trigger_http: true
-            api_spec_template: "api-gateways/processor-spec-template.yaml"
+            api_spec_template: "api-gateways/processor-spec-template.yml"
           - name: reporter
             path: services/reporter
             entry_point: report
