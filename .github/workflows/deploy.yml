@@ -134,13 +134,13 @@ jobs:
           GATEWAY_SA_EMAIL: "api-gateway-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
           API_ID: "processor-api"
           GATEWAY_ID: "processor-gateway"
-          CONFIG_ID: "config-${{ github.sha_short }}" # Create a unique config ID
+          CONFIG_ID: "config-${{ github.run_id }}" # Create a unique config ID
         run: |
           echo "Deploying API Gateway for ${{ matrix.service.name }}..."
           
           # 1. Create the API (fails silently if it already exists)
-          gcloud beta api-gateway apis create ${API_ID} \
-            --project=${{ env.gcloud_project }} \
+          gcloud api-gateway apis create ${API_ID} \
+            --project=${{ env.gcp_project_id }} \
             --location=${{ env.region }} || echo "API '${API_ID}' already exists."
           
           # 2. Prepare the spec file by replacing the DUMMY_URL
@@ -153,7 +153,7 @@ jobs:
           echo "---------------------"
 
           # 3. Create the new API Config
-          gcloud beta api-gateway api-configs create ${CONFIG_ID} \
+          gcloud api-gateway api-configs create ${CONFIG_ID} \
             --api=${API_ID} \
             --project=${{ env.gcp_project_id }} \
             --openapi-spec=processed-spec.yml \
@@ -162,13 +162,13 @@ jobs:
           # 4. Create or Update the Gateway to use the new config
           # This command creates the gateway if it's missing,
           # or updates it to the new config if it exists.
-          gcloud beta api-gateway gateways create ${GATEWAY_ID} \
+          gcloud api-gateway gateways create ${GATEWAY_ID} \
             --api=${API_ID} \
             --api-config=${CONFIG_ID} \
             --location=${{ env.region }} \
             --project=${{ env.gcp_project_id }} \
             || \
-          gcloud beta api-gateway gateways update ${GATEWAY_ID} \
+          gcloud api-gateway gateways update ${GATEWAY_ID} \
             --api=${API_ID} \
             --api-config=${CONFIG_ID} \
             --location=${{ env.region }} \
