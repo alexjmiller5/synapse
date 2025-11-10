@@ -44,6 +44,7 @@ Synapse is a serverless application designed to eliminate the friction of manual
    ```
 
 2. **Test Functionality Locally:**
+
 - **Run the function(s) you are interested in testing:**
 
 ```bash
@@ -67,7 +68,21 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 - Run the following commands to create or find and print the processor service API Key
 
 ```bash
+# Create an API key for the processor service
+gcloud services api-keys create --display-name="Processor Gateway Key"
 
+# List existing API keys to find the name of the created key
+gcloud services api-keys list
+gcloud services api-keys get-key-string "<processor-service-api-key-name>"
+
+# Find the managed service name for the API Gateway
+gcloud api-gateway apis describe "<api-id>" # API_ID is processor-api set in deploy.yml
+
+# Check current restrictions on the created key
+gcloud services api-keys describe "<key-name>" --format="value(restrictions)"
+
+# Apply the restrictions to the created key
+gcloud services api-keys update "$KEY_NAME" --api-target="service=$SERVICE_NAME"
 ```
 
 ### Required Secrets (Google Secret Manager)
@@ -143,3 +158,4 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - add a min-instances=1 to the cloud run services to avoid cold starts -- this needs to be configured within terraform most likely
 - Whenever I set up a Dockerfile, set up cloud run to use tailscale so that I can enable public access only within my tailscale network
 - reorganize main.tf and delete unecessary comments
+- keep api gateway even with tailscale but write it with gcloud beta in terraform
