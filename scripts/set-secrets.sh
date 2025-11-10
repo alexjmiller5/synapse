@@ -76,10 +76,10 @@ main() {
     check_dependencies
     
     local project_id
-    project_id=$(get_config "google_cloud_project_id")
+    project_id=$(get_config "gcp_project_id")
     
     if [ -z "$project_id" ] || [ "$project_id" == "null" ]; then
-        echo "Error: Could not read 'google_cloud_project_id' from $CONFIG_FILE." >&2
+        echo "Error: Could not read 'gcp_project_id' from $CONFIG_FILE." >&2
         exit 1
     fi
     
@@ -93,9 +93,7 @@ main() {
         "notion-api-token"
         "notion-tasks-db-id"
         "notion-quick-notes-last-block-id"
-        "gmail-sender-email"
         "gmail-app-password"
-        "gmail-recipient-email"
     )
     
     # Add menu options
