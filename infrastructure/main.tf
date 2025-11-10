@@ -40,7 +40,7 @@ resource "google_storage_bucket" "terraform_state" {
 resource "google_secret_manager_secret" "secrets" {
   for_each = toset([
     "gemini-api-key",
-    "notion-api-token",
+    "notion-api-token", #TODO: Rename to notion-integration-token
     "notion-tasks-db-id",
     "notion-quick-notes-last-block-id",
     "gmail-app-password",

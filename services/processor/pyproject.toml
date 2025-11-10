@@ -5,9 +5,8 @@ authors = [{name = "Alex Miller", email = "redacted-usr@gmail.com"}]
 
 dependencies = [
   "requests~=2.31.0",
-  "functions_framework~=3.9.2"
+  "functions_framework~=3.9.2",
+  "google-genai~=1.49.0",
+  "PyYAML~=6.0.3",
+  "google-cloud-secret-manager~=2.25.0"
 ]
-
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
