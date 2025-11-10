@@ -140,8 +140,14 @@ jobs:
           
           # 1. Create the API (fails silently if it already exists)
           gcloud api-gateway apis create ${API_ID} \
+            --project=${{ env.gcp_project_id }} || echo "API '${API_ID}' already exists."
+
+          echo "Enabling the managed service for ${API_ID}..."
+          SERVICE_NAME=$(gcloud api-gateway apis describe ${API_ID} \
             --project=${{ env.gcp_project_id }} \
-            --location=${{ env.region }} || echo "API '${API_ID}' already exists."
+            --format 'value(managedService)')
+          
+          gcloud services enable $SERVICE_NAME
           
           # 2. Prepare the spec file by replacing the DUMMY_URL
           echo "Replacing placeholder in spec..."
