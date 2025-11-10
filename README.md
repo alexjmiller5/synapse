@@ -17,6 +17,7 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **Gemini 2.5 Pro**: Complex data structuring and schema-based decisions.
 - **Google Secret Manager** stores all keys (Notion token, Gmail password), accessed via IAM.
 - **Gmail**: Email reports sent by `reporter-function` via `smtplib` and a **Gmail App Password**.
+- **API Gateway**: Secures and manages access to the `processor` function.
 
 ## Architecture Diagram
 <!-- TODO: Create an architecture diagram of the flow of my services -->
@@ -60,6 +61,14 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 ---
 
 ## Configuration
+
+### Getting an API Key for Shortcuts
+
+- Run the following commands to create or find and print the processor service API Key
+
+```bash
+
+```
 
 ### Required Secrets (Google Secret Manager)
 
