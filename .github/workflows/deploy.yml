@@ -114,7 +114,7 @@ jobs:
             --function=${{ matrix.service.entry_point }}
             ${{ matrix.service.trigger_topic && 
                 '--no-allow-unauthenticated' || 
-                '--allow-unauthenticated' }}
+                '--no-allow-unauthenticated' }}
 
       - name: Get Cloud Run service URL
         id: get_url
