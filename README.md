@@ -155,6 +155,8 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - [ ] reorganize main.tf and delete unecessary comments  
 - [ ] keep api gateway even with tailscale but write it with gcloud beta in terraform
 - [ ] make the api gateway only deploy if the api-gateways folder is modified
+- [ ] Figure out how to set up an src layout for my pyproject.toml to avoid issues with imports when running locally with functions framework and also then my deployment probably needs to be refacted cause the source / entrypoint will need the multiple files and shit
+- [ ] move my gemini api key from my personal services project to my synpase project
 
 ### **Feature Related Stuff**
 

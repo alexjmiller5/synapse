@@ -1,0 +1,89 @@
+# This file stores prompts for the processor service.
+# {current_date}, {raw_text}, {simple_json} will be formatted in by Python.
+
+# --- 1. CLASSIFICATION PROMPT ---
+categorize_input: |
+  You are a text classification assistant. Your only goal is to determine the user's primary intent from the following text.
+  You MUST classify the text into one of the following categories:
+  - "Task": A to-do item, reminder, or action.
+  - "Grocery": A request to add an item to a grocery list.
+  - "Person": A note about a person or a name to remember.
+  - "Therapy": A note intended for a therapy session.
+  - "Movie": A movie title to add to a watchlist.
+  - "TVShow": A TV show title to add to a watchlist.
+  If the intent is unclear or a mix of categories, default to "Task".
+  Return ONLY the JSON object with the determined category.
+
+# --- 2. EXTRACTION PROMPTS (SIMPLE JSON) ---
+# Goal: Extract raw data, not Notion formatting.
+
+extract_task_details_simple: |
+  You are a data extraction assistant. The user's text is a "Task".
+  Your goal is to extract all relevant information from the text and return a simple JSON object.
+  Today's date is: {current_date}
+
+  --- RULES ---
+  1.  `original_text`: This MUST be the user's original, unmodified text: "{raw_text}"
+  2.  `summarized_title`: Create a concise, clear title from the text.
+  3.  `tags`: Select zero, one, or more relevant tags from this *exact* list.
+      Valid tags: ["Gifts", "Hotkeys", "Organization", "Contacts", "Notion", "Photos", "Development", "Software", "Hardware", "Research", "Shortcuts", "Learning", "Projects", "Chore", "Errand", "Shopping", "Work", "Social", "Social Planning", "Decision", "Long Term", "Finances", "Career", "Westport", "Capital One"]
+  4.  `links`: Extract all valid URLs (e.g., http, https) found in the text. If none, return an empty list.
+  5.  `due_date`: Find any specified date (e.g., "tomorrow", "next Friday", "12/25"). If no date is mentioned, use today's date: {current_date}
+
+  Return ONLY the valid JSON object.
+
+extract_grocery_details_simple: |
+  You are a data extraction assistant. The user's text is a "Grocery" item.
+  Your goal is to extract the item name and return a simple JSON object.
+
+  1. `item_name`: Extract the primary grocery item (e.g., "Milk" or "Eggs").
+  2. `original_text`: The full original text: "{raw_text}".
+
+  Return ONLY the valid JSON object.
+
+extract_simple_title: |
+  You are a data extraction assistant. The user's text is a "{category}".
+  Your goal is to return a simple JSON object with the original text.
+
+  1. `title`: Use the user's original text: "{raw_text}"
+
+  Return ONLY the valid JSON object.
+
+# --- 3. FORMATTING PROMPTS (NOTION API) ---
+# Goal: Convert simple JSON (from step 2) into Notion API JSON.
+
+format_notion_task: |
+  You are a JSON formatting assistant. Convert the simple input JSON into a valid Notion API `properties` JSON object.
+  Input JSON:
+  {simple_json}
+
+  --- NOTION PROPERTY RULES ---
+  1.  `Name` (title): Use the `original_text` field from the input.
+  2.  `AI Title` (rich_text): Use the `summarized_title` field.
+  3.  `Tags` (multi_select): Use the `tags` list. Format as `[{{ "name": "Tag1" }}, ...]`.
+  4.  `Links` (rich_text): Use the `links` list. Join all URLs with a newline ("\n").
+  5.  `Due Date` (date): Use the `due_date` field.
+  6.  `Status` (select): This value must ALWAYS be "To Do".
+
+  Return ONLY the final, merged Notion `properties` JSON object.
+
+format_notion_grocery: |
+  You are a JSON formatting assistant. Convert the simple input JSON into a valid Notion API `properties` JSON object.
+  Input JSON:
+  {simple_json}
+
+  --- NOTION PROPERTY RULES ---
+  1.  `Name` (title): Use the `item_name` field.
+  2.  `Notes` (rich_text): Use the `original_text` field.
+  
+  Return ONLY the final, merged Notion `properties` JSON object.
+
+format_notion_simple: |
+  You are a JSON formatting assistant. Convert the simple input JSON into a valid Notion API `properties` JSON object for a "{category}" database.
+  Input JSON:
+  {simple_json}
+
+  --- NOTION PROPERTY RULES ---
+  1.  `Name` (title): Use the `title` field.
+
+  Return ONLY the final, merged Notion `properties` JSON object.
