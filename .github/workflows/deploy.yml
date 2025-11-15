@@ -34,14 +34,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: '3.13' # TODO: see if a higher version is available for this action
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
       - name: Install service + test deps
         run: |
-          uv sync --frozen --all-extras
+          echo "TODO: When implement tests, install test dependencies here!"  
+        # uv sync --frozen --all-extras
 
       - name: Run tests
         run: |
