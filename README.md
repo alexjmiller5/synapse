@@ -126,7 +126,7 @@ chmod +x ./scripts/set-secrets.sh
 - [Gemini Studio Usage](https://aistudio.google.com/usage?project=nimble-acrobat-422115-q8)
 - [Notion Developer Portal](https://www.notion.so/my-integrations)
 - [Gemini Chat About Design](https://gemini.google.com/app/59fe912cc890af6d)
-- [GCloud Project Functions](https://console.cloud.google.com/run?deploymentType=function&project=nimble-acrobat-422115-q8)
+- [GCloud Project Functions](https://console.cloud.google.com/run?deploymentType=function&project=synapse-477401)
 - [GitHub Repository](https://github.com/alexjmiller5/synapse)
 
 ## General thoughts and important TODOs
