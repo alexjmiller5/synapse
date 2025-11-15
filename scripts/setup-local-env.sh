@@ -7,7 +7,6 @@ PROJECT_ROOT=$( cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd )
 CONFIG_FILE="$PROJECT_ROOT/config.yml"
 TF_VARS_FILE="$PROJECT_ROOT/infrastructure/terraform.tfvars"
 VENV_DIR="$PROJECT_ROOT/.venv"
-SERVICES_DIR="$PROJECT_ROOT/services"
 
 check_command() {
     if ! command -v "$1" &> /dev/null; then
@@ -53,19 +52,30 @@ setup_python() {
         (cd "$PROJECT_ROOT" && uv venv)
     fi
     
-    echo "📦 Installing service dependencies..."
+    echo "📦 Installing service and worker dependencies..."
 
     local venv_python="$VENV_DIR/bin/python"
+    
+    # Define all directories that contain apps
+    local app_dirs=("$PROJECT_ROOT/services" "$PROJECT_ROOT/workers")
 
-    echo "  -> Discovering and installing services in '$SERVICES_DIR'..."
-    for service_dir in "$SERVICES_DIR"/*/; do
-        if [ -d "$service_dir" ] && [ -f "$service_dir/pyproject.toml" ]; then
-            local service_name
-            service_name=$(basename "$service_dir")
-            echo "    -> Installing '$service_name'"
-            uv pip install -e "$service_dir" --python "$venv_python" --quiet
+    for app_root_dir in "${app_dirs[@]}"; do
+        echo "  -> Discovering apps in '$app_root_dir'..."
+        if [ ! -d "$app_root_dir" ]; then
+            echo "    -> Warning: Directory not found: $app_root_dir. Skipping."
+            continue
         fi
+
+        for app_dir in "$app_root_dir"/*/; do
+            if [ -d "$app_dir" ] && [ -f "$app_dir/pyproject.toml" ]; then
+                local app_name
+                app_name=$(basename "$app_dir")
+                echo "    -> Installing '$app_name'"
+                uv pip install -e "$app_dir" --python "$venv_python" --quiet
+            fi
+        done
     done
+    
     echo "✅ Python environment is ready."
 }
 
