@@ -42,7 +42,25 @@ resource "google_secret_manager_secret" "secrets" {
     "gemini-api-key",
     "notion-api-token", #TODO: Rename to notion-integration-token
     "notion-tasks-db-id",
+    "notion-groceries-db-id",
+    "notion-cheers-note-last-block-id",
+    "notion-card-games-list-id",
+    "notion-fun-activities-db-id",
+    "notion-people-db-id",
     "notion-quick-notes-last-block-id",
+    "notion-languages-db-id",
+    "notion-shopping-db-id",
+    "notion-ideas-db-id",
+    "notion-bucket-list-db-id",
+    "notion-movies-db-id",
+    "notion-tv-episodes-db-id",
+    "notion-tv-shows-db-id",
+    "notion-podcasts-db-id",
+    "notion-youtube-videos-db-id",
+    "notion-youtube-channels-db-id",
+    "notion-books-db-id",
+    "notion-video-games-db-id",
+    "notion-quotes-db-id",
     "gmail-app-password",
   ])
 
@@ -62,20 +80,17 @@ resource "google_eventarc_trigger" "reporter_trigger" {
   location = var.region
   project  = var.gcp_project_id
 
-  # 1. The event to listen for
   matching_criteria {
     attribute = "type"
     value     = "google.cloud.pubsub.topic.v1.messagePublished"
   }
 
-  # 2. The topic to listen on
   transport {
     pubsub {
       topic = google_pubsub_topic.reporter_topic.id
     }
   }
 
-  # 3. The service to send the event to
   destination {
     cloud_run_service {
       service = module.reporter_service.service_name
@@ -83,35 +98,69 @@ resource "google_eventarc_trigger" "reporter_trigger" {
     }
   }
 
-  # 4. The service account for the trigger itself
   service_account = google_service_account.function_sa.email
 }
 
-# Allow the reporter service to be invoked by Eventarc
 resource "google_cloud_run_service_iam_member" "reporter_invoker" {
   service  = module.reporter_service.service_name
   location = var.region
   project  = var.gcp_project_id
   role     = "roles/run.invoker"
-
-  # This member is the SA that Eventarc uses
-  member = "serviceAccount:${google_service_account.function_sa.email}"
+  member   = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
-# # Allow the processor service to be invoked by the public
-# resource "google_cloud_run_service_iam_member" "processor_invoker" {
-#   service  = module.processor_service.service_name
-#   location = var.region
-#   project  = var.gcp_project_id
-#   role     = "roles/run.invoker"
-#   member   = "allUsers"
-# }
+# --- NEW: Eventarc Trigger for Processor Worker ---
 
-# --- Reporter Function Infrastructure ---
+resource "google_eventarc_trigger" "processor_worker_trigger" {
+  name     = "processor-trigger"
+  location = var.region
+  project  = var.gcp_project_id
+
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.pubsub.topic.v1.messagePublished"
+  }
+
+  transport {
+    pubsub {
+      topic = google_pubsub_topic.processor_topic.id
+    }
+  }
+
+  destination {
+    cloud_run_service {
+      service = module.processor_worker.service_name
+      region  = var.region
+    }
+  }
+
+  service_account = google_service_account.function_sa.email
+  depends_on      = [module.processor_worker]
+}
+
+# NEW: Allow the processor worker to be invoked by Eventarc
+resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
+  service  = module.processor_worker.service_name
+  location = var.region
+  project  = var.gcp_project_id
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.function_sa.email}"
+  depends_on = [
+    module.processor_worker,
+    google_eventarc_trigger.processor_worker_trigger
+  ]
+}
+
+# --- Pub/Sub Topics ---
 
 resource "google_pubsub_topic" "reporter_topic" {
   name = "reporter"
+  depends_on = [google_project_service.services]
+}
 
+# NEW: Topic for the processor jobs
+resource "google_pubsub_topic" "processor_topic" {
+  name = "processor-jobs"
   depends_on = [google_project_service.services]
 }
 
@@ -133,7 +182,6 @@ resource "google_cloud_scheduler_job" "reporter_job" {
 
 # --- Service Accounts ---
 
-# SA for the Cloud Functions themselves
 resource "google_service_account" "function_sa" {
   account_id   = "synapse-functions"
   display_name = "Synapse Cloud Functions Service Account"
@@ -145,16 +193,14 @@ resource "google_service_account" "api_gateway_sa" {
   display_name = "API Gateway Invoker SA"
 }
 
-# Grant the new SA permission to invoke the processor_service
-resource "google_cloud_run_service_iam_member" "processor_gateway_invoker" {
-  service  = module.processor_service.service_name
+# Grant the API Gateway SA permission to invoke the INTAKE service
+resource "google_cloud_run_service_iam_member" "intaker_gateway_invoker" {
+  service  = module.intaker_service.service_name
   location = var.region
   project  = var.gcp_project_id
   role     = "roles/run.invoker"
   member   = google_service_account.api_gateway_sa.member
-
-  # Ensure the service exists before adding IAM
-  depends_on = [module.processor_service]
+  depends_on = [module.intaker_service]
 }
 
 resource "google_project_iam_member" "deploy_sa_apigateway_admin" {
@@ -163,7 +209,6 @@ resource "google_project_iam_member" "deploy_sa_apigateway_admin" {
   member  = google_service_account.deploy_sa.member
 }
 
-# This lets your deploy_sa act as the api_gateway_sa during config creation
 resource "google_project_iam_member" "deploy_sa_api_gateway_sa_user" {
   project = var.gcp_project_id
   role    = "roles/iam.serviceAccountUser"
@@ -171,7 +216,7 @@ resource "google_project_iam_member" "deploy_sa_api_gateway_sa_user" {
 }
 
 # --- Workload Identity Federation (for GitHub Actions CI/CD) ---
-
+# (No changes in this section)
 resource "google_iam_workload_identity_pool" "github_pool" {
   project                   = var.gcp_project_id
   workload_identity_pool_id = "github-pool"
@@ -196,7 +241,7 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
 }
 
 # --- CI/CD Service Accounts & Permissions ---
-
+# (No changes in this section)
 resource "google_service_account" "terraform_sa" {
   project      = var.gcp_project_id
   account_id   = "terraform-sa"
@@ -209,7 +254,6 @@ resource "google_service_account" "deploy_sa" {
   display_name = "Deployment Service Account"
 }
 
-# Allow GitHub to impersonate the Terraform SA
 resource "google_service_account_iam_member" "terraform_sa_wif_user" {
   service_account_id = google_service_account.terraform_sa.name
   role               = "roles/iam.workloadIdentityUser"
@@ -217,7 +261,6 @@ resource "google_service_account_iam_member" "terraform_sa_wif_user" {
   depends_on         = [google_iam_workload_identity_pool_provider.github_provider]
 }
 
-# Allow GitHub to impersonate the Deploy SA
 resource "google_service_account_iam_member" "deploy_sa_wif_user" {
   service_account_id = google_service_account.deploy_sa.name
   role               = "roles/iam.workloadIdentityUser"
@@ -226,30 +269,27 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
 }
 
 # --- Project-level Roles ---
+# (No changes in this section)
 resource "google_project_iam_member" "cloud_build_artifact_writer" {
   project = var.gcp_project_id
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
-
 resource "google_project_iam_member" "terraform_sa_iam_admin" {
   project = var.gcp_project_id
   role    = "roles/resourcemanager.projectIamAdmin" # 
   member  = google_service_account.terraform_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_artifact_writer" {
   project = var.gcp_project_id
   role    = "roles/artifactregistry.writer"
   member  = google_service_account.deploy_sa.member
 }
-
 resource "google_project_iam_member" "terraform_sa_roles" {
   project = var.gcp_project_id
   role    = "roles/editor" # TODO: Note: 'editor' is broad. Scope this down for production.
   member  = google_service_account.terraform_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_run_admin" {
   project = var.gcp_project_id
   role    = "roles/run.admin" # <-- This is the new role
@@ -260,58 +300,58 @@ resource "google_project_iam_member" "deploy_sa_iam_user" {
   role    = "roles/iam.serviceAccountUser"
   member  = google_service_account.deploy_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_run_developer" {
   project = var.gcp_project_id
   role    = "roles/run.developer"
   member  = google_service_account.deploy_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_artifact_admin" {
   project = var.gcp_project_id
   role    = "roles/artifactregistry.admin"
   member  = google_service_account.deploy_sa.member
 }
-
 resource "google_project_iam_member" "deploy_sa_cloudbuild_editor" {
   project = var.gcp_project_id
   role    = "roles/cloudbuild.builds.editor"
   member  = google_service_account.deploy_sa.member
 }
-
-# --- Function SA Roles ---
-resource "google_project_iam_member" "function_secrets" {
-  project = var.gcp_project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.function_sa.email}"
-}
-
-resource "google_project_iam_member" "function_logging" {
-  project = var.gcp_project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.function_sa.email}"
-}
-
-resource "google_project_iam_member" "function_monitoring" {
-  project = var.gcp_project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.function_sa.email}"
-}
-
 resource "google_project_iam_member" "cloud_build_run_invoker" {
   project = var.gcp_project_id
   role    = "roles/run.invoker"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
 
+# --- Function SA Roles ---
+
+# NEW: Allow the Function SA (used by 'intaker') to publish to the processor topic
+resource "google_project_iam_member" "function_pubsub_publisher" {
+  project = var.gcp_project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
+
+resource "google_project_iam_member" "function_secrets" {
+  project = var.gcp_project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
+resource "google_project_iam_member" "function_logging" {
+  project = var.gcp_project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
+resource "google_project_iam_member" "function_monitoring" {
+  project = var.gcp_project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.function_sa.email}"
+}
 resource "google_project_iam_member" "function_artifact_reader" {
   project = var.gcp_project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
-
-
+# (Rest of project-level roles)
 resource "google_project_iam_member" "deploy_sa_storage_admin" {
   project = var.gcp_project_id
   role    = "roles/storage.admin"
@@ -322,50 +362,44 @@ resource "google_project_iam_member" "deploy_sa_service_usage" {
   role    = "roles/serviceusage.serviceUsageConsumer"
   member  = google_service_account.deploy_sa.member
 }
-
-
 resource "google_project_iam_member" "cloud_build_service_usage" {
   project = var.gcp_project_id
   role    = "roles/serviceusage.serviceUsageConsumer"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
-
 resource "google_project_iam_member" "cloud_build_run_admin" {
   project = var.gcp_project_id
   role    = "roles/run.admin"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
-
 resource "google_project_iam_member" "cloud_build_artifact_admin" {
   project = var.gcp_project_id
   role    = "roles/artifactregistry.admin"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
-
 resource "google_project_iam_member" "cloud_build_storage_admin" {
   project = var.gcp_project_id
   role    = "roles/storage.admin"
   member  = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
-
-# Allow Cloud Build to act as your function service account
 resource "google_service_account_iam_member" "cloud_build_sa_user" {
   service_account_id = google_service_account.function_sa.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${var.gcp_project_number}@cloudbuild.gserviceaccount.com"
 }
 
-module "processor_service" {
+# RENAMED: from "processor_service" to "intaker_service"
+module "intaker_service" {
   source = "./modules/cloud-service"
 
-  name                  = "processor"
+  name                  = "intaker" # Renamed from "processor"
   location              = var.region
   gcp_project_id        = var.gcp_project_id
   service_account_email = google_service_account.function_sa.email
   max_instance_count    = 10
   available_memory      = "512Mi"
   available_cpu         = "1000m"
-  timeout_seconds       = 300
+  timeout_seconds       = 300 # This can be very short, e.g., 30s
 
   depends_on = [google_project_service.services]
 }
@@ -373,7 +407,6 @@ module "processor_service" {
 module "reporter_service" {
   source = "./modules/cloud-service"
 
-  # --- Inputs ---
   name                  = "reporter"
   location              = var.region
   gcp_project_id        = var.gcp_project_id
@@ -382,6 +415,22 @@ module "reporter_service" {
   available_memory      = "256Mi"
   available_cpu         = "1000m"
   timeout_seconds       = 300
+
+  depends_on = [google_project_service.services]
+}
+
+# NEW: Module for the processor worker
+module "processor_worker" {
+  source = "./modules/cloud-service"
+
+  name                  = "processor"
+  location              = var.region
+  gcp_project_id        = var.gcp_project_id
+  service_account_email = google_service_account.function_sa.email
+  max_instance_count    = 5 # Can scale if needed
+  available_memory      = "512Mi"
+  available_cpu         = "1000m"
+  timeout_seconds       = 540 # Can be longer for AI calls
 
   depends_on = [google_project_service.services]
 }

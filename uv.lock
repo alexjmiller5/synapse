@@ -5,7 +5,7 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "synapse",
-    "synapse-processor",
+    "synapse-intaker",
     "synapse-reporter",
 ]
 
@@ -533,9 +533,9 @@ version = "1.0.0"
 source = { virtual = "." }
 
 [[package]]
-name = "synapse-processor"
+name = "synapse-intaker"
 version = "1.0.0"
-source = { virtual = "services/processor" }
+source = { virtual = "services/intaker" }
 dependencies = [
     { name = "functions-framework" },
     { name = "google-genai" },

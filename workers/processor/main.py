@@ -2,6 +2,7 @@ import functions_framework
 import json
 import yaml
 import os
+import base64
 import google.genai as genai
 from google.genai import types
 import requests
@@ -50,15 +51,28 @@ SIMPLE_TITLE_SCHEMA = {
     "required": ["title"],
 }
 
+
+# --- Load Config ---
+def load_config():
+    """Loads gcp_project_id from root config.yml."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(os.path.dirname(script_dir))
+        config_path = os.path.join(root_dir, 'config.yml')
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        return config.get("gcp_project_id", "synapse-477401")
+    except Exception as e:
+        print(f"Warning: Could not load config.yml: {e}. Using default project ID.")
+        return os.environ.get("GCP_PROJECT", "synapse-477401")
+
 # --- Secret Manager Setup ---
-# TODO: remove hardcoded configuration and have it point back to conifg.yml. This will be complicated given that the deployment only really looks at main.py. Also not sure what the best practices are here in general but I want the SSOT method
-PROJECT_ID = "synapse-477401"
+PROJECT_ID = load_config()
 
 # Cache for secrets
 SECRETS = {}
-
 client = None
-
 
 def get_secret(secret_id, version="latest"):
     """Fetches a secret from Google Secret Manager."""
@@ -87,7 +101,6 @@ def get_secret(secret_id, version="latest"):
 
 
 # --- Load Prompts ---
-# TODO: Make sure the prompts.yml makes it into the deployment package
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     prompts_path = os.path.join(script_dir, "prompts.yml")
@@ -113,8 +126,21 @@ else:
 NOTION_API_KEY = get_secret("notion-api-token")
 FALLBACK_NOTION_BLOCK_ID = get_secret("notion-quick-notes-last-block-id")
 
-# --- Helper Functions ---
+DATABASE_ID_SECRET_MAP = {
+    "Task": "notion-tasks-db-id",
+    "Grocery": "notion-groceries-db-id",
+    "Person": "notion-people-db-id",
+    "Therapy": "notion-therapy-db-id",
+    "Movie": "notion-movies-db-id",
+    "TVShow": "notion-tvshows-db-id",
+}
 
+DATABASE_IDS = {
+    category: get_secret(secret_id)
+    for category, secret_id in DATABASE_ID_SECRET_MAP.items()
+}
+
+# --- Helper Functions ---
 
 def call_gemini(system_prompt, user_prompt, schema):
     """Generic helper to call the Gemini API with a specific schema."""
@@ -124,9 +150,8 @@ def call_gemini(system_prompt, user_prompt, schema):
     print(f"--- Sending to Gemini (Schema: {list(schema['properties'].keys())}) ---")
 
     try:
-        # New SDK pattern from your docs
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",  # Your model name
+            model="gemini-2.5-flash-preview-09-2025",
             contents=[
                 types.Content(
                     parts=[types.Part.from_text(text=user_prompt)],
@@ -134,18 +159,16 @@ def call_gemini(system_prompt, user_prompt, schema):
                 )
             ],
             config=types.GenerateContentConfig(
-                system_instruction=system_prompt,  # Pass system prompt here
+                system_instruction=system_prompt,
                 response_mime_type="application/json",
                 response_json_schema=schema,
             ),
         )
     except KeyError as e:
-        # --- NEW DEBUGGING BLOCK ---
         print(f"--- FATAL KEYERROR in call_gemini ---")
         print(f"The google-genai SDK failed with KeyError: {e}")
         print("This almost certainly means the schema it was given is invalid.")
         print("Failing Schema:", json.dumps(schema, indent=2))
-        # Re-raise the exception to be caught by the main fallback handler
         raise e
     except Exception as e:
         print(f"--- FATAL ERROR in call_gemini: {e} ---")
@@ -168,7 +191,6 @@ def append_to_quick_notes(raw_text):
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28",
     }
-    # This is the JSON payload you provided
     payload = {
         "children": [
             {
@@ -191,21 +213,6 @@ def append_to_quick_notes(raw_text):
             print(f"Response body: {e.response.text}")
 
 
-DATABASE_ID_SECRET_MAP = {
-    "Task": "notion-tasks-db-id",
-    "Grocery": "notion-groceries-db-id",
-    "Person": "notion-people-db-id",
-    "Therapy": "notion-therapy-db-id",
-    "Movie": "notion-movies-db-id",
-    "TVShow": "notion-tvshows-db-id",
-}
-
-DATABASE_IDS = {
-    category: get_secret(secret_id)
-    for category, secret_id in DATABASE_ID_SECRET_MAP.items()
-}
-
-
 def create_notion_page(category, properties):
     """
     Creates a new page in the appropriate Notion database.
@@ -225,29 +232,25 @@ def create_notion_page(category, properties):
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28",
     }
-
     payload = {"parent": {"database_id": database_id}, "properties": properties}
+    
+    print(f"--- Sending to Notion: {json.dumps(payload, indent=2)} ---")
 
     try:
-        print( url, headers, payload)
         response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         print(f"--- SUCCESS: Created new Notion page in '{category}' ---")
-        return response.json()  # Return the new page object
+        return response.json()
     except requests.exceptions.RequestException as e:
         print(f"--- FAILED: Error calling Notion API: {e} ---")
+        error_message = f"Error: {e}"
         if e.response:
-            print(f"Response body: {e.response.text}")
-        # Re-raise the exception to be caught by the main try/except block
-        raise e
-
-
-# --- Helper Functions ---
-
-# (Your existing call_gemini and append_to_quick_notes go here)
-
-# --- NEW: Notion Property Builder Helpers ---
-# These functions replace the need for AI Call 3
+            try:
+                error_message = e.response.json()
+            except json.JSONDecodeError:
+                error_message = e.response.text
+            print(f"--- NOTION RESPONSE BODY ---\n{error_message}\n------------------------------")
+        raise Exception(f"Notion API Error: {error_message}")
 
 
 def _notion_title(text):
@@ -272,11 +275,6 @@ def _notion_date(iso_date_string):
     return {"date": {"start": iso_date_string}}
 
 
-def _notion_select(name):
-    """Builds a Notion 'select' property."""
-    return {"select": {"name": name}}
-
-
 def _notion_status(name):
     """Builds a Notion 'status' property."""
     return {"status": {"name": name}}
@@ -285,58 +283,57 @@ def _notion_status(name):
 def build_notion_properties(category, simple_data):
     """
     Takes the simple JSON from Step 2 and builds the complex
-    Notion API JSON. This REPLACES AI Call 3.
+    Notion API JSON.
     """
     print(f"--- Building Notion properties for: {category} ---")
 
     if category == "Task":
         return {
-            "Title": _notion_title(simple_data["original_text"]),
+            "Name": _notion_title(simple_data["original_text"]),
             "AI Title": _notion_rich_text(simple_data["summarized_title"]),
             "Tags": _notion_multi_select(simple_data["tags"]),
             "Links": _notion_rich_text("\n".join(simple_data["links"])),
             "Due Date": _notion_date(simple_data["due_date"]),
             "Status": _notion_status("To Do"),
         }
-
     elif category == "Grocery":
         return {
             "Name": _notion_title(simple_data["item_name"]),
             "Notes": _notion_rich_text(simple_data["original_text"]),
         }
-
     else:  # Person, Therapy, Movie, TVShow
         return {"Name": _notion_title(simple_data["title"])}
 
 
-@functions_framework.http
-def process(request):
-    print("🧠 Synapse processor service is awake!")
+@functions_framework.cloud_event
+def process_job(cloud_event):
+    """
+    Pub/Sub-triggered function that runs the full AI pipeline.
+    This is your main worker.
+    """
+    print("🧠 Synapse processor worker is awake!")
 
     if not GEMINI_API_KEY or not PROMPTS or not NOTION_API_KEY:
-        error_msg = "ERROR: Service is not configured. Missing API Keys or Prompts."
-        print(error_msg)
-        return error_msg, 500
+        print("ERROR: Service is not configured. Missing API Keys or Prompts.")
+        return  # Acknowledge the event to prevent retries
 
     try:
-        request_json = request.get_json(silent=True)
-        if not request_json or "raw_text" not in request_json:
-            error_msg = "Error: Request must be JSON and include a 'raw_text' field."
-            print(error_msg)
-            return error_msg, 400
-        raw_text = request_json["raw_text"]
-        print(f"Received raw_text: {raw_text}")
+        # Get raw_text from the Pub/Sub message
+        message_data = base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8")
+        raw_text = str(message_data) # Ensure it's a string
+        if not raw_text:
+            print("Error: Pub/Sub message data is empty.")
+            return
+        print(f"Received raw_text from Pub/Sub: {raw_text}")
     except Exception as e:
-        error_msg = f"Error parsing request JSON: {e}"
-        print(error_msg)
-        return error_msg, 400
+        print(f"Error decoding Pub/Sub message: {e}")
+        return
 
     try:
         # === STEP 1: CLASSIFICATION CALL ===
         system_prompt_1 = PROMPTS["categorize_input"]
         classified_data = call_gemini(system_prompt_1, raw_text, CATEGORY_SCHEMA)
         category = classified_data.get("category", "Task")
-
         print(f"Step 1 Complete. Category: {category}")
 
         # === STEP 2: SIMPLE EXTRACTION CALL ===
@@ -357,33 +354,19 @@ def process(request):
 
         system_prompt_2 = PROMPTS[prompt_key_2].format(**prompt_2_args)
         simple_json_data = call_gemini(system_prompt_2, raw_text, schema_2)
-
         print(f"Step 2 Complete. Extracted: {simple_json_data}")
 
         # === STEP 3: BUILD NOTION PROPERTIES (Python) ===
-        # This replaces the failing AI call
         final_notion_properties = build_notion_properties(category, simple_json_data)
-
         print(f"Step 3 Complete. Formatted for Notion: {final_notion_properties}")
 
         # === STEP 4: CREATE NOTION PAGE ===
-        notion_response = create_notion_page(category, final_notion_properties)
-
-        # --- SUCCESS ---
-        final_response = {
-            "message": "Successfully created new Notion page.",
-            "category": category,
-            "notion_page_url": notion_response.get("url"),
-        }
-        return final_response, 200
+        create_notion_page(category, final_notion_properties)
+        
+        print("--- JOB SUCCESS: Full pipeline complete. ---")
 
     except Exception as e:
         # --- FALLBACK ---
         print(f"Error during AI/Notion process: {e}. Executing fallback.")
         append_to_quick_notes(raw_text)
-        # Let the client know it was saved as a quick note
-        return {
-            "message": "AI processing failed. Saved as Quick Note.",
-            "category": "QuickNote",  # Special category for client
-            "original_text": raw_text,
-        }, 200
+        print("--- JOB FAILED: Saved as Quick Note. ---")
