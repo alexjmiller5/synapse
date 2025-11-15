@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'services/**'
+      - 'workers/**' # NEW: Watch the workers directory
       - 'pyproject.toml'
       - 'uv.lock'
       - 'config.yml'
@@ -17,10 +18,12 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: processor
-            path: services/processor
+          - name: intaker # RENAMED
+            path: services/intaker # RENAMED
           - name: reporter
             path: services/reporter
+          - name: processor # NEW
+            path: workers/processor # NEW
     defaults:
       run:
         working-directory: ${{ matrix.service.path }}
@@ -56,15 +59,20 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: processor
-            path: services/processor
-            entry_point: process
+          - name: intaker # RENAMED
+            path: services/intaker # RENAMED
+            entry_point: intaker # RENAMED
             trigger_http: true
             api_spec_template: "api-gateways/processor-spec-template.yml"
           - name: reporter
             path: services/reporter
             entry_point: report
             trigger_topic: reporter
+            api_spec_template: ""
+          - name: processor # NEW
+            path: workers/processor # NEW
+            entry_point: process_job # NEW
+            trigger_topic: processor-jobs # NEW
             api_spec_template: ""
 
     steps:
@@ -77,16 +85,12 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
-      # TODO: change the export command to not use dev dependencies 
-      # uv export --no-dev --format requirements-txt > requirements.txt
       - name: Generate requirements.txt
         run: |
           cd ${{ matrix.service.path }}
           
           if [ -f "pyproject.toml" ]; then
             echo "Exporting dependencies using uv..."
-            
-            # Use uv to export dependencies in requirements.txt format
             uv pip compile pyproject.toml -o requirements.txt
             echo "Generated requirements.txt:"
             cat requirements.txt
@@ -112,15 +116,17 @@ jobs:
           source: ${{ matrix.service.path }}
           env_vars: |
             GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
+          # UPDATED: Simplified flags, as all services should be private
+          # The intaker service is invoked by the Gateway SA
+          # The others are invoked by Eventarc
           flags: >-
             --function=${{ matrix.service.entry_point }}
-            ${{ matrix.service.trigger_topic && 
-                '--no-allow-unauthenticated' || 
-                '--no-allow-unauthenticated' }}
+            --no-allow-unauthenticated
 
       - name: Get Cloud Run service URL
         id: get_url
-        if: matrix.service.api_spec_template != ''
+        # UPDATED: Only run this for the intaker service
+        if: matrix.service.name == 'intaker'
         run: |
           SERVICE_URL=$(gcloud run services describe ${{ matrix.service.name }} \
             --region ${{ env.region }} \
@@ -128,17 +134,16 @@ jobs:
           echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
           
       - name: Deploy API Gateway
-        if: matrix.service.api_spec_template != ''
+        # UPDATED: Only run this for the intaker service
+        if: matrix.service.name == 'intaker'
         env:
-          # This email must match the SA you created in Terraform
           GATEWAY_SA_EMAIL: "api-gateway-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
           API_ID: "processor-api"
           GATEWAY_ID: "processor-gateway"
-          CONFIG_ID: "config-${{ github.run_id }}" # Create a unique config ID
+          CONFIG_ID: "config-${{ github.run_id }}"
         run: |
           echo "Deploying API Gateway for ${{ matrix.service.name }}..."
           
-          # 1. Create the API (fails silently if it already exists)
           gcloud api-gateway apis create ${API_ID} \
             --project=${{ env.gcp_project_id }} || echo "API '${API_ID}' already exists."
 
@@ -149,7 +154,6 @@ jobs:
           
           gcloud services enable $SERVICE_NAME
           
-          # 2. Prepare the spec file by replacing the DUMMY_URL
           echo "Replacing placeholder in spec..."
           sed "s|DUMMY_URL|${{ steps.get_url.outputs.service_url }}|g" \
             ${{ matrix.service.api_spec_template }} > processed-spec.yml
@@ -158,16 +162,12 @@ jobs:
           cat processed-spec.yml
           echo "---------------------"
 
-          # 3. Create the new API Config
           gcloud api-gateway api-configs create ${CONFIG_ID} \
             --api=${API_ID} \
             --project=${{ env.gcp_project_id }} \
             --openapi-spec=processed-spec.yml \
             --backend-auth-service-account=${GATEWAY_SA_EMAIL}
 
-          # 4. Create or Update the Gateway to use the new config
-          # This command creates the gateway if it's missing,
-          # or updates it to the new config if it exists.
           gcloud api-gateway gateways create ${GATEWAY_ID} \
             --api=${API_ID} \
             --api-config=${CONFIG_ID} \

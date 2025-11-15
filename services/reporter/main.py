@@ -24,7 +24,7 @@ def report(request):
         # (e.g., query databases, send email)
 
     except Exception as e:
-        print(f"Error processing message: {e}")
+        print(f"Error intaking message: {e}")
         # Return a 500 so Eventarc/Pub/Sub can retry if configured
         return "An error occurred", 500
 

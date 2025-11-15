@@ -11,13 +11,13 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **IaC:** **Terraform** manages all GCP resources (Functions, IAM, Secrets) as versioned code.
 - **CI/CD:** **GitHub Actions** deploys on push to `main` using **GCP Workload Identity Federation** for keyless authentication.
 - **Google Cloud Functions**:
-  - **`processor`**: HTTP-triggered API endpoint for categorizing data and sending it to Notion.
+  - **`intaker`**: HTTP-triggered API endpoint for categorizing data and sending it to Notion.
   - **`reporter`**: Cron-triggered (Cloud Scheduler) for twice-daily email summaries.
 - **Gemini 2.5 Flash**: Low-latency intent classification and entity extraction.
 - **Gemini 2.5 Pro**: Complex data structuring and schema-based decisions.
 - **Google Secret Manager** stores all keys (Notion token, Gmail password), accessed via IAM.
 - **Gmail**: Email reports sent by `reporter-function` via `smtplib` and a **Gmail App Password**.
-- **API Gateway**: Secures and manages access to the `processor` function.
+- **API Gateway**: Secures and manages access to the `intaker` function.
 
 ## Architecture Diagram
 <!-- TODO: Create an architecture diagram of the flow of my services -->
@@ -96,6 +96,11 @@ gcloud services api-keys update "$KEY_NAME" --api-target="service=$SERVICE_NAME"
 #### Setting and managing secrets
 
 Use the scripts/manage_secrets.sh script to create and update secrets in Google Secret Manager.
+
+```bash
+chmod +x ./scripts/set-secrets.sh
+./scripts/set-secrets.sh
+```
 
 ### Config variables in config.yml
 

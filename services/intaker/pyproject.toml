@@ -1,12 +1,10 @@
 [project]
-name = "synapse-processor"
+name = "synapse-intaker"
 version = "1.0.0"
 authors = [{name = "Alex Miller", email = "amiller06880@gmail.com"}]
 
 dependencies = [
-  "requests~=2.31.0",
   "functions_framework~=3.9.2",
-  "google-genai~=1.49.0",
+  "google-cloud-pubsub~=2.19.0",
   "PyYAML~=6.0.3",
-  "google-cloud-secret-manager~=2.25.0"
 ]
