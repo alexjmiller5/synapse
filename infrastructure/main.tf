@@ -154,13 +154,13 @@ resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
 # --- Pub/Sub Topics ---
 
 resource "google_pubsub_topic" "reporter_topic" {
-  name = "reporter"
+  name       = "reporter"
   depends_on = [google_project_service.services]
 }
 
 # NEW: Topic for the processor jobs
 resource "google_pubsub_topic" "processor_topic" {
-  name = "processor-jobs"
+  name       = "processor-jobs"
   depends_on = [google_project_service.services]
 }
 
@@ -195,11 +195,11 @@ resource "google_service_account" "api_gateway_sa" {
 
 # Grant the API Gateway SA permission to invoke the INTAKE service
 resource "google_cloud_run_service_iam_member" "intaker_gateway_invoker" {
-  service  = module.intaker_service.service_name
-  location = var.region
-  project  = var.gcp_project_id
-  role     = "roles/run.invoker"
-  member   = google_service_account.api_gateway_sa.member
+  service    = module.intaker_service.service_name
+  location   = var.region
+  project    = var.gcp_project_id
+  role       = "roles/run.invoker"
+  member     = google_service_account.api_gateway_sa.member
   depends_on = [module.intaker_service]
 }
 
