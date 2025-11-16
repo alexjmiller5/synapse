@@ -4,24 +4,10 @@ import os
 import yaml
 from google.cloud import pubsub_v1
 
-# --- Load Config ---
-def load_config():
-    """Loads gcp_project_id from root config.yml."""
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.dirname(os.path.dirname(script_dir))
-        config_path = os.path.join(root_dir, 'config.yml')
-        
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        return config.get("gcp_project_id", "synapse-477401")
-    except Exception as e:
-        print(f"Warning: Could not load config.yml: {e}. Using default project ID.")
-        return os.environ.get("GCP_PROJECT", "synapse-477401")
-
 # --- Global Config ---
-PROJECT_ID = load_config()
-TOPIC_ID = "processor-jobs"  # As defined in your main.tf
+# TODO: remove hardcoded configuration and have it point back to conifg.yml. This will be complicated given that the deployment only really looks at main.py. Also not sure what the best practices are here in general but I want the SSOT method -- something where I can somehow load the config.yaml into this build, maybe similar to how i generate the requirements.txt at deploy time
+PROJECT_ID = "synapse-477401"
+TOPIC_ID = "processor-jobs"  # As defined in your main.tf TODO: move to to config.yaml which will go hand in hand with moving hardcoded project_id. Also I need to move the terraform to use variables for topic_id just like project_id
 publisher = None
 topic_path = None
 
