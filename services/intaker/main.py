@@ -12,7 +12,7 @@ publisher = None
 topic_path = None
 
 @functions_framework.http
-def intake(request):
+def intaker(request):
     """
     HTTP-triggered function to receive raw_text and publish it
     to a Pub/Sub topic for asynchronous processing.
