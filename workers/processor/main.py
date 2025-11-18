@@ -228,7 +228,7 @@ def create_notion_page(category, properties):
     payload = {"parent": {"database_id": database_id}, "properties": properties}
 
     try:
-        print(url, headers, payload)
+        # print(url, headers, payload)
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for bad status codes
         print(f"--- SUCCESS: Created new Notion page in '{category}' ---")

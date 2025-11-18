@@ -7,12 +7,22 @@ resource "google_api_gateway_api" "processor_api" {
   depends_on = [google_project_service.services]
 }
 
+resource "time_sleep" "wait_for_api_service" {
+  # This implicit dependency is okay, but you can also make it explicit
+  # by adding depends_on = [google_api_gateway_api.processor_api]
+  create_duration = "15m" # 30-60 seconds is usually enough
+}
+
 # 4. Enable the managed service for the API
 resource "google_project_service" "api_gateway_managed_service" {
   provider           = google-beta # Use beta provider for consistency
   project            = var.gcp_project_id
   service            = google_api_gateway_api.processor_api.managed_service
   disable_on_destroy = false # Keep it enabled
+  depends_on = [
+    time_sleep.wait_for_api_service,
+    google_api_gateway_api.processor_api # Good to be explicit
+  ]
 }
 
 # 5. Create the API Config
