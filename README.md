@@ -192,6 +192,11 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] Figure out how to set up an src layout for my pyproject.toml to avoid issues with imports when running locally with functions framework and also then my deployment probably needs to be refacted cause the source / entrypoint will need the multiple files and shit
 - [ ] move my gemini api key from my personal services project to my synpase project
 - [ ] remove all the gpt comments that are unecessary
+- [ ] Set up notion Properties to be mapped as IDs instead of names to avoid issues when i change the names of properties in notion
+- [ ] Set up notion webhooks to notify me when properties are deleted or changed that are used in my code so i can update them accordingly
+- [ ] Think of a way to avoid hardcoding the property ids directly in the code. Maybe have a config file in notion that maps property names to ids and have the code read that at runtime or deployment time -- try to think of some kinda code that determines the property ids based on the names at deployment time and stores them in environment variables or a config file and automatically figures out which property is which -- As I'm thinking about this, I did the DB ids as secrets which is fine, but I kinda wanna put all these property ids in my config.yaml or maybe make a yaml specifically for the processor function -- yeah that's the best idea -- just gonna be big yaml tables lmao coordinated with the db ids I've stored as secrets since that's how I'm determining which dbs to use for this project
+- [ ] put all my secrets keys into my config.yaml -- leave the values out but this way my terraform code will create secrets from the names in the config.yaml (it'll just read every single name within a secret list and make em all) and my actualy code will read the keys from the config.yaml as well. My secret setup script can also read the secrets from the config.yaml and verify that the config.yaml is a mirror of gcp secret manager (rn it just checks gcp manager) for an extra step of verification
+- [ ] make some kinda script which copies the config.yaml into the cloud run functions folders at deploy time so they have access to it and i can stop hardcoding stuff
 
 ### **Feature Related Stuff**
 
