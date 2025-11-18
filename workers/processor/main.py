@@ -285,7 +285,7 @@ def build_notion_properties(category, simple_data):
 
     if category == "Task":
         return {
-            "Name": _notion_title(simple_data["original_text"]),
+            "Title": _notion_title(simple_data["original_text"]),
             "AI Title": _notion_rich_text(simple_data["summarized_title"]),
             "Tags": _notion_multi_select(simple_data["tags"]),
             "Links": _notion_rich_text("\n".join(simple_data["links"])),
