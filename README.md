@@ -82,7 +82,7 @@ gcloud api-gateway apis describe "<api-id>" # API_ID is processor-api set in dep
 gcloud services api-keys describe "<key-name>" --format="value(restrictions)"
 
 # Apply the restrictions to the created key
-gcloud services api-keys update "$KEY_NAME" --api-target="service=$SERVICE_NAME"
+gcloud services api-keys update "<key-name>" --api-target="service=<service-name>"
 ```
 
 ### Required Secrets (Google Secret Manager)
@@ -162,6 +162,7 @@ chmod +x ./scripts/set-secrets.sh
 - [ ] make the api gateway only deploy if the api-gateways folder is modified
 - [ ] Figure out how to set up an src layout for my pyproject.toml to avoid issues with imports when running locally with functions framework and also then my deployment probably needs to be refacted cause the source / entrypoint will need the multiple files and shit
 - [ ] move my gemini api key from my personal services project to my synpase project
+- [ ] remove all the gpt comments that are unecessary
 
 ### **Feature Related Stuff**
 
