@@ -68,21 +68,27 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 - Run the following commands to create or find and print the processor service API Key
 
 ```bash
-# Create an API key for the processor service
-gcloud services api-keys create --display-name="Processor Gateway Key"
+# --- Configuration ---
+export KEY_DISPLAY_NAME="Processor Gateway Key"
+export API_ID="processor-api" # TODO:  The ID set in the terraform code (Should be moved to the config.yaml)
 
-# List existing API keys to find the name of the created key
-gcloud services api-keys list
-gcloud services api-keys get-key-string "<processor-service-api-key-name>"
+# --- Execution ---
 
-# Find the managed service name for the API Gateway
-gcloud api-gateway apis describe "<api-id>" # API_ID is processor-api set in deploy.yml
+# 1. Create the API Key
+gcloud services api-keys create --display-name="$KEY_DISPLAY_NAME"
 
-# Check current restrictions on the created key
-gcloud services api-keys describe "<key-name>" --format="value(restrictions)"
+# 2. Programmatically get the Key Resource Name (projects/.../keys/...)
+KEY_NAME=$(gcloud services api-keys list --filter="displayName:'$KEY_DISPLAY_NAME'" --format="value(name)" --limit=1)
 
-# Apply the restrictions to the created key
-gcloud services api-keys update "<key-name>" --api-target="service=<service-name>"
+# 3. Programmatically get the Managed Service Name for the Gateway
+MANAGED_SERVICE=$(gcloud api-gateway apis describe "$API_ID" --format="value(managedService)")
+
+# 4. Apply restrictions to the key using the retrieved service name
+gcloud services api-keys update "$KEY_NAME" --api-target="service=$MANAGED_SERVICE"
+
+# 5. Output the actual usable Key String
+echo "Setup Complete. Your API Key is:"
+gcloud services api-keys get-key-string "$KEY_NAME" --format="value(keyString)"
 ```
 
 ### Required Secrets (Google Secret Manager)
@@ -118,6 +124,29 @@ chmod +x ./scripts/set-secrets.sh
 
 1. Push to the `main` branch
 2. GitHub Actions will automatically run tests and deploy
+
+---
+
+## Useful Commands
+
+- The API Gateway creates a managed service by default called `api-gateway-<api-id>.<project-id>.cloud.goog`. To find the details of the API Gateway use one of the following commands:
+
+```bash
+gcloud endpoints services list \
+  --project="synapse-477401"
+
+gcloud api-gateway apis describe processor-api
+```
+
+- Find the URL of the deployed `processor` api gateway URL:
+
+```bash
+gcloud api-gateway gateways describe processor-gateway \
+  --location=us-east1 \
+  --project=synapse-477401
+```
+
+---
 
 ---
 
