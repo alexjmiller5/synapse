@@ -38,3 +38,9 @@ variable "timeout_seconds" {
   description = "The timeout for the service in seconds."
   type        = number
 }
+
+variable "min_instance_count" {
+  description = "The minimum number of instances (warm instances)."
+  type        = number
+  default     = 0
+}

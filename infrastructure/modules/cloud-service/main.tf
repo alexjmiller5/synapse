@@ -31,6 +31,7 @@ resource "google_cloud_run_service" "this" {
       annotations = {
         # This maps the Cloud Function's 'max_instance_count'
         "autoscaling.knative.dev/maxScale" = var.max_instance_count
+        "autoscaling.knative.dev/minScale" = var.min_instance_count
       }
     }
   }

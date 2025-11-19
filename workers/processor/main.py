@@ -110,7 +110,7 @@ if GEMINI_API_KEY:
 else:
     print("FATAL: Could not configure Gemini API. Key is missing.")
 
-NOTION_API_KEY = get_secret("notion-api-token")
+NOTION_API_KEY = get_secret("notion-integration-token")
 FALLBACK_NOTION_BLOCK_ID = get_secret("notion-quick-notes-last-block-id")
 
 DATABASE_ID_SECRET_MAP = {
