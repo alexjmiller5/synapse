@@ -94,7 +94,7 @@ gcloud services api-keys get-key-string "$KEY_NAME" --format="value(keyString)"
 ### Required Secrets (Google Secret Manager)
 
 - gemini-api-key
-- notion-api-token
+- notion-integration-token
 - notion-tasks-db-id
 - notion-quick-notes-last-block-id
 - gmail-app-password
