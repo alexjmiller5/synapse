@@ -161,9 +161,23 @@ CATEGORY_SCHEMA = {
         "category": {
             "type": "string",
             "enum": [
-                "Task", "Grocery", "Shopping", "Person", "Idea", "Quote",
-                "Activity", "BucketList", "Language", "Movie", "TVShow",
-                "TVEpisode", "Podcast", "Book", "Game", "Video", "Channel",
+                "Task",
+                "Grocery",
+                "Shopping",
+                "Person",
+                "Idea",
+                "Quote",
+                "Activity",
+                "BucketList",
+                "Language",
+                "Movie",
+                "TVShow",
+                "TVEpisode",
+                "Podcast",
+                "Book",
+                "Game",
+                "Video",
+                "Channel",
             ],
         },
         "related_project": {
@@ -211,7 +225,7 @@ DATABASE_ID_SECRET_MAP = {
     "Game": "notion-video-games-db-id",
     "Video": "notion-youtube-videos-db-id",
     "Channel": "notion-youtube-channels-db-id",
-    "Logs": "notion-logs-db-id"
+    "Logs": "notion-logs-db-id",
 }
 
 # ==========================================
@@ -224,6 +238,7 @@ gemini_client = None
 notion = None
 spotify = None
 PROMPTS = {}
+
 
 def get_secret(secret_id, version="latest"):
     global sm_client
@@ -246,6 +261,7 @@ def get_secret(secret_id, version="latest"):
     except Exception as e:
         print(f"Error fetching secret '{secret_id}': {e}")
         return None
+
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -283,20 +299,28 @@ DATABASE_IDS = {cat: get_secret(sid) for cat, sid in DATABASE_ID_SECRET_MAP.item
 def _notion_title(val):
     return {"title": [{"text": {"content": val}}]}
 
+
 def _notion_rich_text(val):
-    return {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+    return (
+        {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+    )
+
 
 def _notion_multi_select(val):
     return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
 
+
 def _notion_date(val):
     return {"date": {"start": val}}
+
 
 def _notion_status(val):
     return {"status": {"name": val}}
 
+
 def _notion_select(val):
     return {"select": {"name": val}} if val else None
+
 
 def _notion_url(val):
     return {"url": val}
@@ -305,38 +329,42 @@ def _notion_url(val):
 # ==========================================
 # 5. ENRICHMENT HELPERS
 # ==========================================
-def log_job_outcome(raw_text, category, status, details="", created_url=None, ai_data=None):
+def log_job_outcome(
+    raw_text, category, status, details="", created_url=None, ai_data=None
+):
     """
     Creates a log entry in the Synapse Logs DB.
     """
     print(f"--- Logging outcome: {status} ---")
     log_db_id = DATABASE_IDS.get("Logs")
-    if not notion or not log_db_id: return
+    if not notion or not log_db_id:
+        return
 
     ai_summary = json.dumps(ai_data, indent=2) if ai_data else "No data"
 
     props = {
-        "Name": _notion_title(raw_text[:50] + "..."),
-        "Status": _notion_select(status),
+        "Raw Input": _notion_title(raw_text[:2000]),
+        "Status": _notion_status(status),
         "Category": _notion_select(category),
         "Reported": {"checkbox": False},
-        "Raw Input": _notion_rich_text(raw_text[:2000]),
         "Error Details": _notion_rich_text(str(details)[:2000]),
-        "AI Summary": _notion_rich_text(ai_summary[:2000])
+        "AI Summary": _notion_rich_text(ai_summary[:2000]),
     }
-    
+
     if created_url:
         props["Created Item"] = {"url": created_url}
-    
+
     try:
         notion.pages.create(parent={"database_id": log_db_id}, properties=props)
         print("--- Log Entry Created ---")
     except Exception as e:
         print(f"Failed to write log: {e}")
 
+
 def extract_url(text):
     match = re.search(r"(https?://\S+)", text)
     return match.group(0) if match else None
+
 
 def get_tal_metadata(url):
     try:
@@ -346,6 +374,7 @@ def get_tal_metadata(url):
         return f"Content from URL:\n{clean_text[:2000]}..."
     except Exception as e:
         return f"Error scraping TAL: {e}"
+
 
 def get_spotify_metadata(url):
     if not spotify:
@@ -359,6 +388,7 @@ def get_spotify_metadata(url):
         )
     except Exception as e:
         return f"Error fetching Spotify data: {e}"
+
 
 def get_youtube_metadata(url):
     ydl_opts = {
@@ -378,6 +408,7 @@ def get_youtube_metadata(url):
             )
     except Exception as e:
         return f"Error fetching YouTube data: {e}"
+
 
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
@@ -410,6 +441,7 @@ def fetch_existing_page_by_title(category, title_text, title_key="Name"):
         pass
     return None
 
+
 def fetch_active_projects():
     if not notion or not DATABASE_IDS.get("Task"):
         return []
@@ -432,6 +464,7 @@ def fetch_active_projects():
     except Exception:
         return []
 
+
 def create_notion_page(category, properties):
     if not notion or not DATABASE_IDS.get(category):
         raise Exception(f"Notion client or DB missing for {category}")
@@ -439,6 +472,7 @@ def create_notion_page(category, properties):
     return notion.pages.create(
         parent={"database_id": DATABASE_IDS[category]}, properties=properties
     )
+
 
 def update_page_status(page_id, status_name, status_key="Status"):
     if not notion:
@@ -451,6 +485,7 @@ def update_page_status(page_id, status_name, status_key="Status"):
     except Exception as e:
         print(f"Failed to update status: {e}")
         return None
+
 
 def append_to_quick_notes(raw_text):
     if not notion or not FALLBACK_NOTION_BLOCK_ID:
@@ -471,6 +506,7 @@ def append_to_quick_notes(raw_text):
     except Exception:
         pass
 
+
 def create_manual_cleanup_task(description):
     print(f"--- Creating Cleanup Task: {description} ---")
     props = {
@@ -483,6 +519,7 @@ def create_manual_cleanup_task(description):
         create_notion_page("Task", props)
     except Exception:
         pass
+
 
 def append_text_to_property(page_id, property_name, new_text):
     """Appends text to an existing rich_text property on a Notion page."""
@@ -514,6 +551,7 @@ def append_text_to_property(page_id, property_name, new_text):
 # ==========================================
 # 7. PROPERTY BUILDER (UNIVERSAL)
 # ==========================================
+
 
 def apply_business_logic(category, data, related_project=None):
     """
@@ -592,6 +630,7 @@ def build_notion_properties(category, data):
 # ==========================================
 # 8. HANDLERS & MAIN
 # ==========================================
+
 
 def handle_media_logic(category, data):
     """Returns the URL of the created or updated page."""
