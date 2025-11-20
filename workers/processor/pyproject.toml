@@ -1,5 +1,5 @@
 [project]
-name = "synapse-processor"
+name = "processor"
 version = "1.0.0"
 authors = [{name = "Alex Miller", email = "amiller06880@gmail.com"}]
 

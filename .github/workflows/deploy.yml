@@ -72,7 +72,7 @@ jobs:
             api_spec_template: ""
           - name: processor # NEW
             path: workers/processor # NEW
-            entry_point: process_job # NEW
+            entry_point: processor # NEW
             trigger_topic: processor-jobs # NEW
             api_spec_template: ""
 
@@ -123,62 +123,3 @@ jobs:
           flags: >-
             --function=${{ matrix.service.entry_point }}
             --no-allow-unauthenticated
-
-      # - name: Get Cloud Run service URL
-      #   id: get_url
-      #   # UPDATED: Only run this for the intaker service
-      #   if: matrix.service.name == 'intaker'
-      #   run: |
-      #     SERVICE_URL=$(gcloud run services describe ${{ matrix.service.name }} \
-      #       --region ${{ env.region }} \
-      #       --format 'value(status.url)')
-      #     echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
-          
-      # - name: Deploy API Gateway
-      #   # UPDATED: Only run this for the intaker service
-      #   if: matrix.service.name == 'intaker'
-      #   env:
-      #     GATEWAY_SA_EMAIL: "api-gateway-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
-      #     API_ID: "processor-api"
-      #     GATEWAY_ID: "processor-gateway"
-      #     CONFIG_ID: "config-${{ github.run_id }}"
-      #   run: |
-      #     echo "Deploying API Gateway for ${{ matrix.service.name }}..."
-          
-      #     gcloud api-gateway apis create ${API_ID} \
-      #       --project=${{ env.gcp_project_id }} || echo "API '${API_ID}' already exists."
-
-      #     echo "Enabling the managed service for ${API_ID}..."
-      #     SERVICE_NAME=$(gcloud api-gateway apis describe ${API_ID} \
-      #       --project=${{ env.gcp_project_id }} \
-      #       --format 'value(managedService)')
-          
-      #     gcloud services enable $SERVICE_NAME
-          
-      #     echo "Replacing placeholder in spec..."
-      #     sed "s|DUMMY_URL|${{ steps.get_url.outputs.service_url }}|g" \
-      #       ${{ matrix.service.api_spec_template }} > processed-spec.yml
-
-      #     echo "--- Processed Spec---"
-      #     cat processed-spec.yml
-      #     echo "---------------------"
-
-      #     gcloud api-gateway api-configs create ${CONFIG_ID} \
-      #       --api=${API_ID} \
-      #       --project=${{ env.gcp_project_id }} \
-      #       --openapi-spec=processed-spec.yml \
-      #       --backend-auth-service-account=${GATEWAY_SA_EMAIL}
-
-      #     gcloud api-gateway gateways create ${GATEWAY_ID} \
-      #       --api=${API_ID} \
-      #       --api-config=${CONFIG_ID} \
-      #       --location=${{ env.region }} \
-      #       --project=${{ env.gcp_project_id }} \
-      #       || \
-      #     gcloud api-gateway gateways update ${GATEWAY_ID} \
-      #       --api=${API_ID} \
-      #       --api-config=${CONFIG_ID} \
-      #       --location=${{ env.region }} \
-      #       --project=${{ env.gcp_project_id }}
-            
-      #     echo "Gateway '${GATEWAY_ID}' deployed and updated to config '${CONFIG_ID}'"
