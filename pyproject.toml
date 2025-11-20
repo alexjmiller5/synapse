@@ -5,6 +5,8 @@ description = "An intelligent middleware for capturing thoughts and organizing t
 authors = [{name = "Alex Miller", email = "redacted-usr@gmail.com"}]
 readme = "README.md"
 keywords = ["ai", "notion", "automation", "serverless"]
+dependencies = [
+]
 
 [tool.uv.workspace]
 members = ["services/*"]

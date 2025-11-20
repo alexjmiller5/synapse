@@ -8,5 +8,8 @@ dependencies = [
   "google-genai~=1.49.0",
   "PyYAML~=6.0.3",
   "google-cloud-secret-manager~=2.19.0",
-  "requests~=2.32.3"
+  "requests~=2.32.3",
+  "notion-client~=2.7.0",
+  "inscriptis~=2.7.0",
+  "spotipy~=2.25.1",
 ]
