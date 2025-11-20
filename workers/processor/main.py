@@ -49,13 +49,13 @@ NOTION_PROPERTY_TYPES = {
 SIMPLE_TASK_SCHEMA = {
     "type": "object",
     "properties": {
-        "Name": {"type": "string"},
+        "Notes": {"type": "string"},
         "AI Title": {"type": "string"},
         "Tags": {"type": "array", "items": {"type": "string"}},
         "Links": {"type": "array", "items": {"type": "string"}},
         "Due Date": {"type": "string"},
     },
-    "required": ["Name", "AI Title", "Tags", "Links", "Due Date"],
+    "required": ["Notes", "AI Title", "Tags", "Links", "Due Date"],
 }
 
 SIMPLE_GROCERY_SCHEMA = {
