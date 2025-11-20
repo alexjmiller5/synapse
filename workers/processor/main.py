@@ -690,7 +690,7 @@ def call_gemini(system_prompt, user_prompt, schema):
 
 
 @functions_framework.cloud_event
-def process_job(cloud_event):
+def processor(cloud_event):
     print("🧠 Synapse processor worker is awake!")
     if not GEMINI_API_KEY or not PROMPTS or not NOTION_API_KEY:
         print("ERROR: Configuration missing.")
