@@ -18,7 +18,6 @@ import yt_dlp
 # ==========================================
 # 1. PROPERTY TYPE DEFINITIONS (THE MAP)
 # ==========================================
-# This tells the builder how to format any property name it encounters.
 NOTION_PROPERTY_TYPES = {
     "Name": "title",
     "Title": "title",
@@ -33,7 +32,7 @@ NOTION_PROPERTY_TYPES = {
     "Genres": "multi_select",
     "Famous Cast Members": "multi_select",
     
-    "Links": "rich_text_list", # Special handling for lists of URLs
+    "Links": "rich_text_list", 
     
     "Due Date": "date",
     "Date": "date",
@@ -57,8 +56,8 @@ NOTION_PROPERTY_TYPES = {
 SIMPLE_TASK_SCHEMA = {
     "type": "object",
     "properties": {
-        "Name": {"type": "string"}, # Was original_text
-        "AI Title": {"type": "string"}, # Was summarized_title
+        "Name": {"type": "string"}, 
+        "AI Title": {"type": "string"},
         "Tags": {"type": "array", "items": {"type": "string"}},
         "Links": {"type": "array", "items": {"type": "string"}},
         "Due Date": {"type": "string"},
@@ -70,7 +69,7 @@ SIMPLE_GROCERY_SCHEMA = {
     "type": "object",
     "properties": {
         "Name": {"type": "string"},
-        "Notes": {"type": "string"}, # Was original_text
+        "Notes": {"type": "string"}, 
     },
     "required": ["Name", "Notes"],
 }
@@ -93,7 +92,7 @@ SIMPLE_QUOTE_SCHEMA = {
 SIMPLE_IDEA_SCHEMA = {
     "type": "object",
     "properties": {
-        "Description": {"type": "string"}, # Ideas DB uses Description as title
+        "Description": {"type": "string"}, 
         "Tags": {"type": "array", "items": {"type": "string"}},
         "Status": {"type": "string", "enum": ["Not started", "In progress", "Bad Idea", "Already Exists"]}
     },
@@ -104,12 +103,12 @@ SIMPLE_MOVIE_SCHEMA = {
     "type": "object",
     "properties": {
         "Title": {"type": "string"},
-        "is_watched": {"type": "boolean"}, # Helper field (not in Notion)
+        "is_watched": {"type": "boolean"}, 
         "Genres": {"type": "array", "items": {"type": "string"}},
         "Director": {"type": "string"},
         "Producer": {"type": "string"},
         "Famous Cast Members": {"type": "array", "items": {"type": "string"}},
-        "original_text": {"type": "string"}, # For context/logging if needed
+        "original_text": {"type": "string"}, 
     },
     "required": ["Title", "is_watched", "Genres", "original_text"],
 }
@@ -144,7 +143,7 @@ SIMPLE_VIDEO_SCHEMA = {
     "type": "object",
     "properties": {
         "Title": {"type": "string"},
-        "channel_handle": {"type": "string"}, # Helper field
+        "channel_handle": {"type": "string"}, 
         "Status": {"type": "string", "enum": ["Priority", "Not Started", "In Progress", "Watched"]},
         "Video URL": {"type": "string"}
     },
@@ -356,7 +355,6 @@ def append_to_quick_notes(raw_text):
 
 def create_manual_cleanup_task(description):
     print(f"--- Creating Cleanup Task: {description} ---")
-    # Direct inject logic for cleanup tasks
     props = {
         "Name": _notion_title(description),
         "Status": _notion_status("To Do"),
@@ -365,6 +363,29 @@ def create_manual_cleanup_task(description):
     }
     try: create_notion_page("Task", props)
     except Exception: pass
+
+def append_text_to_property(page_id, property_name, new_text):
+    """Appends text to an existing rich_text property on a Notion page."""
+    if not notion: return
+    print(f"--- Appending text to Page {page_id}, Prop '{property_name}' ---")
+    try:
+        # 1. Retrieve current content
+        page = notion.pages.retrieve(page_id)
+        current_rich_text = page["properties"].get(property_name, {}).get("rich_text", [])
+        
+        # 2. Append new text (prepend newline if existing text exists)
+        if current_rich_text:
+            current_rich_text.append({"type": "text", "text": {"content": "\n"}})
+        current_rich_text.append({"type": "text", "text": {"content": new_text}})
+        
+        # 3. Update
+        notion.pages.update(
+            page_id=page_id,
+            properties={property_name: {"rich_text": current_rich_text}}
+        )
+        print("--- Append Success ---")
+    except Exception as e:
+        print(f"Failed to append text: {e}")
 
 
 # ==========================================
@@ -504,7 +525,6 @@ def execute_category_action(category, data):
         create_notion_page(category, props)
         
         if category == "Quote":
-            # data["Name"] holds the quote text per the new schema
             create_manual_cleanup_task(f"Link person to quote: '{data.get('Name','...')[:30]}...'")
 
 def call_gemini(system_prompt, user_prompt, schema):
@@ -566,11 +586,25 @@ def process_job(cloud_event):
         extracted_data = call_gemini(sys_prompt_2, raw_text, config["schema"])
         print(f"Extracted: {extracted_data}")
 
-        # Step 4: Business Logic Application
-        processed_data = apply_business_logic(category, extracted_data, related_project)
-
-        # Step 5: Execution
-        execute_category_action(category, processed_data)
+        # Step 4: Branching Logic (Project Updates vs New Items)
+        if related_project and category == "Task":
+             print(f"--- Detected Related Project: {related_project} ---")
+             project_page_id = fetch_existing_page_by_title("Task", related_project)
+             
+             if project_page_id:
+                 # Case A: Project Exists -> Append to Notes
+                 text_to_append = extracted_data.get("Name") or raw_text
+                 append_text_to_property(project_page_id, "Notes", text_to_append)
+                 print("--- Project Note Appended ---")
+             else:
+                 # Case B: Project Not Found -> Fallback to standard task creation
+                 print(f"Project '{related_project}' not found. Creating linked task instead.")
+                 processed_data = apply_business_logic(category, extracted_data, related_project)
+                 execute_category_action(category, processed_data)
+        else:
+             # Step 5: Standard Execution
+             processed_data = apply_business_logic(category, extracted_data, related_project)
+             execute_category_action(category, processed_data)
 
         print("--- JOB SUCCESS ---")
 
