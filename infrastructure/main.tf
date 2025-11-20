@@ -62,7 +62,9 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-video-games-db-id",
     "notion-quotes-db-id",
     "gmail-app-password",
-    "notion-logs-db-id"
+    "notion-logs-db-id",
+    "spotify-client-id",
+    "spotify-client-secret"
   ])
 
   secret_id = each.value
