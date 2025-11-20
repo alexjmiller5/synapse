@@ -12,4 +12,5 @@ dependencies = [
   "notion-client~=2.7.0",
   "inscriptis~=2.7.0",
   "spotipy~=2.25.1",
+  "yt-dlp>=2025.11.12",
 ]
