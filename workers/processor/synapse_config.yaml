@@ -1,0 +1,240 @@
+databases:
+  tasks:
+    description: "A general to-do item, reminder, or action."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "This MUST be the user's original, unmodified text."
+      AI Title:
+        type: "rich_text"
+        required: true
+        instruction: "Create a concise, clear title from the text."
+      Tags:
+        type: "multi_select"
+        required: true
+        # Specific rule about Work/Capital One added here
+        instruction: "Select relevant tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'."
+        allowlist: ["Gifts", "Hotkeys", "Organization", "Software", "Shopping", "Work", "Social", "Finances", "Career", "Lakeport", "Capital One"]
+      Links:
+        type: "rich_text_list"
+        required: true
+        instruction: "Extract all valid URLs (e.g., http, https). Return empty list if none."
+      Due Date:
+        type: "date"
+        required: true
+        instruction: "Find any specified date (e.g., 'tomorrow', 'next Friday', '12/25'). If no date is mentioned, use today: {current_date}."
+      Status:
+        type: "status"
+        virtual: true
+      Notes:
+        type: "rich_text"
+        virtual: true
+
+  groceries:
+    description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping)."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "Extract the primary item name (e.g., 'Milk'). Capitalize the first letter."
+      Category:
+        type: "select"
+        required: true
+        instruction: "Select the most appropriate category from the list."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["On List", "Don't Have", "Have"]
+        # Specific Grocery mapping logic
+        instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
+      Notes:
+        type: "rich_text"
+        required: true
+        instruction: "The full original text."
+
+  shopping:
+    description: "A non-food item to buy (paper towels, tech, clothes, furniture)."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "Extract the item name."
+      Notes:
+        type: "rich_text"
+        required: true
+        instruction: "The full original text."
+
+  ideas:
+    description: "A random thought, invention idea, app concept, or project idea."
+    properties:
+      Description:
+        type: "title"
+        required: true
+        instruction: "The user's full original text."
+      Tags:
+        type: "multi_select"
+        required: true
+        instruction: "Select relevant tags from the list."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["Not started", "In progress", "Bad Idea", "Already Exists"]
+        instruction: "Determine status based on confidence/progress."
+
+  quotes:
+    description: "A memorable quote or saying (often attributed to a person)."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "The actual words spoken (e.g., 'I'll be back')."
+      Context:
+        type: "rich_text"
+        required: true
+        instruction: "Any context provided about who said it, where, or why."
+      Date:
+        type: "date"
+        virtual: true
+
+  movies:
+    description: "A movie title to watch or rate (may imply 'watched')."
+    properties:
+      Title:
+        type: "title"
+        required: true
+        instruction: "The official movie title."
+      is_watched:
+        type: "boolean"
+        required: true
+        # Specific logic for watched status
+        instruction: "Boolean. Set to true if the user implies they just watched it, finished it, or are rating it. Set to false if adding to watchlist."
+      Genres:
+        type: "multi_select"
+        required: true
+        instruction: "Select relevant genres."
+      Director:
+        type: "select"
+        instruction: "The director's name (if known)."
+      Producer:
+        type: "select"
+        instruction: "The production studio (e.g., Netflix, HBO, Disney, Studio Ghibli)."
+      Famous Cast Members:
+        type: "multi_select"
+        instruction: "Famous actors in the movie."
+      original_text:
+        type: "ignore"
+        required: true
+        instruction: "The full original text."
+      Status:
+        type: "status"
+        virtual: true
+
+  tv-shows:
+    description: "A TV series title to start or track status of."
+    properties:
+      Title:
+        type: "title"
+        required: true
+        instruction: "The official show title."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["Priority", "Finished", "In Progress", "Not Started"]
+        instruction: "Determine status based on text ('must watch'->Priority, 'finished'->Finished, 'watching'->In Progress)."
+      Genres:
+        type: "multi_select"
+        required: true
+        instruction: "Select relevant genres."
+      Producer:
+        type: "select"
+        instruction: "The production studio/network (Netflix, HBO, etc)."
+      Famous Cast Members:
+        type: "multi_select"
+        instruction: "Famous actors in the show."
+      original_text:
+        type: "ignore"
+        required: true
+        instruction: "The full original text."
+
+  podcasts:
+    description: "A podcast episode or series (often contains a Spotify or 'thisamericanlife.org' link)."
+    properties:
+      Episode Title:
+        type: "title"
+        required: true
+        instruction: "The specific episode title."
+      Podcast Name:
+        type: "select"
+        required: true
+        instruction: "The name of the show."
+      Producer:
+        type: "select"
+        instruction: "The network/producer."
+      Genres:
+        type: "multi_select"
+        required: true
+        instruction: "Relevant genres."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["Not Started", "In Progress", "Finished"]
+        instruction: "Finished if listened, In Progress if listening, Not Started otherwise."
+      URL:
+        type: "url"
+        required: true
+        instruction: "The valid URL found in the text."
+      Date Listened To:
+        type: "date"
+        virtual: true
+
+  youtube-videos:
+    description: "A YouTube video (often contains a youtube.com or youtu.be link)."
+    properties:
+      Title:
+        type: "title"
+        required: true
+        instruction: "The video title. Use the Context if available."
+      channel_handle:
+        type: "ignore"
+        required: true
+        instruction: "The creator's handle (e.g., '@MKBHD'). Ensure it starts with '@'."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["Priority", "Not Started", "In Progress", "Watched"]
+        instruction: "Priority if 'must watch', Watched if 'seen', In Progress if watching."
+      Video URL:
+        type: "url"
+        required: true
+        instruction: "The valid YouTube URL."
+      Date Watched:
+        type: "date"
+        virtual: true
+
+  # Helpers
+  youtube-channels:
+    description: "Internal use."
+    properties:
+      Name:
+        type: "title"
+
+  logs:
+    description: "Internal use."
+    properties:
+      Name:
+        type: "title"
+      Status:
+        type: "select"
+      Category:
+        type: "select"
+      Reported:
+        type: "checkbox"
+      Raw Input:
+        type: "rich_text"
+      Error Details:
+        type: "rich_text"
+      AI Summary:
+        type: "rich_text"
+      Created Item:
+        type: "url"

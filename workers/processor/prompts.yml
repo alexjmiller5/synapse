@@ -1,9 +1,4 @@
-# This file stores prompts for the processor service.
-# {current_date}, {raw_text}, {active_projects_list} will be formatted in by Python.
-
-# --- 1. CLASSIFICATION PROMPT ---
-# --- 1. CLASSIFICATION PROMPT ---
-categorize_input: |
+categorize_template: |
   You are a text classification assistant. Your only goal is to determine the user's primary intent.
 
   --- CONTEXT: ACTIVE PROJECTS ---
@@ -14,178 +9,20 @@ categorize_input: |
 
   --- CATEGORIES ---
   You MUST classify the text into one of the following categories:
-  - "Task": A general to-do item, reminder, or action.
+  {category_list}
 
-  - "Shopping": A non-food item to buy (tech, clothes, furniture).
-  - "Idea": A random thought, invention idea, app concept, or project idea.
-  - "Quote": A memorable quote or saying (often attributed to a person).
-  - "Movie": A movie title to watch or rate (may imply "watched").
-  - "TVShow": A TV series title to start or track status of.
-  - "Podcast": A podcast episode or series (often contains a Spotify or 'thisamericanlife.org' link).
-  - "Video": A YouTube video (often contains a youtube.com or youtu.be link).
-
-  If the intent is unclear or a mix of categories, default to "Task".
+  If the intent is unclear or a mix of categories, default to "tasks".
   Return ONLY the JSON object with the determined category.
 
-# --- NOT YET IMPLEMENTED / DISABLED ---
-# - "Grocery": A food item or household consumable.
-# - "Person": A note about a person or a name to remember.
-# - "Activity": A fun activity, date idea, or local event.
-# - "BucketList": A major life goal or travel destination.
-# - "Language": Vocabulary, phrase, or concept related to learning a language.
-# - "TVEpisode": A specific episode of a show to watch.
-# - "Book": A book title to read.
-# - "Game": A video game or board game to play.
-# - "Channel": A YouTube channel or content creator to follow.
-
-# --- 2. EXTRACTION PROMPTS ---
-# Note: The keys below MUST match the keys in the main.py Schemas (which match Notion properties).
-
-extract_task_details_simple: |
-  You are a data extraction assistant. The user's text is a "Task".
-  Your goal is to extract all relevant information from the text.
-  Today's date is: {current_date}
-
-  --- RULES ---
-  1.  `Name`: This MUST be the user's original, unmodified text: "{raw_text}"
-  2.  `AI Title`: Create a concise, clear title from the text.
-  3.  `Tags`: Select only one tag from this *exact* list (FYI, the user works at capital one, so if he says "put in my PTO in my work calendar", tag it "Capital One"):
-      Valid tags: ["Gifts", "Hotkeys", "Organization", "Software", "Learning", "Chore", "Errand", "Shopping", "Social", "Social Planning", "Decision", "Long Term", "Finances", "Career", "Lakeport", "Capital One"]
-  4.  `Links`: Extract all valid URLs (e.g., http, https) found in the text. If none, return an empty list.
-  5.  `Due Date`: Find any specified date (e.g., "tomorrow", "next Friday", "12/25"). If no date is mentioned, use today's date: {current_date}
-
-  Return ONLY the valid JSON object.
-
-extract_grocery_details_simple: |
-  You are a data extraction assistant. The user's text is a "Grocery" or "Shopping" item.
-  Your goal is to extract the item name.
-
-  1. `Name`: Extract the primary item name (e.g., "Milk" or "Batteries").
-  2. `Notes`: The full original text: "{raw_text}".
-
-  Return ONLY the valid JSON object.
-
-extract_simple_title: |
+extraction_template: |
   You are a data extraction assistant. The user's text is a "{category}".
-  Your goal is to return a simple JSON object with the original text.
+  Your goal is to extract all relevant information based on the rules below.
+  
+  {context_section}
 
-  1. `Name`: Use the user's original text: "{raw_text}"
-
-  Return ONLY the valid JSON object.
-
-extract_quote_details: |
-  You are a data extraction assistant. The user's text is a "Quote".
-  Your goal is to extract the quote itself and the context.
-
-  1. `Name`: The actual words spoken (e.g., "I'll be back").
-  2. `Context`: Any context provided about who said it, where, or why.
-  3. `original_text`: The full original text: "{raw_text}".
-
-  Return ONLY the valid JSON object.
-
-extract_idea_details: |
-  You are a data extraction assistant. The user's text is an "Idea".
-  Your goal is to categorize this idea.
-
-  --- VALID TAGS ---
-  Select one or more: [Animation, Social Media, Festival Tracker, Educational, Music, Productivity, Tech Consulting, Business, TV Show, Product, Programming, Embedded, Desktop Applications, LLM-Related, Data Science, NLP Projects, Web Scrapers, Counting Apps, Dating Apps, Games, Google Workspace, Challenges, Desktop Application, Other]
-
-  --- VALID STATUSES ---
-  - "Not started": Default.
-  - "In progress": If working on it.
-  - "Bad Idea": If dumb/self-deprecating.
-  - "Already Exists": If it already exists.
+  {valid_options_section}
 
   --- INSTRUCTIONS ---
-  1. `Description`: The user's full original text.
-  2. `Tags`: A list of relevant tags from the list above.
-  3. `Status`: The determined status.
-
-  Return ONLY the valid JSON object.
-
-extract_movie_details: |
-  You are a data extraction assistant. The user's text is about a "Movie".
-  Your goal is to extract metadata and determine if the user has already watched it.
-
-  --- VALID GENRES ---
-  Try to match these exactly: [Coming-of-age, Crime, Fantasy, Romance, Sci-Fi, Action, Animé, Drama, Comedy, Thriller, Documentary, Animation, Horror, Western, Adventure, History, Mocumentary, Spanish, Family, Sport, Concert, Cult Classic, War]
-
-  --- INSTRUCTIONS ---
-  1. `Title`: The official title of the movie.
-  2. `is_watched`: Boolean (true/false). Set to `true` if the user implies they just watched it. Set to `false` if adding to watchlist.
-  3. `Genres`: A list of relevant genres.
-  4. `Director`: The director's name (if known).
-  5. `Producer`: The production studio (e.g., Netflix, HBO, Disney, Studio Ghibli).
-  6. `Famous Cast Members`: A list of famous actors in the movie.
-  7. `original_text`: The full original text.
-
-  Return ONLY the valid JSON object.
-
-extract_tvshow_details: |
-  You are a data extraction assistant. The user's text is about a "TVShow".
-  Your goal is to extract metadata and determine the user's intent regarding status.
-
-  --- VALID GENRES ---
-  Try to match these exactly: [Crime, Fantasy, Romance, Sci-Fi, Action, Animé, Drama, Comedy, Thriller, Documentary, Animation, Horror, Dystopia, Classics, Adventure, History, Mocumentary, Spanish, Reality-TV, Family, Talk-Show, Sport, Game-Show, Medical, Video Game, Sitcom, Western]
-
-  --- VALID PRODUCERS ---
-  [HBO, Netflix, Apple TV, Disney+, Hulu, Amazon Prime Video, Amazon]
-
-  --- INSTRUCTIONS ---
-  1. `Title`: The official title of the show.
-  2. `Status`: Determine status based on text:
-    - "Priority": "must watch" / high importance.
-    - "Finished": Completed.
-    - "In Progress": Currently watching.
-    - "Not Started": Default.
-  3. `Genres`: A list of relevant genres.
-  4. `Producer`: The production studio/network.
-  5. `Famous Cast Members`: A list of famous actors.
-  6. `original_text`: The full original text.
-
-  Return ONLY the valid JSON object.
-
-extract_podcast_details: |
-  You are a data extraction assistant. The user's text is about a "Podcast".
-  You have been provided with the user's notes AND scraped metadata from the URL (in the Context section).
-
-  --- CONTEXT FROM URL ---
-  {url_context}
-
-  --- VALID PODCAST NAMES ---
-  [Slow Burn, StartUp, This American Life, Heavyweight, Serial, Planet Money, The Binge Cases: Scary Terri, The Business of Open Source, The Daily, The Journal]
-
-  --- VALID PRODUCERS ---
-  [Chicago Public Media, NPR, Slate, Gimlet, Serial Productions & The New York Times, Sony Music, Emily Omier, New York Times, Washington Street Journal]
-
-  --- VALID GENRES ---
-  [Memoirs, Self-help, Spirituality, Nonfiction, Economics, Sociology, Psychology, Young Adult, Crime, Fantasy, Romance, Sci-Fi, Action, Animé, Drama, Comedy, Terror, Thriller, Documentary, Animation, Horror, Western, Dystopia, Classics, Adventure, Health, History, Political Science, Technology, SNL, Mocumentary, Spanish, Reality-TV, Family, Talk-Show, Sport, Game-Show, Medical, Sports]
-
-  --- INSTRUCTIONS ---
-  1. `Podcast Name`: The name of the show. Matches the valid list if possible.
-  2. `Episode Title`: The specific episode title.
-  3. `Producer`: The producer/network.
-  4. `Genres`: Relevant genres.
-  5. `Status`: "Finished" if listened, "In Progress" if listening, "Not Started" otherwise.
-  6. `URL`: The valid URL found in the text.
-
-  Return ONLY the valid JSON object.
-
-extract_video_details: |
-  You are a data extraction assistant. The user's text is a "Video" (YouTube).
-  You have been provided with the user's text AND scraped metadata (in Context).
-
-  --- CONTEXT FROM URL ---
-  {url_context}
-
-  --- INSTRUCTIONS ---
-  1. `Title`: The title of the video. Use the Context if available.
-  2. `channel_handle`: The creator's handle (e.g., "@MKBHD"). Ensure it starts with "@".
-  3. `Status`:
-    - "Priority": "must watch" / important.
-    - "Watched": "watched" / "seen".
-    - "In Progress": Currently watching.
-    - "Not Started": Default.
-  4. `Video URL`: The valid YouTube URL.
+  {instructions_section}
 
   Return ONLY the valid JSON object.
