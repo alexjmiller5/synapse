@@ -16,220 +16,19 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import yt_dlp
 
 # ==========================================
-# 1. PROPERTY TYPE DEFINITIONS
+# 1. CONFIGURATION ENGINE (SSOT)
 # ==========================================
-NOTION_PROPERTY_TYPES = {
-    "Name": "title",
-    "Title": "title",
-    "Description": "title",
-    "Episode Title": "title",
-    "AI Title": "rich_text",
-    "Notes": "rich_text",
-    "Context": "rich_text",
-    "Tags": "multi_select",
-    "Genres": "multi_select",
-    "Famous Cast Members": "multi_select",
-    "Links": "rich_text_list",
-    "Due Date": "date",
-    "Date": "date",
-    "Date Watched": "date",
-    "Date Listened To": "date",
-    "Status": "status",
-    "Podcast Name": "select",
-    "Producer": "select",
-    "Director": "select",
-    "URL": "url",
-    "Video URL": "url",
-}
+
+CONFIG = {}
+try:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(script_dir, "synapse_config.yaml"), "r") as f:
+        CONFIG = yaml.safe_load(f)
+except Exception as e:
+    print(f"❌ Critical Config Error: {e}")
 
 # ==========================================
-# 2. SCHEMAS
-# ==========================================
-# (Your Schemas remain exactly the same...)
-SIMPLE_TASK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Notes": {"type": "string"},
-        "AI Title": {"type": "string"},
-        "Tags": {"type": "array", "items": {"type": "string"}},
-        "Links": {"type": "array", "items": {"type": "string"}},
-        "Due Date": {"type": "string"},
-    },
-    "required": ["Notes", "AI Title", "Tags", "Links", "Due Date"],
-}
-
-SIMPLE_GROCERY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Name": {"type": "string"},
-        "Notes": {"type": "string"},
-    },
-    "required": ["Name", "Notes"],
-}
-
-SIMPLE_TITLE_SCHEMA = {
-    "type": "object",
-    "properties": {"Name": {"type": "string"}},
-    "required": ["Name"],
-}
-
-SIMPLE_QUOTE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Name": {"type": "string"},
-        "Context": {"type": "string"},
-    },
-    "required": ["Name", "Context"],
-}
-
-SIMPLE_IDEA_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Description": {"type": "string"},
-        "Tags": {"type": "array", "items": {"type": "string"}},
-        "Status": {
-            "type": "string",
-            "enum": ["Not started", "In progress", "Bad Idea", "Already Exists"],
-        },
-    },
-    "required": ["Description", "Tags", "Status"],
-}
-
-SIMPLE_MOVIE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Title": {"type": "string"},
-        "is_watched": {"type": "boolean"},
-        "Genres": {"type": "array", "items": {"type": "string"}},
-        "Director": {"type": "string"},
-        "Producer": {"type": "string"},
-        "Famous Cast Members": {"type": "array", "items": {"type": "string"}},
-        "original_text": {"type": "string"},
-    },
-    "required": ["Title", "is_watched", "Genres", "original_text"],
-}
-
-SIMPLE_TVSHOW_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Title": {"type": "string"},
-        "Status": {
-            "type": "string",
-            "enum": ["Priority", "Finished", "In Progress", "Not Started"],
-        },
-        "Genres": {"type": "array", "items": {"type": "string"}},
-        "Producer": {"type": "string"},
-        "Famous Cast Members": {"type": "array", "items": {"type": "string"}},
-        "original_text": {"type": "string"},
-    },
-    "required": ["Title", "Status", "Genres", "original_text"],
-}
-
-SIMPLE_PODCAST_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Podcast Name": {"type": "string"},
-        "Episode Title": {"type": "string"},
-        "Producer": {"type": "string"},
-        "Genres": {"type": "array", "items": {"type": "string"}},
-        "Status": {
-            "type": "string",
-            "enum": ["Not Started", "In Progress", "Finished"],
-        },
-        "URL": {"type": "string"},
-    },
-    "required": ["Podcast Name", "Episode Title", "Status", "URL"],
-}
-
-SIMPLE_VIDEO_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "Title": {"type": "string"},
-        "channel_handle": {"type": "string"},
-        "Status": {
-            "type": "string",
-            "enum": ["Priority", "Not Started", "In Progress", "Watched"],
-        },
-        "Video URL": {"type": "string"},
-    },
-    "required": ["Title", "channel_handle", "Status", "Video URL"],
-}
-
-CATEGORY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "category": {
-            "type": "string",
-            "enum": [
-                "Task",
-                "Grocery",
-                "Shopping",
-                "Person",
-                "Idea",
-                "Quote",
-                "Activity",
-                "BucketList",
-                "Language",
-                "Movie",
-                "TVShow",
-                "TVEpisode",
-                "Podcast",
-                "Book",
-                "Game",
-                "Video",
-                "Channel",
-            ],
-        },
-        "related_project": {
-            "type": "string",
-            "description": "The exact name of the active project this input relates to, if applicable.",
-        },
-    },
-    "required": ["category"],
-}
-
-CATEGORY_CONFIG = {
-    "Task": {"prompt": "extract_task_details_simple", "schema": SIMPLE_TASK_SCHEMA},
-    "Grocery": {
-        "prompt": "extract_grocery_details_simple",
-        "schema": SIMPLE_GROCERY_SCHEMA,
-    },
-    "Shopping": {
-        "prompt": "extract_grocery_details_simple",
-        "schema": SIMPLE_GROCERY_SCHEMA,
-    },
-    "Quote": {"prompt": "extract_quote_details", "schema": SIMPLE_QUOTE_SCHEMA},
-    "Idea": {"prompt": "extract_idea_details", "schema": SIMPLE_IDEA_SCHEMA},
-    "Movie": {"prompt": "extract_movie_details", "schema": SIMPLE_MOVIE_SCHEMA},
-    "TVShow": {"prompt": "extract_tvshow_details", "schema": SIMPLE_TVSHOW_SCHEMA},
-    "Podcast": {"prompt": "extract_podcast_details", "schema": SIMPLE_PODCAST_SCHEMA},
-    "Video": {"prompt": "extract_video_details", "schema": SIMPLE_VIDEO_SCHEMA},
-    "DEFAULT": {"prompt": "extract_simple_title", "schema": SIMPLE_TITLE_SCHEMA},
-}
-
-DATABASE_ID_SECRET_MAP = {
-    "Task": "notion-tasks-db-id",
-    "Grocery": "notion-groceries-db-id",
-    "Shopping": "notion-shopping-db-id",
-    "Person": "notion-people-db-id",
-    "Idea": "notion-ideas-db-id",
-    "Quote": "notion-quotes-db-id",
-    "Activity": "notion-fun-activities-db-id",
-    "BucketList": "notion-bucket-list-db-id",
-    "Language": "notion-languages-db-id",
-    "Movie": "notion-movies-db-id",
-    "TVShow": "notion-tv-shows-db-id",
-    "TVEpisode": "notion-tv-episodes-db-id",
-    "Podcast": "notion-podcasts-db-id",
-    "Book": "notion-books-db-id",
-    "Game": "notion-video-games-db-id",
-    "Video": "notion-youtube-videos-db-id",
-    "Channel": "notion-youtube-channels-db-id",
-    "Logs": "notion-logs-db-id",
-}
-
-# ==========================================
-# 3. CLIENT INITIALIZATION
+# 2. CLIENT INITIALIZATION
 # ==========================================
 PROJECT_ID = "synapse-477401"
 SECRETS = {}
@@ -239,19 +38,12 @@ notion = None
 spotify = None
 PROMPTS = {}
 
-
 def get_secret(secret_id, version="latest"):
     global sm_client
     if sm_client is None:
-        try:
-            sm_client = secretmanager.SecretManagerServiceClient()
-        except Exception as e:
-            print(f"Error initializing SecretManager: {e}")
-            return None
-
-    if secret_id in SECRETS:
-        return SECRETS[secret_id]
-
+        try: sm_client = secretmanager.SecretManagerServiceClient()
+        except Exception: return None
+    if secret_id in SECRETS: return SECRETS[secret_id]
     try:
         name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version}"
         response = sm_client.access_secret_version(request={"name": name})
@@ -259,16 +51,17 @@ def get_secret(secret_id, version="latest"):
         SECRETS[secret_id] = payload
         return payload
     except Exception as e:
-        print(f"Error fetching secret '{secret_id}': {e}")
+        print(f"Error fetching {secret_id}: {e}")
         return None
 
+def get_db_id(category):
+    """Fetches the Secret ID for a category based on convention."""
+    return get_secret(f"notion-{category}-db-id")
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "prompts.yml"), "r") as f:
-        PROMPTS = yaml.safe_load(f)
-except Exception as e:
-    print(f"Error loading prompts.yml: {e}")
+    with open(os.path.join(script_dir, "prompts.yml"), "r") as f: PROMPTS = yaml.safe_load(f)
+except Exception: pass
 
 GEMINI_API_KEY = get_secret("gemini-api-key")
 NOTION_API_KEY = get_secret("notion-integration-token")
@@ -276,553 +69,396 @@ FALLBACK_NOTION_BLOCK_ID = get_secret("notion-quick-notes-last-block-id")
 SPOTIFY_CLIENT_ID = get_secret("spotify-client-id")
 SPOTIFY_CLIENT_SECRET = get_secret("spotify-client-secret")
 
-if GEMINI_API_KEY:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-if NOTION_API_KEY:
-    notion = Client(auth=NOTION_API_KEY)
+if GEMINI_API_KEY: gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+if NOTION_API_KEY: notion = Client(auth=NOTION_API_KEY)
 if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+    try: spotify = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET))
+    except Exception: pass
+
+# Pre-fetch Database IDs for those defined in Config + Logs
+DATABASE_IDS = {}
+for cat in list(CONFIG.get("databases", {}).keys()) + ["logs", "youtube-channels"]:
+    val = get_secret(f"notion-{cat}-db-id")
+    if val: DATABASE_IDS[cat] = val
+
+# ==========================================
+# 3. DYNAMIC HYDRATION & PROMPT GENERATION
+# ==========================================
+
+def fetch_property_options(db_id, prop_name):
+    if not notion: return []
     try:
-        spotify = spotipy.Spotify(
-            auth_manager=SpotifyClientCredentials(
-                client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET
-            )
-        )
-    except Exception:
-        pass
+        db = notion.databases.retrieve(db_id)
+        prop = db["properties"].get(prop_name)
+        if not prop: return []
+        if "select" in prop: return [o["name"] for o in prop["select"]["options"]]
+        if "multi_select" in prop: return [o["name"] for o in prop["multi_select"]["options"]]
+        if "status" in prop: return [o["name"] for o in prop["status"]["options"]]
+        return []
+    except Exception: return []
 
-DATABASE_IDS = {cat: get_secret(sid) for cat, sid in DATABASE_ID_SECRET_MAP.items()}
+def hydrate_dynamic_options():
+    print("🔄 Hydrating Options...")
+    for category, details in CONFIG.get("databases", {}).items():
+        if category in ["logs", "youtube-channels"]: continue
+        db_id = get_db_id(category)
+        if not db_id: continue
 
+        for prop_name, rules in details.get("properties", {}).items():
+            if rules.get("type") not in ["select", "multi_select", "status"]: continue
+            
+            real_options = fetch_property_options(db_id, prop_name)
+            allowlist = rules.get("allowlist")
+            
+            # Logic: Use allowlist if present, else real options
+            final_options = [opt for opt in real_options if opt in allowlist] if allowlist else real_options
+            
+            # Store back into CONFIG memory for Schema Generation
+            rules["_runtime_options"] = final_options
+    print("✅ Hydration complete.")
 
-# ==========================================
-# 4. FORMATTING HELPERS (MOVED UP)
-# ==========================================
-def _notion_title(val):
-    return {"title": [{"text": {"content": val}}]}
+# --- PROMPT BUILDERS ---
 
-
-def _notion_rich_text(val):
-    return (
-        {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+def generate_classification_prompt(active_projects_str):
+    """Builds classification prompt dynamically from descriptions."""
+    category_lines = []
+    for cat, details in CONFIG.get("databases", {}).items():
+        if cat in ["youtube-channels", "logs"]: continue
+        desc = details.get("description", "No description.")
+        category_lines.append(f'- "{cat}": {desc}')
+    
+    return PROMPTS["categorize_template"].format(
+        active_projects_list=active_projects_str,
+        category_list="\n".join(category_lines)
     )
 
+def generate_extraction_prompt(category, raw_text, url_context=None):
+    """Builds extraction prompt using instructions and valid options."""
+    db_config = CONFIG.get("databases", {}).get(category)
+    if not db_config: return "Error: Unknown category"
 
-def _notion_multi_select(val):
-    return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
+    # 1. Valid Options Section
+    valid_opts_lines = []
+    for prop_name, rules in db_config.get("properties", {}).items():
+        options = rules.get("_runtime_options") or rules.get("allowlist")
+        if options:
+            valid_opts_lines.append(f"--- VALID {prop_name.upper()} ---\n{json.dumps(options)}")
+    
+    # 2. Instructions Section
+    instr_lines = []
+    for prop_name, rules in db_config.get("properties", {}).items():
+        instr = rules.get("instruction")
+        is_virtual = rules.get("virtual")
+        if instr and not is_virtual:
+            # Format replacements
+            formatted_instr = instr.replace("{current_date}", date.today().isoformat())
+            formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
+            instr_lines.append(f'- `{prop_name}`: {formatted_instr}')
 
+    return PROMPTS["extraction_template"].format(
+        category=category,
+        context_section=f"--- CONTEXT FROM URL ---\n{url_context}" if url_context else "",
+        valid_options_section="\n\n".join(valid_opts_lines),
+        instructions_section="\n".join(instr_lines)
+    )
 
-def _notion_date(val):
-    return {"date": {"start": val}}
+def get_gemini_schema(category):
+    """Generates JSON Schema from YAML + Runtime Options."""
+    db_config = CONFIG.get("databases", {}).get(category)
+    if not db_config: return {"type": "object", "properties": {"Name": {"type": "string"}}}
 
+    schema_props = {}
+    required_fields = []
 
-def _notion_status(val):
-    return {"status": {"name": val}}
+    for prop_name, rules in db_config.get("properties", {}).items():
+        prop_type = rules.get("type")
+        if rules.get("virtual"): continue 
 
+        field_def = {"type": "string"} 
+        if prop_type == "boolean": field_def = {"type": "boolean"}
+        elif prop_type in ["multi_select", "array"]:
+            opts = rules.get("_runtime_options") or rules.get("allowlist") or []
+            field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
+        elif prop_type in ["select", "status"]:
+            opts = rules.get("_runtime_options") or rules.get("allowlist") or []
+            field_def = {"type": "string", "enum": opts}
+        
+        schema_props[prop_name] = field_def
+        if rules.get("required"): required_fields.append(prop_name)
 
-def _notion_select(val):
-    return {"select": {"name": val}} if val else None
-
-
-def _notion_url(val):
-    return {"url": val}
-
+    return {"type": "object", "properties": schema_props, "required": required_fields}
 
 # ==========================================
-# 5. ENRICHMENT HELPERS
+# 4. FORMATTING HELPERS
 # ==========================================
-def log_job_outcome(
-    raw_text, category, status, details="", created_url=None, ai_data=None
-):
-    """
-    Creates a log entry in the Synapse Logs DB.
-    """
-    print(f"--- Logging outcome: {status} ---")
-    log_db_id = DATABASE_IDS.get("Logs")
-    if not notion or not log_db_id:
-        return
+def _notion_title(val): return {"title": [{"text": {"content": val}}]}
+def _notion_rich_text(val): return {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+def _notion_multi_select(val): return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
+def _notion_date(val): return {"date": {"start": val}}
+def _notion_status(val): return {"status": {"name": val}}
+def _notion_select(val): return {"select": {"name": val}} if val else None
+def _notion_url(val): return {"url": val}
 
-    ai_summary = json.dumps(ai_data, indent=2) if ai_data else "No data"
+# ==========================================
+# 5. PROPERTY BUILDER (YAML-DRIVEN)
+# ==========================================
 
-    props = {
-        "Raw Input": _notion_title(raw_text[:2000]),
-        "Status": _notion_status(status),
-        "Category": _notion_select(category),
-        "Reported": {"checkbox": False},
-        "Error Details": _notion_rich_text(str(details)[:2000]),
-        "AI Summary": _notion_rich_text(ai_summary[:2000]),
-    }
+def build_notion_properties(category, data):
+    print(f"--- Building Props for {category} ---")
+    properties = {}
+    
+    db_config = CONFIG.get("databases", {}).get(category)
+    if not db_config: return {"Name": _notion_title(data.get("Name", "Untitled"))}
 
-    if created_url:
-        props["Created Item"] = {"url": created_url}
+    for key, value in data.items():
+        if value is None: continue
+        
+        prop_rules = db_config.get("properties", {}).get(key)
+        if not prop_rules: continue
 
-    try:
-        notion.pages.create(parent={"database_id": log_db_id}, properties=props)
-        print("--- Log Entry Created ---")
-    except Exception as e:
-        print(f"Failed to write log: {e}")
+        prop_type = prop_rules.get("type")
 
+        if prop_type == "title": properties[key] = _notion_title(value)
+        elif prop_type == "rich_text": properties[key] = _notion_rich_text(value)
+        elif prop_type == "rich_text_list": 
+            val_str = "\n".join(value) if isinstance(value, list) else str(value)
+            properties[key] = _notion_rich_text(val_str)
+        elif prop_type == "multi_select": properties[key] = _notion_multi_select(value)
+        elif prop_type == "select": properties[key] = _notion_select(value)
+        elif prop_type == "status": properties[key] = _notion_status(value)
+        elif prop_type == "date": properties[key] = _notion_date(value)
+        elif prop_type == "url": properties[key] = _notion_url(value)
+    return properties
 
+def apply_business_logic(category, data, related_project=None):
+    today_str = date.today().isoformat()
+    
+    if category == "tasks":
+        data["Status"] = "To Do"
+        if related_project: data["Notes"] = f"Project: {related_project}"
+    elif category == "quotes": 
+        data["Date"] = today_str
+    elif category == "movies":
+        if "Status" not in data: data["Status"] = "Finished" if data.get("is_watched") else "Not Started"
+    elif category == "podcasts":
+        if data.get("Status") == "Finished": data["Date Listened To"] = today_str
+    elif category == "youtube-videos":
+        if data.get("Status") == "Watched": data["Date Watched"] = today_str
+    return data
+
+# ==========================================
+# 6. HELPERS (External APIs & Notion)
+# ==========================================
 def extract_url(text):
     match = re.search(r"(https?://\S+)", text)
     return match.group(0) if match else None
 
-
 def get_tal_metadata(url):
-    try:
-        html = requests.get(url).text
-        text = get_text(html)
-        clean_text = re.sub(r"\s+", " ", text).strip()
-        return f"Content from URL:\n{clean_text[:2000]}..."
-    except Exception as e:
-        return f"Error scraping TAL: {e}"
-
+    try: return f"Content:\n{re.sub(r'\s+', ' ', get_text(requests.get(url).text)).strip()[:2000]}..."
+    except Exception as e: return f"Error: {e}"
 
 def get_spotify_metadata(url):
-    if not spotify:
-        return "Spotify client not configured."
+    if not spotify: return "No Spotify Client"
     try:
-        results = spotify.episode(url)
-        return (
-            f"Spotify Metadata:\nShow: {results['show']['name']}\n"
-            f"Episode: {results['name']}\nPublisher: {results['show']['publisher']}\n"
-            f"Description: {results['description']}"
-        )
-    except Exception as e:
-        return f"Error fetching Spotify data: {e}"
-
+        r = spotify.episode(url)
+        return f"Show: {r['show']['name']}\nEp: {r['name']}\nDesc: {r['description']}"
+    except Exception as e: return f"Spotify Error: {e}"
 
 def get_youtube_metadata(url):
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "extract_flat": True,
-    }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL({'quiet':True, 'skip_download':True}) as ydl:
             info = ydl.extract_info(url, download=False)
-            handle = info.get("uploader_id", "")
-            handle = handle if handle.startswith("@") else f"@{handle}"
-            return (
-                f"YouTube Metadata:\nTitle: {info.get('title', 'Unknown')}\n"
-                f"Channel Name: {info.get('uploader', 'Unknown')}\nChannel Handle: {handle}"
-            )
-    except Exception as e:
-        return f"Error fetching YouTube data: {e}"
-
+            handle = info.get('uploader_id', '')
+            return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
+    except Exception as e: return f"YT Error: {e}"
 
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
-    if not url:
-        return None
-    if category == "Podcast":
-        if "spotify.com" in url:
-            return get_spotify_metadata(url)
-        if "thisamericanlife.org" in url:
-            return get_tal_metadata(url)
-    elif category == "Video":
-        return get_youtube_metadata(url)
+    if not url: return None
+    if category == "podcasts":
+        if "spotify.com" in url: return get_spotify_metadata(url)
+        if "thisamericanlife" in url: return get_tal_metadata(url)
+    elif category == "youtube-videos": return get_youtube_metadata(url)
     return None
 
-
-# ==========================================
-# 6. NOTION INTERACTION
-# ==========================================
-def fetch_existing_page_by_title(category, title_text, title_key="Name"):
-    if not notion or not DATABASE_IDS.get(category):
-        return None
-    try:
-        response = notion.databases.query(
-            database_id=DATABASE_IDS[category],
-            filter={"property": title_key, "title": {"equals": title_text}},
-        )
-        if response.get("results"):
-            return response["results"][0]["id"]
-    except Exception:
-        pass
-    return None
-
-
-def fetch_active_projects():
-    if not notion or not DATABASE_IDS.get("Task"):
-        return []
-    try:
-        response = notion.databases.query(
-            database_id=DATABASE_IDS["Task"],
-            filter={
-                "and": [
-                    {"property": "Tags", "multi_select": {"contains": "Project"}},
-                    {"property": "Status", "status": {"does_not_equal": "Done"}},
-                ]
-            },
-            page_size=100,
-        )
-        return [
-            p["properties"]["Name"]["title"][0]["text"]["content"]
-            for p in response.get("results", [])
-            if p["properties"].get("Name", {}).get("title")
-        ]
-    except Exception:
-        return []
-
-
-def create_notion_page(category, properties):
-    if not notion or not DATABASE_IDS.get(category):
-        raise Exception(f"Notion client or DB missing for {category}")
-    print(f"--- Creating Page in '{category}' ---")
-    return notion.pages.create(
-        parent={"database_id": DATABASE_IDS[category]}, properties=properties
-    )
-
-
-def update_page_status(page_id, status_name, status_key="Status"):
-    if not notion:
-        return None
-    print(f"--- Updating Page {page_id} Status to '{status_name}' ---")
-    try:
-        return notion.pages.update(
-            page_id=page_id, properties={status_key: {"status": {"name": status_name}}}
-        )
-    except Exception as e:
-        print(f"Failed to update status: {e}")
-        return None
-
+def log_job_outcome(raw_text, category, status, details="", created_url=None, ai_data=None):
+    print(f"--- Logging: {status} ---")
+    log_id = get_db_id("logs")
+    if not notion or not log_id: return
+    
+    props = {
+        "Name": _notion_title(raw_text[:50]),
+        "Status": _notion_select(status),
+        "Category": _notion_select(category),
+        "Reported": {"checkbox": False},
+        "Raw Input": _notion_rich_text(raw_text[:2000]),
+        "Error Details": _notion_rich_text(str(details)[:2000]),
+        "AI Summary": _notion_rich_text(json.dumps(ai_data, indent=2)[:2000] if ai_data else "")
+    }
+    if created_url: props["Created Item"] = {"url": created_url}
+    try: notion.pages.create(parent={"database_id": log_id}, properties=props)
+    except Exception as e: print(f"Log failed: {e}")
 
 def append_to_quick_notes(raw_text):
-    if not notion or not FALLBACK_NOTION_BLOCK_ID:
-        return
+    """Fallback: Appends text to a specific Notion Block if processing fails."""
+    if not notion or not FALLBACK_NOTION_BLOCK_ID: return
     try:
         notion.blocks.children.append(
             block_id=FALLBACK_NOTION_BLOCK_ID,
-            children=[
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"type": "text", "text": {"content": raw_text}}]
-                    },
-                }
-            ],
+            children=[{
+                "object": "block", 
+                "type": "paragraph", 
+                "paragraph": {"rich_text": [{"type": "text", "text": {"content": raw_text}}]}
+            }]
         )
-    except Exception:
-        pass
+        print("--- Fallback: Appended to Quick Notes ---")
+    except Exception as e:
+        print(f"Fallback failed: {e}")
 
-
-def create_manual_cleanup_task(description):
-    print(f"--- Creating Cleanup Task: {description} ---")
-    props = {
-        "Name": _notion_title(description),
-        "Status": _notion_status("To Do"),
-        "Tags": _notion_multi_select(["Organization"]),
-        "Due Date": _notion_date(date.today().isoformat()),
-    }
+def fetch_existing_page(category, value, key="Name"):
+    db_id = get_db_id(category)
+    if not notion or not db_id: return None
     try:
-        create_notion_page("Task", props)
-    except Exception:
-        pass
+        resp = notion.databases.query(database_id=db_id, filter={"property": key, "title": {"equals": value}})
+        if resp.get("results"): return resp["results"][0]["id"]
+    except Exception: pass
+    return None
 
+def create_page(category, props):
+    return notion.pages.create(parent={"database_id": get_db_id(category)}, properties=props)
 
-def append_text_to_property(page_id, property_name, new_text):
-    """Appends text to an existing rich_text property on a Notion page."""
-    if not notion:
-        return
-    print(f"--- Appending text to Page {page_id}, Prop '{property_name}' ---")
+def update_status(page_id, status):
+    try: return notion.pages.update(page_id=page_id, properties={"Status": {"status": {"name": status}}})
+    except Exception: return None
+
+def append_note(page_id, text):
     try:
-        # 1. Retrieve current content
         page = notion.pages.retrieve(page_id)
-        current_rich_text = (
-            page["properties"].get(property_name, {}).get("rich_text", [])
-        )
+        curr = page["properties"].get("Notes", {}).get("rich_text", [])
+        if curr: curr.append({"type": "text", "text": {"content": "\n"}})
+        curr.append({"type": "text", "text": {"content": text}})
+        notion.pages.update(page_id=page_id, properties={"Notes": {"rich_text": curr}})
+    except Exception: pass
 
-        # 2. Append new text (prepend newline if existing text exists)
-        if current_rich_text:
-            current_rich_text.append({"type": "text", "text": {"content": "\n"}})
-        current_rich_text.append({"type": "text", "text": {"content": new_text}})
+def create_cleanup_task(desc):
+    props = {"Name": _notion_title(desc), "Status": _notion_status("To Do"), "Tags": _notion_multi_select(["Organization"]), "Due Date": _notion_date(date.today().isoformat())}
+    try: create_page("tasks", props)
+    except Exception: pass
 
-        # 3. Update
-        notion.pages.update(
-            page_id=page_id,
-            properties={property_name: {"rich_text": current_rich_text}},
-        )
-        print("--- Append Success ---")
-    except Exception as e:
-        print(f"Failed to append text: {e}")
-
-
-# ==========================================
-# 7. PROPERTY BUILDER (UNIVERSAL)
-# ==========================================
-
-
-def apply_business_logic(category, data, related_project=None):
-    """
-    Enforces side-effects and logic branching BEFORE mapping.
-    Injects or modifies keys in 'data' to match NOTION_PROPERTY_TYPES.
-    """
-    today_str = date.today().isoformat()
-
-    # 1. Task Logic
-    if category == "Task":
-        data["Status"] = "To Do"
-        if related_project:
-            data["Notes"] = f"Project: {related_project}"
-
-    # 2. Quote Logic
-    elif category == "Quote":
-        data["Date"] = today_str
-
-    # 3. Movie Logic (Calculate Status from bool)
-    elif category == "Movie":
-        if "Status" not in data:
-            data["Status"] = "Finished" if data.get("is_watched") else "Not Started"
-
-    # 4. Podcast Logic (If Finished -> Date Listened)
-    elif category == "Podcast":
-        if data.get("Status") == "Finished":
-            data["Date Listened To"] = today_str
-
-    # 5. Video Logic (If Watched -> Date Watched)
-    elif category == "Video":
-        if data.get("Status") == "Watched":
-            data["Date Watched"] = today_str
-
-    return data
-
-
-def build_notion_properties(category, data):
-    """
-    Universal builder. Loops through data keys, finds type in map, formats it.
-    """
-    print(f"--- Building Universal Props for {category} ---")
-    properties = {}
-
-    for key, value in data.items():
-        # Check if this key is a known Notion Property
-        if key in NOTION_PROPERTY_TYPES:
-            prop_type = NOTION_PROPERTY_TYPES[key]
-
-            # Skip empty values
-            if value is None:
-                continue
-
-            # Dispatch to helper
-            if prop_type == "title":
-                properties[key] = _notion_title(value)
-            elif prop_type == "rich_text":
-                properties[key] = _notion_rich_text(value)
-            elif prop_type == "rich_text_list":
-                # Join list strings for Rich Text fields
-                val_str = "\n".join(value) if isinstance(value, list) else str(value)
-                properties[key] = _notion_rich_text(val_str)
-            elif prop_type == "multi_select":
-                properties[key] = _notion_multi_select(value)
-            elif prop_type == "select":
-                properties[key] = _notion_select(value)
-            elif prop_type == "status":
-                properties[key] = _notion_status(value)
-            elif prop_type == "date":
-                properties[key] = _notion_date(value)
-            elif prop_type == "url":
-                properties[key] = _notion_url(value)
-
-    return properties
-
-
-# ==========================================
-# 8. HANDLERS & MAIN
-# ==========================================
-
-
-def handle_media_logic(category, data):
-    """Returns the URL of the created or updated page."""
-    title_key = "movie_title" if category == "Movie" else "tvshow_title"
-    status_val = data.get("Status")
-
-    existing_id = fetch_existing_page_by_title(
-        category, data["Title"], title_key="Title"
-    )
-
-    if existing_id:
-        # Logic: Update if status implies progress/completion
-        should_update = False
-        if category == "Movie" and data.get("is_watched"):
-            should_update = True
-        if category == "TVShow" and status_val in [
-            "Priority",
-            "Finished",
-            "In Progress",
-        ]:
-            should_update = True
-
-        if should_update:
-            resp = update_page_status(existing_id, status_val)
-            print(f"{category} '{data['Title']}' updated to {status_val}.")
-            return resp.get("url") if resp else None
-        else:
-            print(f"{category} '{data['Title']}' exists. No update.")
-            # Return the existing URL even if we didn't update it, so the log links to it
-            return f"https://www.notion.so/{existing_id.replace('-', '')}"
-    else:
-        props = build_notion_properties(category, data)
-        resp = create_notion_page(category, props)
-        return resp.get("url")
-
-
-def handle_video_logic(category, data):
-    """Returns the URL of the created video page."""
-    props = build_notion_properties(category, data)
-
-    channel_handle = data.get("channel_handle")
-    channel_id = fetch_existing_page_by_title("Channel", channel_handle)
-    if channel_id:
-        props["Channel"] = {"relation": [{"id": channel_id}]}
-
-    resp = create_notion_page(category, props)
-
-    if not channel_id:
-        create_manual_cleanup_task(
-            f"Add YouTube Channel: {channel_handle} for video '{data['Title']}'"
-        )
-
-    return resp.get("url")
-
-
-def execute_category_action(category, data):
-    """Routes logic and returns the URL of the primary item created/touched."""
-    if category in ["Movie", "TVShow"]:
-        return handle_media_logic(category, data)
-    elif category == "Video":
-        return handle_video_logic(category, data)
-    else:
-        props = build_notion_properties(category, data)
-        resp = create_notion_page(category, props)
-
-        if category == "Quote":
-            create_manual_cleanup_task(
-                f"Link person to quote: '{data.get('Name','...')[:30]}...'"
-            )
-
-        return resp.get("url")
-
-
-def call_gemini(system_prompt, user_prompt, schema):
-    if not gemini_client:
-        raise Exception("Gemini not initialized")
-    print(f"--- Gemini Call: {list(schema['properties'].keys())} ---")
+def fetch_active_projects():
+    if not notion or not get_db_id("tasks"): return []
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
-            contents=[
-                types.Content(
-                    parts=[types.Part.from_text(text=user_prompt)], role="user"
-                )
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type="application/json",
-                response_json_schema=schema,
-            ),
+        response = notion.databases.query(
+            database_id=get_db_id("tasks"),
+            filter={"and": [{"property": "Tags", "multi_select": {"contains": "Project"}},
+                            {"property": "Status", "status": {"does_not_equal": "Done"}}]},
+            page_size=100
         )
-        return json.loads(response.text)
-    except Exception as e:
-        print(f"Gemini Error: {e}")
-        raise e
+        return [p["properties"]["Name"]["title"][0]["text"]["content"] 
+                for p in response.get("results", []) if p["properties"].get("Name", {}).get("title")]
+    except Exception: return []
 
+# ==========================================
+# 7. MAIN HANDLERS & EXECUTORS
+# ==========================================
+CATEGORY_SCHEMA_CLASSIFY = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string", "enum": list(CONFIG.get("databases", {}).keys())},
+        "related_project": {"type": "string"}
+    },
+    "required": ["category"]
+}
+
+def execute_logic(category, data):
+    # Media Logic
+    if category in ["movies", "tv-shows"]:
+        status = data.get("Status")
+        eid = fetch_existing_page(category, data["Title"], "Title")
+        if eid:
+            should_up = (category=="movies" and data.get("is_watched")) or (category=="tv-shows" and status in ["Priority","Finished","In Progress"])
+            if should_up: return update_status(eid, status).get("url")
+            return f"https://www.notion.so/{eid.replace('-','')}"
+        return create_page(category, build_notion_properties(category, data)).get("url")
+    
+    # Video Logic
+    elif category == "youtube-videos":
+        props = build_notion_properties(category, data)
+        cid = fetch_existing_page("youtube-channels", data.get("channel_handle"), "Name")
+        if cid: props["Channel"] = {"relation": [{"id": cid}]}
+        else: create_cleanup_task(f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'")
+        return create_page(category, props).get("url")
+    
+    # Grocery Logic
+    elif category == "groceries":
+        eid = fetch_existing_page(category, data["Name"], "Name")
+        if eid: return update_status(eid, data.get("Status")).get("url")
+        return create_page(category, build_notion_properties(category, data)).get("url")
+
+    # Default
+    else:
+        resp = create_page(category, build_notion_properties(category, data))
+        if category == "quotes": create_cleanup_task(f"Link person: {data.get('Name')[:30]}...")
+        return resp.get("url")
 
 @functions_framework.cloud_event
 def processor(cloud_event):
-    print("🧠 Synapse processor worker is awake!")
-    if not GEMINI_API_KEY or not PROMPTS or not NOTION_API_KEY:
-        print("ERROR: Configuration missing.")
-        return
+    print("🧠 Worker awake!")
+    if not GEMINI_API_KEY or not PROMPTS: return
+    
+    # Hydration Check: Inspect a configured property that needs hydration
+    task_props = CONFIG.get("databases", {}).get("tasks", {}).get("properties", {})
+    if not any(d.get("_runtime_options") for d in task_props.values() if isinstance(d, dict)): 
+        hydrate_dynamic_options()
 
-    # Initialize variables for logging
-    raw_text = ""
-    category = "Unknown"
-    extracted_data = {}
-    created_url = None
-
+    raw_text, category, extracted, url = "", "Unknown", {}, None
     try:
-        message_data = base64.b64decode(cloud_event.data["message"]["data"]).decode(
-            "utf-8"
-        )
-        raw_text = str(message_data)
-        if not raw_text:
-            return
+        raw_text = str(base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8"))
         print(f"Processing: {raw_text}")
-    except Exception as e:
-        print(f"Pub/Sub Error: {e}")
-        return
+        
+        # 1. Active Projects
+        projects = fetch_active_projects()
+        proj_str = ", ".join(projects) if projects else "None"
+        
+        # 2. Classify
+        cat_prompt = generate_classification_prompt(proj_str)
+        classified = json.loads(gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[types.Content(parts=[types.Part.from_text(raw_text)], role="user")],
+            config=types.GenerateContentConfig(system_instruction=cat_prompt, 
+            response_mime_type="application/json", response_json_schema=CATEGORY_SCHEMA_CLASSIFY)).text)
+        
+        category = classified.get("category", "tasks")
+        project = classified.get("related_project")
+        print(f"Classified: {category}")
 
-    try:
-        # Step 0: Context
-        active_projects = fetch_active_projects()
-        projects_str = ", ".join(active_projects) if active_projects else "None"
-
-        # Step 1: Classification
-        sys_prompt_1 = PROMPTS["categorize_input"].format(
-            active_projects_list=projects_str
-        )
-        classified = call_gemini(sys_prompt_1, raw_text, CATEGORY_SCHEMA)
-        category = classified.get("category", "Task")
-        related_project = classified.get("related_project")
-        print(f"Classified as: {category}")
-
-        # Step 2: Preparation
-        config = CATEGORY_CONFIG.get(category, CATEGORY_CONFIG["DEFAULT"])
-
-        prompt_args = {"raw_text": raw_text}
-        if category == "Task":
-            prompt_args["current_date"] = date.today().isoformat()
-        elif category in ["Podcast", "Video"]:
-            print(f"--- Enriching {category} Data ---")
-            prompt_args["url_context"] = (
-                enrich_context(category, raw_text) or "No URL found."
-            )
-        elif category not in CATEGORY_CONFIG:
-            prompt_args["category"] = category
-
-        # Step 3: AI Extraction
-        sys_prompt_2 = PROMPTS[config["prompt"]].format(**prompt_args)
-        extracted_data = call_gemini(sys_prompt_2, raw_text, config["schema"])
-        print(f"Extracted: {extracted_data}")
-
-        # Step 4: Business Logic
-        processed_data = apply_business_logic(category, extracted_data, related_project)
-
-        # Step 5: Execution & URL Capture
-        if related_project and category == "Task":
-            print(f"--- Detected Related Project: {related_project} ---")
-            project_page_id = fetch_existing_page_by_title("Task", related_project)
-
-            if project_page_id:
-                # Append to Project
-                text_to_append = extracted_data.get("Name") or raw_text
-                append_text_to_property(project_page_id, "Notes", text_to_append)
-                created_url = f"https://www.notion.so/{project_page_id.replace('-', '')}"  # Construct Project URL
-                print("--- Project Note Appended ---")
+        # 3. Extract
+        url_context = enrich_context(category, raw_text) or "No URL" if category in ["podcasts", "youtube-videos"] else None
+        extract_prompt = generate_extraction_prompt(category, raw_text, url_context)
+        
+        extracted = json.loads(gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[types.Content(parts=[types.Part.from_text(raw_text)], role="user")],
+            config=types.GenerateContentConfig(system_instruction=extract_prompt, 
+            response_mime_type="application/json", response_json_schema=get_gemini_schema(category))).text)
+        
+        # 4. Exec
+        extracted = apply_business_logic(category, extracted, project)
+        
+        if project and category == "tasks":
+            eid = fetch_existing_page("tasks", project, "Name")
+            if eid:
+                append_note(eid, extracted.get("Name", raw_text))
+                url = f"https://www.notion.so/{eid.replace('-','')}"
             else:
-                # Fallback to new task
-                print(
-                    f"Project '{related_project}' not found. Creating linked task instead."
-                )
-                created_url = execute_category_action(category, processed_data)
+                url = execute_logic(category, extracted)
         else:
-            created_url = execute_category_action(category, processed_data)
+            url = execute_logic(category, extracted)
 
-        # LOG SUCCESS
-        log_job_outcome(
-            raw_text,
-            category,
-            "Success",
-            created_url=created_url,
-            ai_data=extracted_data,
-        )
+        log_job_outcome(raw_text, category, "Success", created_url=url, ai_data=extracted)
         print("--- JOB SUCCESS ---")
 
     except Exception as e:
-        print(f"Pipeline Error: {e}")
-        # LOG FAILURE
-        log_job_outcome(
-            raw_text, category, "Failure", details=str(e), ai_data=extracted_data
-        )
+        print(f"Error: {e}")
+        log_job_outcome(raw_text, category, "Failure", details=e, ai_data=extracted)
         append_to_quick_notes(raw_text)
