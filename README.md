@@ -198,6 +198,7 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] put all my secrets keys into my config.yaml -- leave the values out but this way my terraform code will create secrets from the names in the config.yaml (it'll just read every single name within a secret list and make em all) and my actualy code will read the keys from the config.yaml as well. My secret setup script can also read the secrets from the config.yaml and verify that the config.yaml is a mirror of gcp secret manager (rn it just checks gcp manager) for an extra step of verification
 - [ ] make some kinda script which copies the config.yaml into the cloud run functions folders at deploy time so they have access to it and i can stop hardcoding stuff
 - [ ] rewrok the setuplocalenv script to use uv correctly -- idrk how it works tbh there's uv sync, uv add, uv pip install, where does the venv get created? Also how does the pyproject.toml work with having various projects? Should they even have one at the root level? Maybe not? But it seems like maybe lmaooo
+- [ ] It would be great to not be hardcoding my helper dbs --  the logs and youtube-channels, but it is what it is for now
 
 ### **Feature Related Stuff**
 
