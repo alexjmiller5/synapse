@@ -61,6 +61,7 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-books-db-id",
     "notion-video-games-db-id",
     "notion-quotes-db-id",
+    "notion-bookmarks-db-id",
     "gmail-app-password",
     "notion-logs-db-id",
     "spotify-client-id",
