@@ -13,8 +13,8 @@ databases:
       Tags:
         type: "multi_select"
         required: true
-        instruction: "Most tasks are chores to be honest. If it's something that's quick to do on my computer, in my room, whatever it is it's probably a chore. ANything that I'm buying is shopping - so amazon, whatever. Whatever involves going out of the house to do it is errand - picking up dry cleaning, dropping something off at goodwill, things like that.  Select One of the following Tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'. If it's related to general career stuff pick career. If it's related to buying a gift for somebody or a gift idea I have for somebody put it as a gift"
-        allowlist: ["Gifts", "Shopping", "Work", "Social", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore"]
+        instruction: "Most tasks are chores to be honest. If it's something that's quick to do on my computer, in my room, whatever it is it's probably a chore. ANything that I'm buying is shopping - so amazon, whatever. Whatever involves going out of the house to do it is errand - picking up dry cleaning, dropping something off at goodwill, things like that.  Select One of the following Tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'. If it's related to general career stuff pick career. If it's related to buying a gift for somebody or a gift idea I have for somebody put it as a gift. Learning is something to explore -- like I says look through this website or look into this tool or figure out how the python tool uv works"
+        allowlist: ["Gifts", "Shopping", "Work", "Social", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore", "Errand", "Decision", "Learning"]
       Links:
         type: "rich_text_list"
         required: true
@@ -46,18 +46,6 @@ databases:
         required: true
         allowlist: ["On List", "Don't Have", "Have"]
         instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
-
-  shopping:
-    description: "A non-food item to buy (paper towels, tech, clothes, furniture)."
-    properties:
-      Name:
-        type: "title"
-        required: true
-        instruction: "Extract the item name."
-      Notes:
-        type: "rich_text"
-        required: true
-        instruction: "The full original text."
 
   ideas:
     description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that."
@@ -205,6 +193,17 @@ databases:
       Date Watched:
         type: "date"
         virtual: true
+  people:
+    description: "A database where each page represents a person I know, maybe a work colleague, friend, or family member."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "The full name of the person."
+      Context:
+        type: "rich_text"
+        required: true
+        instruction: "Any additional context about the person (e.g., how you know them)."
 
   # Helpers
   youtube-channels:
