@@ -13,9 +13,8 @@ databases:
       Tags:
         type: "multi_select"
         required: true
-        # Specific rule about Work/Capital One added here
-        instruction: "Select relevant tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'."
-        allowlist: ["Gifts", "Hotkeys", "Organization", "Software", "Shopping", "Work", "Social", "Finances", "Career", "Westport", "Capital One"]
+        instruction: "Most tasks are chores to be honest. If it's something that's quick to do on my computer, in my room, whatever it is it's probably a chore. ANything that I'm buying is shopping - so amazon, whatever. Whatever involves going out of the house to do it is errand - picking up dry cleaning, dropping something off at goodwill, things like that.  Select One of the following Tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'. If it's related to general career stuff pick career. If it's related to buying a gift for somebody or a gift idea I have for somebody put it as a gift"
+        allowlist: ["Gifts", "Shopping", "Work", "Social", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore"]
       Links:
         type: "rich_text_list"
         required: true
@@ -37,7 +36,7 @@ databases:
       Name:
         type: "title"
         required: true
-        instruction: "Extract the primary item name (e.g., 'Milk'). Capitalize the first letter."
+        instruction: "Check the 'EXISTING INVENTORY' list provided. If the user's item matches (or is a close variation of) an existing item name, USE THE EXISTING EXACT NAME. If it is truly new, create a singular, Title Case name."
       Category:
         type: "select"
         required: true
@@ -46,12 +45,7 @@ databases:
         type: "status"
         required: true
         allowlist: ["On List", "Don't Have", "Have"]
-        # Specific Grocery mapping logic
         instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
-      Notes:
-        type: "rich_text"
-        required: true
-        instruction: "The full original text."
 
   shopping:
     description: "A non-food item to buy (paper towels, tech, clothes, furniture)."
@@ -66,7 +60,7 @@ databases:
         instruction: "The full original text."
 
   ideas:
-    description: "A random thought, invention idea, app concept, or project idea."
+    description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that."
     properties:
       Description:
         type: "title"
@@ -222,16 +216,14 @@ databases:
   logs:
     description: "Internal use."
     properties:
-      Name:
-        type: "title"
+      Raw Input:
+        type: "title" # Changed from rich_text to title
       Status:
-        type: "select"
+        type: "status" # Changed from select to status
       Category:
         type: "select"
       Reported:
         type: "checkbox"
-      Raw Input:
-        type: "rich_text"
       Error Details:
         type: "rich_text"
       AI Summary:
