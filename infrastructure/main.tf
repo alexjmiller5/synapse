@@ -49,7 +49,6 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-people-db-id",
     "notion-quick-notes-last-block-id",
     "notion-languages-db-id",
-    "notion-shopping-db-id",
     "notion-ideas-db-id",
     "notion-bucket-list-db-id",
     "notion-movies-db-id",
@@ -105,35 +104,6 @@ resource "google_eventarc_trigger" "reporter_trigger" {
   service_account = google_service_account.function_sa.email
 }
 
-# --- Eventarc Trigger for Processor Worker ---
-
-resource "google_eventarc_trigger" "processor_worker_trigger" {
-  name     = "processor-trigger"
-  location = var.region
-  project  = var.gcp_project_id
-
-  matching_criteria {
-    attribute = "type"
-    value     = "google.cloud.pubsub.topic.v1.messagePublished"
-  }
-
-  transport {
-    pubsub {
-      topic = google_pubsub_topic.processor_topic.id
-    }
-  }
-
-  destination {
-    cloud_run_service {
-      service = module.processor_worker.service_name
-      region  = var.region
-    }
-  }
-
-  service_account = google_service_account.function_sa.email
-  depends_on      = [module.processor_worker]
-}
-
 resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
   service  = module.processor_worker.service_name
   location = var.region
@@ -141,12 +111,37 @@ resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.function_sa.email}"
   depends_on = [
-    module.processor_worker,
-    google_eventarc_trigger.processor_worker_trigger
+    module.processor_worker
   ]
 }
 
-# --- Pub/Sub Topics ---
+# --- Pub/Sub Topics & Subscriptions ---
+
+resource "google_pubsub_subscription" "processor_subscription" {
+  name  = "processor-jobs-sub"
+  topic = google_pubsub_topic.processor_topic.name
+
+  # THE FIX: Wait up to 600s for the worker to finish before retrying
+  ack_deadline_seconds = 600 
+
+  # Retry policy (Optional: exponential backoff if the code actually fails)
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  push_config {
+    # Point to your Cloud Run Service URL
+    push_endpoint = module.processor_worker.url 
+
+    # Auth using the Function SA (which has invoker permissions)
+    oidc_token {
+      service_account_email = google_service_account.function_sa.email
+    }
+  }
+
+  depends_on = [module.processor_worker]
+}
 
 resource "google_pubsub_topic" "reporter_topic" {
   name       = "reporter"
