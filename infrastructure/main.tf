@@ -132,7 +132,7 @@ resource "google_pubsub_subscription" "processor_subscription" {
 
   push_config {
     # Point to your Cloud Run Service URL
-    push_endpoint = module.processor_worker.url
+    push_endpoint = module.processor_worker.service_url
 
     # Auth using the Function SA (which has invoker permissions)
     oidc_token {
