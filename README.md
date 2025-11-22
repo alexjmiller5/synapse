@@ -48,7 +48,7 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **Run the function(s) you are interested in testing:**
 
 ```bash
-functions-framework --target=<name-of-python-function> --source=<path-to-python-service> --debug
+uv run functions-framework --target=<name-of-python-function> --source=<path-to-python-service> --debug
 ```
 
 - **Test infrastructure changes with Terraform:**
@@ -199,6 +199,8 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] make some kinda script which copies the config.yaml into the cloud run functions folders at deploy time so they have access to it and i can stop hardcoding stuff
 - [ ] rewrok the setuplocalenv script to use uv correctly -- idrk how it works tbh there's uv sync, uv add, uv pip install, where does the venv get created? Also how does the pyproject.toml work with having various projects? Should they even have one at the root level? Maybe not? But it seems like maybe lmaooo
 - [ ] It would be great to not be hardcoding my helper dbs --  the logs and youtube-channels, but it is what it is for now
+- [ ] make it so the hydration only happens on a per category/db basis after classification is done so it doesn't have to hydrate everything all at the beginning
+- [ ] add checks at the beginning of my function to make sure that the synapse_config.yaml matches the actual notion db structure -- this way if i change something in notion and forget to update the config file, the function will error out and maybe send me an email? and notify me instead of just failing silently or misbehaving
 
 ### **Feature Related Stuff**
 

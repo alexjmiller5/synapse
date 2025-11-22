@@ -22,6 +22,8 @@ extraction_template: |
 
   {valid_options_section}
 
+  {inventory_section}
+
   --- INSTRUCTIONS ---
   {instructions_section}
 
