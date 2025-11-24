@@ -121,20 +121,16 @@ resource "google_pubsub_subscription" "processor_subscription" {
   name  = "processor-jobs-sub"
   topic = google_pubsub_topic.processor_topic.name
 
-  # THE FIX: Wait up to 600s for the worker to finish before retrying
   ack_deadline_seconds = 600
 
-  # Retry policy (Optional: exponential backoff if the code actually fails)
   retry_policy {
     minimum_backoff = "10s"
     maximum_backoff = "600s"
   }
 
   push_config {
-    # Point to your Cloud Run Service URL
     push_endpoint = module.processor_worker.service_url
 
-    # Auth using the Function SA (which has invoker permissions)
     oidc_token {
       service_account_email = google_service_account.function_sa.email
     }

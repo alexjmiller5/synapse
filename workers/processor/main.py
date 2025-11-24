@@ -342,7 +342,7 @@ def log_job_outcome(raw_text, category, status, details="", created_url=None, ai
     
     props = {
         "Raw Input": _notion_title(raw_text[:2000]),
-        "Status": _notion_status(status),
+        "Code Execution": _notion_status(status),
         "Category": _notion_select(category),
         "Reported": {"checkbox": False},
         "Error Details": _notion_rich_text(str(details)[:2000]),
@@ -372,9 +372,15 @@ def fetch_existing_page(category, value, key="Name"):
     db_id = get_db_id(category)
     if not notion or not db_id: return None
     try:
+        print(f"🔍 Searching {category} for '{value}'...")
         resp = notion.databases.query(database_id=db_id, filter={"property": key, "title": {"equals": value}})
-        if resp.get("results"): return resp["results"][0]["id"]
-    except Exception: pass
+        if resp.get("results"): 
+            found_id = resp["results"][0]["id"]
+            print(f"   ✅ Found existing page: {found_id}")
+            return found_id
+        print(f"   🔸 No exact match found for '{value}'")
+    except Exception as e:
+        print(f"   ❌ Search failed for '{value}': {e}")
     return None
 
 def create_page(category, props):
@@ -386,22 +392,78 @@ def create_page(category, props):
         raise e
 
 def update_status(page_id, status):
-    try: return notion.pages.update(page_id=page_id, properties={"Status": {"status": {"name": status}}})
-    except Exception: return None
+    print(f"🔄 Updating status for {page_id} to '{status}'...")
+    try: 
+        return notion.pages.update(page_id=page_id, properties={"Status": {"status": {"name": status}}})
+    except Exception as e:
+        print(f"   ❌ Update Status Failed: {e}")
+        return None
 
 def append_note(page_id, text):
+    print(f"📎 Appending note to {page_id}...")
+    
+    def get_utf16_split(content, limit=2000):
+        chunks = []
+        current_chunk = []
+        current_len = 0
+        
+        for char in content:
+            char_len = len(char.encode('utf-16-le')) // 2
+            
+            if current_len + char_len > limit:
+                chunks.append("".join(current_chunk))
+                current_chunk = []
+                current_len = 0
+            
+            current_chunk.append(char)
+            current_len += char_len
+            
+        if current_chunk:
+            chunks.append("".join(current_chunk))
+        return chunks
+
     try:
         page = notion.pages.retrieve(page_id)
-        curr = page["properties"].get("Notes", {}).get("rich_text", [])
-        if curr: curr.append({"type": "text", "text": {"content": "\n"}})
-        curr.append({"type": "text", "text": {"content": text}})
-        notion.pages.update(page_id=page_id, properties={"Notes": {"rich_text": curr}})
-    except Exception: pass
+        current_notes = page["properties"].get("Notes", {}).get("rich_text", [])
+        
+        safe_notes = []
+        
+        # 1. Sanitize existing notes
+        for note_obj in current_notes:
+            content = note_obj.get("text", {}).get("content", "")
+            anns = note_obj.get("annotations", {})
+            
+            chunks = get_utf16_split(content)
+            for chunk in chunks:
+                safe_notes.append({
+                    "type": "text",
+                    "text": {"content": chunk},
+                    "annotations": anns
+                })
+        
+        # 2. Append new note
+        new_chunks = get_utf16_split(f"\n{text}")
+        for chunk in new_chunks:
+            safe_notes.append({
+                "type": "text",
+                "text": {"content": chunk}
+            })
+        
+        # 3. Send update
+        notion.pages.update(
+            page_id=page_id, 
+            properties={"Notes": {"rich_text": safe_notes}}
+        )
+        print("   ✅ Note appended successfully.")
+        
+    except Exception as e:
+        print(f"   ❌ Append Note Failed: {e}")
 
 def create_cleanup_task(desc):
+    print(f"🧹 Creating cleanup task: {desc}")
     props = {"Name": _notion_title(desc), "Status": _notion_status("To Do"), "Tags": _notion_multi_select(["Organization"]), "Due Date": _notion_date(date.today().isoformat())}
     try: create_page("tasks", props)
-    except Exception: pass
+    except Exception as e: print(f"   ❌ Cleanup Task Creation Failed: {e}")
 
 def fetch_active_projects():
     """
@@ -585,6 +647,11 @@ def processor(cloud_event):
                 print(f"   -> Appending to Project: {project} (ID: {eid})")
                 append_note(eid, extracted.get("Name", raw_text))
                 url = f"https://www.notion.so/{eid.replace('-','')}"
+                extracted = {
+                    "Action": "Appended to Project",
+                    "Target Project": project,
+                    "Content": raw_text
+                }
             else:
                 print(f"   ⚠️ Project '{project}' not found in active map. Creating new task.")
                 url = execute_logic(category, extracted)
@@ -596,10 +663,5 @@ def processor(cloud_event):
 
     except Exception as e:
         print(f"❌ Error Traceback: {e}")
-        log_job_outcome(raw_text, category, "Failure", details=e, ai_data=extracted)
-        append_to_quick_notes(raw_text)
-
-    except Exception as e:
-        print(f"❌ Error Traceback: {e}")
-        log_job_outcome(raw_text, category, "Failure", details=e, ai_data=extracted)
+        log_job_outcome(raw_text, category, "Error(s)", details=e, ai_data=extracted if 'extracted' in locals() else {})
         append_to_quick_notes(raw_text)
