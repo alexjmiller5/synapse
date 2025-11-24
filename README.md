@@ -51,6 +51,41 @@ Synapse is a serverless application designed to eliminate the friction of manual
 uv run functions-framework --target=<name-of-python-function> --source=<path-to-python-service> --debug
 ```
 
+- **Add the following to your shell's startup file:**
+
+```bash
+syn-local() {
+    local url="http://localhost:8080"
+    local input_text="$*"
+
+    if [ -z "$input_text" ]; then
+        echo "Usage: syn-local <text>"
+        return 1
+    fi
+
+    echo "🚀 Sending: '$input_text'..."
+
+    local payload
+    payload=$(python3 -c "import sys, json, base64; print(json.dumps({'message': {'data': base64.b64encode(sys.argv[1].encode('utf-8')).decode('utf-8'), 'attributes': {}}}))" "$input_text")
+
+    curl -X POST "$url" \
+        -H "Content-Type: application/json" \
+        -H "Ce-Id: 123456789" \
+        -H "Ce-Specversion: 1.0" \
+        -H "Ce-Type: google.cloud.pubsub.topic.v1.messagePublished" \
+        -H "Ce-Source: //pubsub.googleapis.com/projects/synapse/topics/local" \
+        -d "$payload"
+    
+    echo ""
+}
+```
+
+- **Send test requests to your local function:**
+
+```bash
+syn-local "Your test input text here"
+```
+
 - **Test infrastructure changes with Terraform:**
 
 ```bash
