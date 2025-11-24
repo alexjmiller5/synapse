@@ -217,7 +217,7 @@ databases:
     properties:
       Raw Input:
         type: "title" # Changed from rich_text to title
-      Status:
+      Code Execution:
         type: "status" # Changed from select to status
       Category:
         type: "select"
