@@ -428,7 +428,6 @@ def append_note(page_id, text):
         
         safe_notes = []
         
-        # 1. Sanitize existing notes
         for note_obj in current_notes:
             content = note_obj.get("text", {}).get("content", "")
             anns = note_obj.get("annotations", {})
@@ -441,15 +440,13 @@ def append_note(page_id, text):
                     "annotations": anns
                 })
         
-        # 2. Append new note
-        new_chunks = get_utf16_split(f"\n{text}")
+        new_chunks = get_utf16_split(f"{text}")
         for chunk in new_chunks:
             safe_notes.append({
                 "type": "text",
                 "text": {"content": chunk}
             })
         
-        # 3. Send update
         notion.pages.update(
             page_id=page_id, 
             properties={"Notes": {"rich_text": safe_notes}}
