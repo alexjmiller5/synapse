@@ -381,20 +381,25 @@ def apply_business_logic(category, data, related_project=None):
     if category == "tasks":
         data["Status"] = "To Do"
         if related_project: data["Notes"] = f"Project: {related_project}"
+        
     elif category == "quotes": 
         data["Date"] = today_str
         raw_quote = data.get("Quote", "")
         if raw_quote:
-            # 1. Strip existing quotes to avoid double wrapping (e.g. ““Hello””)
             clean_quote = raw_quote.strip('"').strip("'").strip("“").strip("”")
-            # 2. Force wrap in smart quotes
             data["Quote"] = f"“{clean_quote}”"
+
     elif category == "movies":
-        if "Status" not in data: data["Status"] = "Finished" if data.get("is_watched") else "Not Started"
+        # REMOVED: is_watched logic. 
+        # Just ensure we have a default if AI somehow sends nothing.
+        if "Status" not in data: data["Status"] = "Not Started"
+        
     elif category == "podcasts":
         if data.get("Status") == "Finished": data["Date Listened To"] = today_str
+        
     elif category == "youtube-videos":
         if data.get("Status") == "Watched": data["Date Watched"] = today_str
+        
     return data
 
 # ==========================================
@@ -722,43 +727,44 @@ def execute_logic(category, data, inventory_map=None):
             print(f"   ✨ Item '{name}' not in inventory. Creating new page.")
             return create_page(category, build_notion_properties(category, data)).get("url")
     
+    # UNIFIED MOVIE & TV LOGIC
     elif category in ["movies", "tv-shows"]:
         status = data.get("Status")
         eid = fetch_existing_page(category, data["Title"], "Title")
+        
         if eid:
-            print(f"   -> Found existing {category} {eid}, checking update logic...")
-            should_up = (category=="movies" and data.get("is_watched")) or (category=="tv-shows" and status in ["Priority","Finished","In Progress"])
-            if should_up: 
+            print(f"   -> Found existing {category} {eid}...")
+            
+            # Logic: Only update if the user provided a "significant" status.
+            # We ignore "Not Started" updates so we don't accidentally reset "Finished" items 
+            # if we mention them again without context.
+            significant_statuses = ["Priority", "Finished", "In Progress", "Watched Parts", "Gave Up"]
+            
+            if status in significant_statuses: 
                 print(f"   -> Updating status to {status}")
                 return update_status(eid, status).get("url")
+            
+            print("   -> Existing item found, but new status was default/insignificant. No update made.")
             return f"https://www.notion.so/{eid.replace('-','')}"
+            
         return create_page(category, build_notion_properties(category, data)).get("url")
     
     elif category == "youtube-videos":
         props = build_notion_properties(category, data)
         cid = fetch_existing_page("youtube-channels", data.get("channel_handle"), "Name")
         if cid: 
-            print(f"   -> Linked Channel ID: {cid}")
             props["Channel"] = {"relation": [{"id": cid}]}
         else: 
-            print(f"   -> Channel {data.get('channel_handle')} not found, creating task.")
             create_cleanup_task(f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'")
         return create_page(category, props).get("url")
     
-    # Default (Handles Quotes, Ideas, etc.)
     else:
         resp = create_page(category, build_notion_properties(category, data))
         created_url = resp.get("url")
-        
         if category == "quotes": 
-            # Check if Context is missing. If so, create a linked task.
             if not data.get("Context"):
                 quote_preview = data.get("Quote") or data.get("Name") or "Unknown Quote"
-                create_cleanup_task(
-                    f"Fill in the person that said the quote: '{quote_preview[:50]}...'", 
-                    link_url=created_url
-                )
-            
+                create_cleanup_task(f"Link person to quote: {quote_preview[:30]}...", link_url=created_url)
         return created_url
 
 def run_pipeline(item_data, project_prompts, project_id_map, inventory_map, inventory_list):

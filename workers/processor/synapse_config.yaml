@@ -85,11 +85,7 @@ databases:
       Title:
         type: "title"
         required: true
-        instruction: "The official movie title."
-      is_watched:
-        type: "boolean"
-        required: true
-        instruction: "Boolean. Set to true if the user implies they just watched it, finished it, or are rating it. Set to false if adding to watchlist."
+        instruction: "The official movie title. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. We want actual movies titles here."
       Genres:
         type: "multi_select"
         required: true
@@ -103,14 +99,11 @@ databases:
       Famous Cast Members:
         type: "multi_select"
         instruction: "Famous actors in the movie."
-      original_text:
-        type: "ignore"
-        required: true
-        instruction: "The full original text."
       Status:
         type: "status"
-        virtual: true
-
+        required: true
+        allowlist: ["Priority", "Not Started", "Watched Parts", "In Progress", "Finished", "Gave Up"]
+        instruction: "Analyze the user's intent. If they imply they finished it (e.g., 'watched', 'seen', 'rate'), use 'Finished'. If they are currently watching, use 'In Progress'. If they just mention the title with no context (e.g., 'The Matrix'), default to 'Not Started'. Or if they say 'Watch [title]' or 'Must watch [title]', use 'Not Started' because the user is essentially tell you they want to watch a movie and haven't. If they mention they gave up, use 'Gave Up'. If they mention watching parts of it, use 'Watched Parts'."
   tv-shows:
     description: "A TV series title to start or track status of."
     properties:
@@ -133,10 +126,6 @@ databases:
       Famous Cast Members:
         type: "multi_select"
         instruction: "Famous actors in the show."
-      original_text:
-        type: "ignore"
-        required: true
-        instruction: "The full original text."
 
   podcasts:
     description: "A podcast episode or series (often contains a Spotify or 'thisamericanlife.org' link)."

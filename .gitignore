@@ -12,3 +12,9 @@ __pycache__/
 
 # MacOS files
 .DS_Store
+
+# Local Spotify cached tokens
+.cache
+
+# Local requests to the processor worker
+scripts/local-requests.txt
