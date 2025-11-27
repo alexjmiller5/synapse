@@ -80,12 +80,12 @@ databases:
         virtual: true
 
   movies:
-    description: "A movie title to watch or rate (may imply 'watched')."
+    description: "A movie title, genre, or film description to watch or rate."
     properties:
       Title:
         type: "title"
         required: true
-        instruction: "The official movie title. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. We want actual movies titles here."
+        instruction: "The official movie title. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. We want actual movies titles here. Also, The official, correctly formatted title. Fix any typos, capitalization, or missing punctuation provided by the user (e.g. 'the avengers' -> 'The Avengers'), DO NOT include the word 'movie' or 'film' in the title unless it is part of the official name (e.g., 'The Lego Movie')."
       Genres:
         type: "multi_select"
         required: true
@@ -103,19 +103,25 @@ databases:
         type: "status"
         required: true
         allowlist: ["Priority", "Not Started", "Watched Parts", "In Progress", "Finished", "Gave Up"]
-        instruction: "Analyze the user's intent. If they imply they finished it (e.g., 'watched', 'seen', 'rate'), use 'Finished'. If they are currently watching, use 'In Progress'. If they just mention the title with no context (e.g., 'The Matrix'), default to 'Not Started'. Or if they say 'Watch [title]' or 'Must watch [title]', use 'Not Started' because the user is essentially tell you they want to watch a movie and haven't. If they mention they gave up, use 'Gave Up'. If they mention watching parts of it, use 'Watched Parts'."
+        instruction: |
+          Determine the status based on the user's specific phrasing. FOLLOW THIS ORDER:
+          1. "Priority": If the user says "need to watch", "must watch", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [movie]" - THAT IS "Not Started".
+          2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating.
+          3. "In Progress": If the user says "watching", "started", or "currently on".
+          4. "Gave Up": If the user stopped watching or disliked it.
+          5. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
   tv-shows:
     description: "A TV series title to start or track status of."
     properties:
       Title:
         type: "title"
         required: true
-        instruction: "The official show title."
+        instruction: "The official, correctly formatted title. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Also if the user  We want actual tv show titles here. Fix any typos, capitalization, or missing punctuation provided by the user (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' in the title unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus')."
       Status:
         type: "status"
         required: true
         allowlist: ["Priority", "Finished", "In Progress", "Not Started"]
-        instruction: "Determine status based on text ('must watch'->Priority, 'finished'->Finished, 'watching'->In Progress)."
+        instruction: "Analyze the user's intent. If they imply they finished it (e.g., 'watched', 'seen', 'rate'), use 'Finished'. If they are currently watching, use 'In Progress'. If they just mention the title with no context (e.g., 'The Matrix'), default to 'Not Started'. Or if they say 'Watch [title]' or 'Must watch [title]', use 'Not Started' because the user is essentially tell you they want to watch a movie and haven't. If they mention they gave up, use 'Gave Up'. If they mention watching parts of it, use 'Watched Parts'. If the user says need to watch or must watch or something along those lines, use 'Priority'."
       Genres:
         type: "multi_select"
         required: true

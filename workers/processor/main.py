@@ -554,6 +554,10 @@ def create_page(category, props):
     # Automatically add the headphones icon for new podcasts
     if category == "podcasts":
         body_params["icon"] = {"type": "emoji", "emoji": "🎧"}
+    if category == "movies":
+        body_params["icon"] = {"type": "emoji", "emoji": "🎬"}
+    if category == "tv-shows":
+        body_params["icon"] = {"type": "emoji", "emoji": "📺"}
 
     try:
         # Pass the parameters to the Notion SDK
