@@ -64,7 +64,8 @@ resource "google_secret_manager_secret" "secrets" {
     "gmail-app-password",
     "notion-logs-db-id",
     "spotify-client-id",
-    "spotify-client-secret"
+    "spotify-client-secret",
+    "tmdb-api-key"
   ])
 
   secret_id = each.value
