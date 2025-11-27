@@ -80,6 +80,65 @@ DATABASE_IDS = {}
 for cat in list(CONFIG.get("databases", {}).keys()) + ["logs", "youtube-channels"]:
     val = get_secret(f"notion-{cat}-db-id")
     if val: DATABASE_IDS[cat] = val
+    
+# ==========================================
+# 2. INTELLIGENT PARSING (New Step 1)
+# ==========================================
+
+PARSER_INSTRUCTION = """
+You are an intelligent text parser. The user is dictating one or more items.
+Your goal is to parse the input into a structured list of items.
+
+--- DELIMITER RULES ---
+1. Item Separator (@): The user uses '@' to separate distinct tasks or ideas.
+    - Example: "Buy milk @ Call John" -> [Item 1: Buy milk, Item 2: Call John]
+    - EXCEPTION: Ignore '@' if it is part of an email (john@gmail.com) or a handle (@MKBHD).
+
+2. Context Separator ($): The user uses '$' to separate the 'Core Content' from 'Metadata/Context'.
+    - Example: "Finish report $ urgent due friday" -> Core: "Finish report", Context: "urgent due friday"
+    - Example: "Eli quote $ this guy dresses like he wants to get wegied" -> Core: "this guy dresses like he wants to get wegied", Context: "Eli quote"
+    - EXCEPTION: Ignore '$' if it is part of a price ($50) or a variable name.
+    - The context would be on either side of the '$' depending on user intent.
+
+--- OUTPUT FORMAT ---
+Return a JSON list of objects. Each object must have:
+- "core_text": The main content of the item.
+- "context_notes": Any context separated by '$'. If no '$' was used, leave empty.
+"""
+
+PARSER_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "core_text": {"type": "string"},
+            "context_notes": {"type": "string"}
+        },
+        "required": ["core_text"]
+    }
+}
+
+def parse_raw_input(raw_text):
+    """
+    Uses Gemini to intelligently split valid delimiters while ignoring false positives (emails, prices).
+    """
+    print(f"🧠 Parsing raw input for delimiters...")
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
+            config=types.GenerateContentConfig(
+                system_instruction=PARSER_INSTRUCTION, 
+                response_mime_type="application/json", 
+                response_json_schema=PARSER_SCHEMA
+            )
+        )
+        parsed = json.loads(response.text)
+        print(f"   ✅ Parsed {len(parsed)} item(s).")
+        return parsed
+    except Exception as e:
+        print(f"   ⚠️ Parsing failed: {e}. Fallback to raw text.")
+        return [{"core_text": raw_text, "context_notes": ""}]
 
 # ==========================================
 # 3. DYNAMIC HYDRATION & PROMPT GENERATION
@@ -181,8 +240,10 @@ def generate_classification_prompt(active_projects_str):
         category_list="\n".join(category_lines)
     )
 
-def generate_extraction_prompt(category, raw_text, url_context=None, inventory_list=None):
-    """Builds extraction prompt using instructions and valid options."""
+def generate_extraction_prompt(category, raw_text, url_context=None, inventory_list=None, user_context=None):
+    """
+    Builds extraction prompt using instructions, valid options, and contexts.
+    """
     db_config = CONFIG.get("databases", {}).get(category)
     if not db_config: return "Error: Unknown category"
 
@@ -191,14 +252,28 @@ def generate_extraction_prompt(category, raw_text, url_context=None, inventory_l
     for prop_name, rules in db_config.get("properties", {}).items():
         options = rules.get("_runtime_options") or rules.get("allowlist")
         if options:
-            valid_opts_lines.append(f"--- VALID {prop_name.upper()} ---\n{json.dumps(options)}")
+            # CHECK THE FLAG
+            is_strict = not rules.get("create_new", False)
+            header = f"--- VALID {prop_name.upper()} (STRICT) ---" if is_strict else f"--- EXISTING {prop_name.upper()} (CREATE NEW IF NEEDED) ---"
+            valid_opts_lines.append(f"{header}\n{json.dumps(options)}")
     
     # 2. Inventory Section
     inventory_section = ""
     if inventory_list:
         inventory_section = f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
     
-    # 3. Instructions Section
+    # 3. Context Section
+    combined_context = ""
+    if url_context:
+        combined_context += f"--- CONTEXT FROM URL ---\n{url_context}\n\n"
+    if user_context:
+        combined_context += (
+            f"--- USER EXPLICIT CONTEXT (Via '$') ---\n"
+            f"The user manually provided this metadata: '{user_context}'\n"
+            f"Use this to determine Due Dates, Status, or specific Tags.\n"
+        )
+
+    # 4. Instructions Section
     instr_lines = []
     for prop_name, rules in db_config.get("properties", {}).items():
         instr = rules.get("instruction")
@@ -210,9 +285,9 @@ def generate_extraction_prompt(category, raw_text, url_context=None, inventory_l
 
     return PROMPTS["extraction_template"].format(
         category=category,
-        context_section=f"--- CONTEXT FROM URL ---\n{url_context}" if url_context else "",
+        context_section=combined_context.strip(), 
         valid_options_section="\n\n".join(valid_opts_lines),
-        inventory_section=inventory_section, # <--- FIXED: WAS MISSING
+        inventory_section=inventory_section,
         instructions_section="\n".join(instr_lines)
     )
 
@@ -227,15 +302,31 @@ def get_gemini_schema(category):
     for prop_name, rules in db_config.get("properties", {}).items():
         prop_type = rules.get("type")
         if rules.get("virtual"): continue 
+        
+        # Check if we allow creating new options
+        allow_new = rules.get("create_new", False)
 
         field_def = {"type": "string"} 
-        if prop_type == "boolean": field_def = {"type": "boolean"}
+        
+        if prop_type == "boolean": 
+            field_def = {"type": "boolean"}
+            
         elif prop_type in ["multi_select", "array"]:
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
-            field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
+            # IF allow_new is True, we remove 'enum' so AI can write anything
+            if opts and not allow_new:
+                field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
+            else:
+                field_def = {"type": "array", "items": {"type": "string"}}
+                
         elif prop_type in ["select", "status"]:
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
-            field_def = {"type": "string", "enum": opts}
+            # IF allow_new is True, we remove 'enum' so AI can write anything
+            # Note: Notion 'status' properties usually require specific IDs, but 'select' allows creation.
+            if opts and not allow_new:
+                field_def = {"type": "string", "enum": opts}
+            else:
+                field_def = {"type": "string"}
         
         schema_props[prop_name] = field_def
         if rules.get("required"): required_fields.append(prop_name)
@@ -292,6 +383,12 @@ def apply_business_logic(category, data, related_project=None):
         if related_project: data["Notes"] = f"Project: {related_project}"
     elif category == "quotes": 
         data["Date"] = today_str
+        raw_quote = data.get("Quote", "")
+        if raw_quote:
+            # 1. Strip existing quotes to avoid double wrapping (e.g. ““Hello””)
+            clean_quote = raw_quote.strip('"').strip("'").strip("“").strip("”")
+            # 2. Force wrap in smart quotes
+            data["Quote"] = f"“{clean_quote}”"
     elif category == "movies":
         if "Status" not in data: data["Status"] = "Finished" if data.get("is_watched") else "Not Started"
     elif category == "podcasts":
@@ -308,8 +405,34 @@ def extract_url(text):
     return match.group(0) if match else None
 
 def get_tal_metadata(url):
-    try: return f"Content:\n{re.sub(r'\s+', ' ', get_text(requests.get(url).text)).strip()[:2000]}..."
-    except Exception as e: return f"Error: {e}"
+    print(f"   ⏳ Fetching URL metadata from: {url}...")
+    try:
+        # 1. Fake User-Agent to avoid blocking
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36"
+        }
+        
+        # 2. Timeout is KEY here. If it takes >5s, we abort and trigger the cleanup task.
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        
+        full_text = get_text(response.text)
+        cleaned_text = re.sub(r'\s+', ' ', full_text).strip()[:2000]
+        
+        print("   ✅ Metadata fetched successfully.")
+        return f"Content:\n{cleaned_text}..."
+        
+    except Exception as e:
+        print(f"   ⚠️ Metadata fetch failed: {e}")
+        
+        # 3. VERBOSE FALLBACK: Create the Task immediately
+        print("   🧹 Triggering cleanup task for failed scrape...")
+        create_cleanup_task(
+            f"Manual Podcast Entry (Scraping Failed): {url}", 
+            link_url=url
+        )
+        
+        return f"Error fetching URL: {e} (User has been notified via a Cleanup Task)"
 
 def get_spotify_metadata(url):
     if not spotify: return "No Spotify Client"
@@ -329,10 +452,14 @@ def get_youtube_metadata(url):
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
     if not url: return None
+    
+    print(f"   🔗 Enriched Context Triggered for: {url}") # <--- Add this log
+    
     if category == "podcasts":
         if "spotify.com" in url: return get_spotify_metadata(url)
         if "thisamericanlife" in url: return get_tal_metadata(url)
     elif category == "youtube-videos": return get_youtube_metadata(url)
+    
     return None
 
 def log_job_outcome(raw_text, category, status, details="", created_url=None, ai_data=None):
@@ -371,22 +498,61 @@ def append_to_quick_notes(raw_text):
 def fetch_existing_page(category, value, key="Name"):
     db_id = get_db_id(category)
     if not notion or not db_id: return None
+    
+    # 1. Clean the search term for better matching
+    clean_val = value.replace("The ", "").strip()
+    
     try:
-        print(f"🔍 Searching {category} for '{value}'...")
-        resp = notion.databases.query(database_id=db_id, filter={"property": key, "title": {"equals": value}})
-        if resp.get("results"): 
-            found_id = resp["results"][0]["id"]
-            print(f"   ✅ Found existing page: {found_id}")
+        print(f"🔍 Searching {category} for '{value}' (Smart Search: '{clean_val}')...")
+        
+        # FIX: Use raw notion.request() to bypass SDK version issues
+        resp = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "property": key, 
+                    "title": {"contains": clean_val} 
+                }
+            }
+        )
+        
+        results = resp.get("results", [])
+        
+        if results:
+            found_page = results[0]
+            
+            # Safely extract title
+            title_prop = found_page["properties"].get(key, {}).get("title", [])
+            found_title = title_prop[0]["plain_text"] if title_prop else "Unknown"
+            found_id = found_page["id"]
+            
+            print(f"   ✅ Found match: '{found_title}' (ID: {found_id})")
             return found_id
-        print(f"   🔸 No exact match found for '{value}'")
+            
+        print(f"   🔸 No match found for '{clean_val}'")
     except Exception as e:
         print(f"   ❌ Search failed for '{value}': {e}")
     return None
 
 def create_page(category, props):
-    print(f"📝 Sending to Notion ({category}): {json.dumps(props, default=str)}")
+    # DEBUG: See the exact structure and characters sending to Notion
+    print(f"🔍 DEBUG NOTION PAYLOAD REPR: {repr(props)}")
+    
+    # Build the base arguments for the API call
+    body_params = {
+        "parent": {"database_id": get_db_id(category)},
+        "properties": props
+    }
+    
+    # --- ICON LOGIC ---
+    # Automatically add the headphones icon for new podcasts
+    if category == "podcasts":
+        body_params["icon"] = {"type": "emoji", "emoji": "🎧"}
+
     try:
-        return notion.pages.create(parent={"database_id": get_db_id(category)}, properties=props)
+        # Pass the parameters to the Notion SDK
+        return notion.pages.create(**body_params)
     except Exception as e:
         print(f"❌ Notion Create Error: {e}")
         raise e
@@ -444,7 +610,7 @@ def append_note(page_id, text):
         for chunk in new_chunks:
             safe_notes.append({
                 "type": "text",
-                "text": {"content": chunk}
+                "text": {"content": chunk if chunk != new_chunks[0] else f"\n{chunk}"},
             })
         
         notion.pages.update(
@@ -455,12 +621,23 @@ def append_note(page_id, text):
         
     except Exception as e:
         print(f"   ❌ Append Note Failed: {e}")
-
-def create_cleanup_task(desc):
+def create_cleanup_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
-    props = {"Name": _notion_title(desc), "Status": _notion_status("To Do"), "Tags": _notion_multi_select(["Organization"]), "Due Date": _notion_date(date.today().isoformat())}
-    try: create_page("tasks", props)
-    except Exception as e: print(f"   ❌ Cleanup Task Creation Failed: {e}")
+    props = {
+        "Name": _notion_title(desc), 
+        "Status": _notion_status("To Do"), 
+        "Tags": _notion_multi_select(["Chore"]), 
+        "Due Date": _notion_date(date.today().isoformat())
+    }
+    
+    # If we have a link, add it to the 'Links' property
+    if link_url:
+        props["Links"] = _notion_rich_text(link_url)
+
+    try: 
+        create_page("tasks", props)
+    except Exception as e: 
+        print(f"   ❌ Cleanup Task Creation Failed: {e}")
 
 def fetch_active_projects():
     """
@@ -532,13 +709,11 @@ CATEGORY_SCHEMA_CLASSIFY = {
     "required": ["category"]
 }
 
-# FIXED: Added inventory_map=None to the definition
 def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
     
     if category == "groceries":
         name = data.get("Name")
-        # Check if the AI-determined name exists in our map
         if inventory_map and name in inventory_map:
             page_id = inventory_map[name]
             print(f"   ✅ Matched existing item '{name}' (ID: {page_id}). Updating Status...")
@@ -547,7 +722,6 @@ def execute_logic(category, data, inventory_map=None):
             print(f"   ✨ Item '{name}' not in inventory. Creating new page.")
             return create_page(category, build_notion_properties(category, data)).get("url")
     
-    # Media Logic
     elif category in ["movies", "tv-shows"]:
         status = data.get("Status")
         eid = fetch_existing_page(category, data["Title"], "Title")
@@ -560,7 +734,6 @@ def execute_logic(category, data, inventory_map=None):
             return f"https://www.notion.so/{eid.replace('-','')}"
         return create_page(category, build_notion_properties(category, data)).get("url")
     
-    # Video Logic
     elif category == "youtube-videos":
         props = build_notion_properties(category, data)
         cid = fetch_existing_page("youtube-channels", data.get("channel_handle"), "Name")
@@ -572,12 +745,93 @@ def execute_logic(category, data, inventory_map=None):
             create_cleanup_task(f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'")
         return create_page(category, props).get("url")
     
-
-    # Default
+    # Default (Handles Quotes, Ideas, etc.)
     else:
         resp = create_page(category, build_notion_properties(category, data))
-        if category == "quotes": create_cleanup_task(f"Link person: {data.get('Name')[:30]}...")
-        return resp.get("url")
+        created_url = resp.get("url")
+        
+        if category == "quotes": 
+            # Check if Context is missing. If so, create a linked task.
+            if not data.get("Context"):
+                quote_preview = data.get("Quote") or data.get("Name") or "Unknown Quote"
+                create_cleanup_task(
+                    f"Fill in the person that said the quote: '{quote_preview[:50]}...'", 
+                    link_url=created_url
+                )
+            
+        return created_url
+
+def run_pipeline(item_data, project_prompts, project_id_map, inventory_map, inventory_list):
+    raw_text = item_data.get("core_text", "")
+    user_context = item_data.get("context_notes", "")
+    full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
+    
+    log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
+    
+    try:
+        print(f"🚀 Pipeline Start: {repr(raw_text)}") # Debugging the input to the pipeline
+
+        # 2. Classify
+        proj_str = ", ".join(project_prompts) if project_prompts else "None"
+        cat_prompt = generate_classification_prompt(proj_str)
+        classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+        
+        classified = json.loads(gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
+            config=types.GenerateContentConfig(system_instruction=cat_prompt, 
+            response_mime_type="application/json", response_json_schema=CATEGORY_SCHEMA_CLASSIFY)).text) or {}
+        
+        category = classified.get("category", "tasks")
+        project = classified.get("related_project")
+        print(f"🤖 Classification: {category}")
+
+        # 3. Extract
+        url_context = enrich_context(category, raw_text) or "No URL" if category in ["podcasts", "youtube-videos"] else None
+        extract_prompt = generate_extraction_prompt(category, raw_text, url_context, inventory_list, user_context)
+
+        # DEBUG: Capture Raw AI Response before JSON Load
+        ai_response_obj = gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
+            config=types.GenerateContentConfig(system_instruction=extract_prompt, 
+            response_mime_type="application/json", response_json_schema=get_gemini_schema(category)))
+        
+        raw_ai_text = ai_response_obj.text
+        print(f"🔍 DEBUG AI EXTRACT REPR: {repr(raw_ai_text)}")
+
+        extracted = json.loads(raw_ai_text) or {}
+        
+        # 4. Execute
+        if not extracted:
+             print("   ⚠️ Extraction returned empty.")
+             extracted = {"Name": raw_text}
+
+        extracted = apply_business_logic(category, extracted, project)
+        log_payload["Extractor_Data"] = extracted
+        
+        url = None
+        if project and category == "tasks":
+            eid = project_id_map.get(project)
+            if eid:
+                print(f"   -> Appending to Project: {project}")
+                note_content = extracted.get("Name", raw_text)
+                if user_context: note_content += f" ({user_context})"
+                append_note(eid, note_content)
+                url = f"https://www.notion.so/{eid.replace('-','')}"
+                log_payload["Extractor_Data"]["Action"] = "Appended"
+            else:
+                url = execute_logic(category, extracted)
+        else:
+            url = execute_logic(category, extracted, inventory_map)
+
+        log_job_outcome(full_str_for_log, category, "Success", created_url=url, ai_data=log_payload)
+
+    except Exception as e:
+        print(f"❌ Pipeline Error: {e}")
+        log_job_outcome(full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload) # Changed "Failure" to "Error"
+        append_to_quick_notes(full_str_for_log)
+
 
 @functions_framework.cloud_event
 def processor(cloud_event):
@@ -587,78 +841,26 @@ def processor(cloud_event):
         return
     
     hydrate_dynamic_options()
+    project_prompts, project_id_map = fetch_active_projects()
+    inventory_map = fetch_inventory_map("groceries")
+    inventory_list = list(inventory_map.keys())
 
-    raw_text, category, extracted, url = "", "Unknown", {}, None
     try:
-        raw_text = str(base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8"))
-        print(f"🚀 Processing: '{raw_text}'")
+        # DECODE
+        full_text = str(base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8"))
         
-        # 1. Active Projects (FETCH ONCE, USE MAP LATER)
-        project_prompts, project_id_map = fetch_active_projects()
-        proj_str = ", ".join(project_prompts) if project_prompts else "None"
-        print(f"📋 Active Projects: {proj_str}")
+        # DEBUG LOG: See exactly what Python sees immediately after decode
+        print(f"🔍 DEBUG INPUT REPR: {repr(full_text)}")
         
-        # 2. Classify
-        cat_prompt = generate_classification_prompt(proj_str)
-        classified = json.loads(gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
-            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
-            config=types.GenerateContentConfig(system_instruction=cat_prompt, 
-            response_mime_type="application/json", response_json_schema=CATEGORY_SCHEMA_CLASSIFY)).text)
-        
-        category = classified.get("category", "tasks")
-        project = classified.get("related_project")
-        print(f"🤖 Classification Result: {json.dumps(classified)}")
-        
-        # 3. PRE-FETCH INVENTORY (If Groceries)
-        inventory_map = {}
-        inventory_list = []
-        if category == "groceries":
-            inventory_map = fetch_inventory_map("groceries")
-            inventory_list = list(inventory_map.keys())
+        # STEP 1: AI PARSING
+        parsed_items = parse_raw_input(full_text)
+        print(f"📋 Processing Batch: {len(parsed_items)} item(s)")
 
-        # 4. Extract
-        url_context = enrich_context(category, raw_text) or "No URL" if category in ["podcasts", "youtube-videos"] else None
-        if url_context: print(f"🔗 Enriched Context: {url_context[:100]}...")
+        # STEP 2: LOOP
+        for item in parsed_items:
+            run_pipeline(item, project_prompts, project_id_map, inventory_map, inventory_list)
 
-        extract_prompt = generate_extraction_prompt(category, raw_text, url_context, inventory_list)
-        
-        extracted = json.loads(gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
-            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
-            config=types.GenerateContentConfig(system_instruction=extract_prompt, 
-            response_mime_type="application/json", response_json_schema=get_gemini_schema(category))).text)
-        
-        print(f"🤖 Raw Extraction: {json.dumps(extracted)}")
-        
-        # 5. Exec
-        extracted = apply_business_logic(category, extracted, project)
-        print(f"✨ Final Payload (Post-Logic): {json.dumps(extracted)}")
-        
-        # LOGIC CHANGE: Use the ID map we already fetched!
-        if project and category == "tasks":
-            # Look up ID in the map we created in step 1
-            eid = project_id_map.get(project)
-            
-            if eid:
-                print(f"   -> Appending to Project: {project} (ID: {eid})")
-                append_note(eid, extracted.get("Name", raw_text))
-                url = f"https://www.notion.so/{eid.replace('-','')}"
-                extracted = {
-                    "Action": "Appended to Project",
-                    "Target Project": project,
-                    "Content": raw_text
-                }
-            else:
-                print(f"   ⚠️ Project '{project}' not found in active map. Creating new task.")
-                url = execute_logic(category, extracted)
-        else:
-            url = execute_logic(category, extracted, inventory_map)
-
-        log_job_outcome(raw_text, category, "Success", created_url=url, ai_data=extracted)
-        print("--- JOB SUCCESS ---")
+        print("--- BATCH COMPLETE ---")
 
     except Exception as e:
-        print(f"❌ Error Traceback: {e}")
-        log_job_outcome(raw_text, category, "Error(s)", details=e, ai_data=extracted if 'extracted' in locals() else {})
-        append_to_quick_notes(raw_text)
+        print(f"❌ Critical Event Error: {e}")

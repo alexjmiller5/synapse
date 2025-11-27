@@ -14,7 +14,7 @@ databases:
         type: "multi_select"
         required: true
         instruction: "Most tasks are chores to be honest. If it's something that's quick to do on my computer, in my room, whatever it is it's probably a chore. ANything that I'm buying is shopping - so amazon, whatever. Whatever involves going out of the house to do it is errand - picking up dry cleaning, dropping something off at goodwill, things like that.  Select One of the following Tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'. If it's related to general career stuff pick career. If it's related to buying a gift for somebody or a gift idea I have for somebody put it as a gift. Learning is something to explore -- like I says look through this website or look into this tool or figure out how the python tool uv works"
-        allowlist: ["Gifts", "Shopping", "Work", "Social", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore", "Errand", "Decision", "Learning"]
+        allowlist: ["Gifts", "Shopping", "Work", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore", "Errand", "Decision", "Learning"]
       Links:
         type: "rich_text_list"
         required: true
@@ -67,14 +67,14 @@ databases:
   quotes:
     description: "A memorable quote or saying (often attributed to a person)."
     properties:
-      Name:
+      Quote:
         type: "title"
         required: true
-        instruction: "The actual words spoken (e.g., 'I'll be back')."
+        instruction: "The actual words spoken (e.g., 'I'll be back')"
       Context:
         type: "rich_text"
-        required: true
-        instruction: "Any context provided about who said it, where, or why."
+        required: false
+        instruction: "The context in which the quote was said, not necesarily the person who said it unless the conetxt happens to include their name in introduction (e.g., 'From the movie The Terminator' or 'Said by Elon Musk during a 2020 interview'). But not just like 'Elon Musk said' - that is not context, that's just attribution which is already handled elsewhere. You are certainly allowed to leave this field empty"
       Date:
         type: "date"
         virtual: true
@@ -89,7 +89,6 @@ databases:
       is_watched:
         type: "boolean"
         required: true
-        # Specific logic for watched status
         instruction: "Boolean. Set to true if the user implies they just watched it, finished it, or are rating it. Set to false if adding to watchlist."
       Genres:
         type: "multi_select"
@@ -98,7 +97,7 @@ databases:
       Director:
         type: "select"
         instruction: "The director's name (if known)."
-      Producer:
+      Studio:
         type: "select"
         instruction: "The production studio (e.g., Netflix, HBO, Disney, Studio Ghibli)."
       Famous Cast Members:
@@ -128,7 +127,7 @@ databases:
         type: "multi_select"
         required: true
         instruction: "Select relevant genres."
-      Producer:
+      Studio:
         type: "select"
         instruction: "The production studio/network (Netflix, HBO, etc)."
       Famous Cast Members:
@@ -147,10 +146,12 @@ databases:
         required: true
         instruction: "The specific episode title."
       Podcast Name:
+        create_new: true
         type: "select"
         required: true
         instruction: "The name of the show."
       Producer:
+        create_new: true
         type: "select"
         instruction: "The network/producer."
       Genres:
@@ -216,9 +217,9 @@ databases:
     description: "Internal use."
     properties:
       Raw Input:
-        type: "title" # Changed from rich_text to title
+        type: "title"
       Code Execution:
-        type: "status" # Changed from select to status
+        type: "status"
       Category:
         type: "select"
       Reported:
