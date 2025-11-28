@@ -13,8 +13,16 @@ databases:
       Tags:
         type: "multi_select"
         required: true
-        instruction: "Most tasks are chores to be honest. If it's something that's quick to do on my computer, in my room, whatever it is it's probably a chore. ANything that I'm buying is shopping - so amazon, whatever. Whatever involves going out of the house to do it is errand - picking up dry cleaning, dropping something off at goodwill, things like that.  Select One of the following Tags. FYI, the user works at Capital One, so if related to work/PTO, use 'Capital One'. If it's related to general career stuff pick career. If it's related to buying a gift for somebody or a gift idea I have for somebody put it as a gift. Learning is something to explore -- like I says look through this website or look into this tool or figure out how the python tool uv works"
         allowlist: ["Gifts", "Shopping", "Work", "Social Planning", "Finances", "Career", "Lakeport", "Capital One", "Chore", "Errand", "Decision", "Learning"]
+        instruction: |
+          Select the most specific tag using the user's definitions. FOLLOW THIS PRIORITY to avoid misclassification:
+          1. "Chore": (DEFAULT) As the user says, "Most tasks are chores to be honest." If it's something quick to do on the computer, in the room, updating a playlist (e.g. Karaoke), editing a profile (dating app), or fixing a technical sync issue, IT IS A CHORE.
+          2. "Errand": Whatever involves going out of the house to do it (e.g. picking up dry cleaning, dropping something off at Goodwill).
+          3. "Capital One": The user works at Capital One. Use this if related to work or PTO.
+          4. "Shopping": Anything related to buying (Amazon, etc). Use "Gifts" if it's a gift idea or buying for someone else.
+          5. "Learning": "Something to explore"—like looking through a website, looking into a tool, or figuring out how something works (e.g. "how the python tool uv works").
+          6. "Career": General career stuff (not specific to the current Capital One job).
+          7. "Social Planning": ONLY if actually scheduling a specific event with other people. Even if it involves interaction with others that doesn't necesarily mean it has this tag -- for this tag it MUST be specifically for me to plan some kind of social event with others. If I have to ask someone something or talk to them about something that's not social planning. Updating a bucket list or profile solo is a CHORE.
       Links:
         type: "rich_text_list"
         required: true
@@ -22,7 +30,12 @@ databases:
       Due Date:
         type: "date"
         required: true
-        instruction: "Find any specified date (e.g., 'tomorrow', 'next Friday', '12/25'). If no date is mentioned, use today: {current_date}."
+        instruction: |
+          Determine the due date using this priority order:
+          1. CHECK CONTEXT: If the user provided a date in the Context/Metadata block (e.g. "January 2025", "next week"), USE THAT DATE.
+          2. CHECK TEXT: If no date is in the Context, look for date mentions in the text itself.
+          3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
+          *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
       Status:
         type: "status"
         virtual: true
