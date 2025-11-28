@@ -86,6 +86,12 @@ syn-local() {
 syn-local "Your test input text here"
 ```
 
+- **Send local batch requests (fill the `local-requests.txt` file with your requests separated by newlines):**
+
+```bash
+uv run --with requests send-local-requests.py local-requests.txt
+```
+
 - **Test infrastructure changes with Terraform:**
 
 ```bash
@@ -247,7 +253,7 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] Get ai to help me make my giant conditional statements into a flowchart so I can see high level how requests are being processed and how the decisions are made by ai. Some decsions that are sticking out to me: intent getting from the ai, getting from the ai's knowledge (i.e. asking it to fill in the producer of a movie), summarizing a title/description, then this all plays into either page creation or page modification
 - [ ] Fetch the notes of the project in addition to the titles to make sure the ai will be able to have the right when determining if a raw text belongs with a project
 
-## Guide to Prompting the AI Well:
+## Guide to Prompting the AI Well
 
 - Use the @ symbol to separate multiple items in a single input.
 - Provide context using the $ tag to help the AI understand the intent better.
