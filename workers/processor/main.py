@@ -38,12 +38,16 @@ notion = None
 spotify = None
 PROMPTS = {}
 
+
 def get_secret(secret_id, version="latest"):
     global sm_client
     if sm_client is None:
-        try: sm_client = secretmanager.SecretManagerServiceClient()
-        except Exception: return None
-    if secret_id in SECRETS: return SECRETS[secret_id]
+        try:
+            sm_client = secretmanager.SecretManagerServiceClient()
+        except Exception:
+            return None
+    if secret_id in SECRETS:
+        return SECRETS[secret_id]
     try:
         name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version}"
         response = sm_client.access_secret_version(request={"name": name})
@@ -54,14 +58,18 @@ def get_secret(secret_id, version="latest"):
         print(f"Error fetching {secret_id}: {e}")
         return None
 
+
 def get_db_id(category):
     """Fetches the Secret ID for a category based on convention."""
     return get_secret(f"notion-{category}-db-id")
 
+
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "prompts.yml"), "r") as f: PROMPTS = yaml.safe_load(f)
-except Exception: pass
+    with open(os.path.join(script_dir, "prompts.yml"), "r") as f:
+        PROMPTS = yaml.safe_load(f)
+except Exception:
+    pass
 
 GEMINI_API_KEY = get_secret("gemini-api-key")
 NOTION_API_KEY = get_secret("notion-integration-token")
@@ -69,18 +77,27 @@ FALLBACK_NOTION_BLOCK_ID = get_secret("notion-quick-notes-last-block-id")
 SPOTIFY_CLIENT_ID = get_secret("spotify-client-id")
 SPOTIFY_CLIENT_SECRET = get_secret("spotify-client-secret")
 
-if GEMINI_API_KEY: gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-if NOTION_API_KEY: notion = Client(auth=NOTION_API_KEY, notion_version="2022-06-28")
+if GEMINI_API_KEY:
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+if NOTION_API_KEY:
+    notion = Client(auth=NOTION_API_KEY, notion_version="2022-06-28")
 if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
-    try: spotify = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET))
-    except Exception: pass
+    try:
+        spotify = spotipy.Spotify(
+            auth_manager=SpotifyClientCredentials(
+                client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET
+            )
+        )
+    except Exception:
+        pass
 
 # Pre-fetch Database IDs for those defined in Config + Logs
 DATABASE_IDS = {}
 for cat in list(CONFIG.get("databases", {}).keys()) + ["logs", "youtube-channels"]:
     val = get_secret(f"notion-{cat}-db-id")
-    if val: DATABASE_IDS[cat] = val
-    
+    if val:
+        DATABASE_IDS[cat] = val
+
 # ==========================================
 # 2. INTELLIGENT PARSING (New Step 1)
 # ==========================================
@@ -112,11 +129,12 @@ PARSER_SCHEMA = {
         "type": "object",
         "properties": {
             "core_text": {"type": "string"},
-            "context_notes": {"type": "string"}
+            "context_notes": {"type": "string"},
         },
-        "required": ["core_text"]
-    }
+        "required": ["core_text"],
+    },
 }
+
 
 def parse_raw_input(raw_text):
     """
@@ -128,10 +146,10 @@ def parse_raw_input(raw_text):
             model="gemini-2.5-flash-preview-09-2025",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
-                system_instruction=PARSER_INSTRUCTION, 
-                response_mime_type="application/json", 
-                response_json_schema=PARSER_SCHEMA
-            )
+                system_instruction=PARSER_INSTRUCTION,
+                response_mime_type="application/json",
+                response_json_schema=PARSER_SCHEMA,
+            ),
         )
         parsed = json.loads(response.text)
         print(f"   ✅ Parsed {len(parsed)} item(s).")
@@ -140,9 +158,11 @@ def parse_raw_input(raw_text):
         print(f"   ⚠️ Parsing failed: {e}. Fallback to raw text.")
         return [{"core_text": raw_text, "context_notes": ""}]
 
+
 # ==========================================
 # 3. DYNAMIC HYDRATION & PROMPT GENERATION
 # ==========================================
+
 
 def fetch_inventory_map(category):
     """
@@ -150,18 +170,17 @@ def fetch_inventory_map(category):
     Uses raw .request() to bypass missing SDK methods.
     """
     db_id = get_db_id(category)
-    if not notion or not db_id: return {}
-    
+    if not notion or not db_id:
+        return {}
+
     print(f"📚 Fetching full inventory for {category}...")
     inventory = {}
     try:
         # FIX: Use raw request to bypass "object has no attribute 'query'" error
         resp = notion.request(
-            path=f"databases/{db_id}/query", 
-            method="POST", 
-            body={"page_size": 100}
+            path=f"databases/{db_id}/query", method="POST", body={"page_size": 100}
         )
-        
+
         for page in resp.get("results", []):
             try:
                 title_prop = page["properties"].get("Name", {}).get("title", [])
@@ -169,21 +188,24 @@ def fetch_inventory_map(category):
                     name = title_prop[0]["plain_text"]
                     # Store as-is. AI instructions will handle mapping.
                     inventory[name] = page["id"]
-            except Exception: continue
-            
+            except Exception:
+                continue
+
         print(f"   ✅ Loaded {len(inventory)} items.")
         return inventory
     except Exception as e:
         print(f"   ❌ Inventory fetch failed: {e}")
         return {}
 
+
 def fetch_property_options(db_id, prop_name):
-    if not notion: return []
+    if not notion:
+        return []
     try:
         # LOGGING ADDED: verifying the ID being passed to the SDK
-        # print(f"🔍 Retrieving DB: {repr(db_id)}") 
+        # print(f"🔍 Retrieving DB: {repr(db_id)}")
         db = notion.databases.retrieve(db_id)
-        
+
         if "properties" not in db:
             print(f"   ❌ CRITICAL: Response missing 'properties' key.")
             print(f"   ❌ Object Type: {db.get('object')}")
@@ -191,61 +213,81 @@ def fetch_property_options(db_id, prop_name):
             return []
 
         prop = db["properties"].get(prop_name)
-        if not prop: return []
-        
+        if not prop:
+            return []
+
         prop_type = prop.get("type")
-        if prop_type == "select": return [o["name"] for o in prop["select"]["options"]]
-        if prop_type == "multi_select": return [o["name"] for o in prop["multi_select"]["options"]]
-        if prop_type == "status": return [o["name"] for o in prop["status"]["options"]]
+        if prop_type == "select":
+            return [o["name"] for o in prop["select"]["options"]]
+        if prop_type == "multi_select":
+            return [o["name"] for o in prop["multi_select"]["options"]]
+        if prop_type == "status":
+            return [o["name"] for o in prop["status"]["options"]]
         return []
     except Exception as e:
         print(f"   ❌ Exception fetching '{prop_name}': {e}")
         return []
 
+
 def hydrate_dynamic_options():
     print("🔄 Hydrating Options...")
     for category, details in CONFIG.get("databases", {}).items():
-        if category in ["logs", "youtube-channels"]: continue
+        if category in ["logs", "youtube-channels"]:
+            continue
         db_id = get_db_id(category)
-        if not db_id: 
+        if not db_id:
             print(f"   ⚠️ Skipping {category} (No DB ID)")
             continue
 
         for prop_name, rules in details.get("properties", {}).items():
-            if rules.get("type") not in ["select", "multi_select", "status"]: continue
-            
+            if rules.get("type") not in ["select", "multi_select", "status"]:
+                continue
+
             real_options = fetch_property_options(db_id, prop_name)
             allowlist = rules.get("allowlist")
-            
+
             # Logic: Use allowlist if present, else real options
-            final_options = [opt for opt in real_options if opt in allowlist] if allowlist else real_options
-            
+            final_options = (
+                [opt for opt in real_options if opt in allowlist]
+                if allowlist
+                else real_options
+            )
+
             # Store back into CONFIG memory for Schema Generation
             rules["_runtime_options"] = final_options
-            print(f"   🔹 {category} [{prop_name}]: Loaded {len(final_options)} options: {final_options}")
+            print(
+                f"   🔹 {category} [{prop_name}]: Loaded {len(final_options)} options: {final_options}"
+            )
     print("✅ Hydration complete.")
 
+
 # --- PROMPT BUILDERS ---
+
 
 def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
     category_lines = []
     for cat, details in CONFIG.get("databases", {}).items():
-        if cat in ["youtube-channels", "logs"]: continue
+        if cat in ["youtube-channels", "logs"]:
+            continue
         desc = details.get("description", "No description.")
         category_lines.append(f'- "{cat}": {desc}')
-    
+
     return PROMPTS["categorize_template"].format(
         active_projects_list=active_projects_str,
-        category_list="\n".join(category_lines)
+        category_list="\n".join(category_lines),
     )
 
-def generate_extraction_prompt(category, raw_text, url_context=None, inventory_list=None, user_context=None):
+
+def generate_extraction_prompt(
+    category, raw_text, url_context=None, inventory_list=None, user_context=None
+):
     """
     Builds extraction prompt using instructions, valid options, and contexts.
     """
     db_config = CONFIG.get("databases", {}).get(category)
-    if not db_config: return "Error: Unknown category"
+    if not db_config:
+        return "Error: Unknown category"
 
     # 1. Valid Options Section
     valid_opts_lines = []
@@ -254,14 +296,18 @@ def generate_extraction_prompt(category, raw_text, url_context=None, inventory_l
         if options:
             # CHECK THE FLAG
             is_strict = not rules.get("create_new", False)
-            header = f"--- VALID {prop_name.upper()} (STRICT) ---" if is_strict else f"--- EXISTING {prop_name.upper()} (CREATE NEW IF NEEDED) ---"
+            header = (
+                f"--- VALID {prop_name.upper()} (STRICT) ---"
+                if is_strict
+                else f"--- EXISTING {prop_name.upper()} (CREATE NEW IF NEEDED) ---"
+            )
             valid_opts_lines.append(f"{header}\n{json.dumps(options)}")
-    
+
     # 2. Inventory Section
     inventory_section = ""
     if inventory_list:
         inventory_section = f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
-    
+
     # 3. Context Section
     combined_context = ""
     if url_context:
@@ -281,36 +327,39 @@ def generate_extraction_prompt(category, raw_text, url_context=None, inventory_l
         if instr and not is_virtual:
             formatted_instr = instr.replace("{current_date}", date.today().isoformat())
             formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
-            instr_lines.append(f'- `{prop_name}`: {formatted_instr}')
+            instr_lines.append(f"- `{prop_name}`: {formatted_instr}")
 
     return PROMPTS["extraction_template"].format(
         category=category,
-        context_section=combined_context.strip(), 
+        context_section=combined_context.strip(),
         valid_options_section="\n\n".join(valid_opts_lines),
         inventory_section=inventory_section,
-        instructions_section="\n".join(instr_lines)
+        instructions_section="\n".join(instr_lines),
     )
+
 
 def get_gemini_schema(category):
     """Generates JSON Schema from YAML + Runtime Options."""
     db_config = CONFIG.get("databases", {}).get(category)
-    if not db_config: return {"type": "object", "properties": {"Name": {"type": "string"}}}
+    if not db_config:
+        return {"type": "object", "properties": {"Name": {"type": "string"}}}
 
     schema_props = {}
     required_fields = []
 
     for prop_name, rules in db_config.get("properties", {}).items():
         prop_type = rules.get("type")
-        if rules.get("virtual"): continue 
-        
+        if rules.get("virtual"):
+            continue
+
         # Check if we allow creating new options
         allow_new = rules.get("create_new", False)
 
-        field_def = {"type": "string"} 
-        
-        if prop_type == "boolean": 
+        field_def = {"type": "string"}
+
+        if prop_type == "boolean":
             field_def = {"type": "boolean"}
-            
+
         elif prop_type in ["multi_select", "array"]:
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
             # IF allow_new is True, we remove 'enum' so AI can write anything
@@ -318,7 +367,7 @@ def get_gemini_schema(category):
                 field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
             else:
                 field_def = {"type": "array", "items": {"type": "string"}}
-                
+
         elif prop_type in ["select", "status"]:
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
             # IF allow_new is True, we remove 'enum' so AI can write anything
@@ -327,62 +376,99 @@ def get_gemini_schema(category):
                 field_def = {"type": "string", "enum": opts}
             else:
                 field_def = {"type": "string"}
-        
+
         schema_props[prop_name] = field_def
-        if rules.get("required"): required_fields.append(prop_name)
+        if rules.get("required"):
+            required_fields.append(prop_name)
 
     return {"type": "object", "properties": schema_props, "required": required_fields}
+
 
 # ==========================================
 # 4. FORMATTING HELPERS
 # ==========================================
-def _notion_title(val): return {"title": [{"text": {"content": val}}]}
-def _notion_rich_text(val): return {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
-def _notion_multi_select(val): return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
-def _notion_date(val): return {"date": {"start": val}}
-def _notion_status(val): return {"status": {"name": val}}
-def _notion_select(val): return {"select": {"name": val}} if val else None
-def _notion_url(val): return {"url": val}
+def _notion_title(val):
+    return {"title": [{"text": {"content": val}}]}
+
+
+def _notion_rich_text(val):
+    return (
+        {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+    )
+
+
+def _notion_multi_select(val):
+    return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
+
+
+def _notion_date(val):
+    return {"date": {"start": val}}
+
+
+def _notion_status(val):
+    return {"status": {"name": val}}
+
+
+def _notion_select(val):
+    return {"select": {"name": val}} if val else None
+
+
+def _notion_url(val):
+    return {"url": val}
+
 
 # ==========================================
 # 5. PROPERTY BUILDER (YAML-DRIVEN)
 # ==========================================
 
+
 def build_notion_properties(category, data):
     print(f"--- Building Props for {category} ---")
     properties = {}
-    
+
     db_config = CONFIG.get("databases", {}).get(category)
-    if not db_config: return {"Name": _notion_title(data.get("Name", "Untitled"))}
+    if not db_config:
+        return {"Name": _notion_title(data.get("Name", "Untitled"))}
 
     for key, value in data.items():
-        if value is None: continue
-        
+        if value is None:
+            continue
+
         prop_rules = db_config.get("properties", {}).get(key)
-        if not prop_rules: continue
+        if not prop_rules:
+            continue
 
         prop_type = prop_rules.get("type")
 
-        if prop_type == "title": properties[key] = _notion_title(value)
-        elif prop_type == "rich_text": properties[key] = _notion_rich_text(value)
-        elif prop_type == "rich_text_list": 
+        if prop_type == "title":
+            properties[key] = _notion_title(value)
+        elif prop_type == "rich_text":
+            properties[key] = _notion_rich_text(value)
+        elif prop_type == "rich_text_list":
             val_str = "\n".join(value) if isinstance(value, list) else str(value)
             properties[key] = _notion_rich_text(val_str)
-        elif prop_type == "multi_select": properties[key] = _notion_multi_select(value)
-        elif prop_type == "select": properties[key] = _notion_select(value)
-        elif prop_type == "status": properties[key] = _notion_status(value)
-        elif prop_type == "date": properties[key] = _notion_date(value)
-        elif prop_type == "url": properties[key] = _notion_url(value)
+        elif prop_type == "multi_select":
+            properties[key] = _notion_multi_select(value)
+        elif prop_type == "select":
+            properties[key] = _notion_select(value)
+        elif prop_type == "status":
+            properties[key] = _notion_status(value)
+        elif prop_type == "date":
+            properties[key] = _notion_date(value)
+        elif prop_type == "url":
+            properties[key] = _notion_url(value)
     return properties
+
 
 def apply_business_logic(category, data, related_project=None):
     today_str = date.today().isoformat()
-    
+
     if category == "tasks":
         data["Status"] = "To Do"
-        if related_project: data["Notes"] = f"Project: {related_project}"
-        
-    elif category == "quotes": 
+        if related_project:
+            data["Notes"] = f"Project: {related_project}"
+
+    elif category == "quotes":
         data["Date"] = today_str
         raw_quote = data.get("Quote", "")
         if raw_quote:
@@ -390,17 +476,21 @@ def apply_business_logic(category, data, related_project=None):
             data["Quote"] = f"“{clean_quote}”"
 
     elif category == "movies":
-        # REMOVED: is_watched logic. 
+        # REMOVED: is_watched logic.
         # Just ensure we have a default if AI somehow sends nothing.
-        if "Status" not in data: data["Status"] = "Not Started"
-        
+        if "Status" not in data:
+            data["Status"] = "Not Started"
+
     elif category == "podcasts":
-        if data.get("Status") == "Finished": data["Date Listened To"] = today_str
-        
+        if data.get("Status") == "Finished":
+            data["Date Listened To"] = today_str
+
     elif category == "youtube-videos":
-        if data.get("Status") == "Watched": data["Date Watched"] = today_str
-        
+        if data.get("Status") == "Watched":
+            data["Date Watched"] = today_str
+
     return data
+
 
 # ==========================================
 # 6. HELPERS (External APIs & Notion)
@@ -409,6 +499,7 @@ def extract_url(text):
     match = re.search(r"(https?://\S+)", text)
     return match.group(0) if match else None
 
+
 def get_tal_metadata(url):
     print(f"   ⏳ Fetching URL metadata from: {url}...")
     try:
@@ -416,140 +507,159 @@ def get_tal_metadata(url):
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36"
         }
-        
+
         # 2. Timeout is KEY here. If it takes >5s, we abort and trigger the cleanup task.
         response = requests.get(url, headers=headers, timeout=5)
         response.raise_for_status()
-        
+
         full_text = get_text(response.text)
-        cleaned_text = re.sub(r'\s+', ' ', full_text).strip()[:2000]
-        
+        cleaned_text = re.sub(r"\s+", " ", full_text).strip()[:2000]
+
         print("   ✅ Metadata fetched successfully.")
         return f"Content:\n{cleaned_text}..."
-        
+
     except Exception as e:
         print(f"   ⚠️ Metadata fetch failed: {e}")
-        
+
         # 3. VERBOSE FALLBACK: Create the Task immediately
         print("   🧹 Triggering cleanup task for failed scrape...")
         create_cleanup_task(
-            f"Manual Podcast Entry (Scraping Failed): {url}", 
-            link_url=url
+            f"Manual Podcast Entry (Scraping Failed): {url}", link_url=url
         )
-        
+
         return f"Error fetching URL: {e} (User has been notified via a Cleanup Task)"
 
+
 def get_spotify_metadata(url):
-    if not spotify: return "No Spotify Client"
+    if not spotify:
+        return "No Spotify Client"
     try:
         r = spotify.episode(url)
         return f"Show: {r['show']['name']}\nEp: {r['name']}\nDesc: {r['description']}"
-    except Exception as e: return f"Spotify Error: {e}"
+    except Exception as e:
+        return f"Spotify Error: {e}"
+
 
 def get_youtube_metadata(url):
     try:
-        with yt_dlp.YoutubeDL({'quiet':True, 'skip_download':True}) as ydl:
+        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
             info = ydl.extract_info(url, download=False)
-            handle = info.get('uploader_id', '')
+            handle = info.get("uploader_id", "")
             return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
-    except Exception as e: return f"YT Error: {e}"
+    except Exception as e:
+        return f"YT Error: {e}"
+
 
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
-    if not url: return None
-    
-    print(f"   🔗 Enriched Context Triggered for: {url}") # <--- Add this log
-    
+    if not url:
+        return None
+
+    print(f"   🔗 Enriched Context Triggered for: {url}")  # <--- Add this log
+
     if category == "podcasts":
-        if "spotify.com" in url: return get_spotify_metadata(url)
-        if "thisamericanlife" in url: return get_tal_metadata(url)
-    elif category == "youtube-videos": return get_youtube_metadata(url)
-    
+        if "spotify.com" in url:
+            return get_spotify_metadata(url)
+        if "thisamericanlife" in url:
+            return get_tal_metadata(url)
+    elif category == "youtube-videos":
+        return get_youtube_metadata(url)
+
     return None
 
-def log_job_outcome(raw_text, category, status, details="", created_url=None, ai_data=None):
+
+def log_job_outcome(
+    raw_text, category, status, details="", created_url=None, ai_data=None
+):
     print(f"--- Logging: {status} ---")
     log_id = get_db_id("logs")
-    if not notion or not log_id: return
-    
+    if not notion or not log_id:
+        return
+
     props = {
         "Raw Input": _notion_title(raw_text[:2000]),
         "Code Execution": _notion_status(status),
         "Category": _notion_select(category),
         "Reported": {"checkbox": False},
         "Error Details": _notion_rich_text(str(details)[:2000]),
-        "AI Summary": _notion_rich_text(json.dumps(ai_data, indent=2)[:2000] if ai_data else "")
+        "AI Summary": _notion_rich_text(
+            json.dumps(ai_data, indent=2)[:2000] if ai_data else ""
+        ),
     }
-    if created_url: props["Created Item"] = {"url": created_url}
-    try: notion.pages.create(parent={"database_id": log_id}, properties=props)
-    except Exception as e: print(f"Log failed: {e}")
+    if created_url:
+        props["Created Item"] = {"url": created_url}
+    try:
+        notion.pages.create(parent={"database_id": log_id}, properties=props)
+    except Exception as e:
+        print(f"Log failed: {e}")
+
 
 def append_to_quick_notes(raw_text):
     """Fallback: Appends text to a specific Notion Block if processing fails."""
-    if not notion or not FALLBACK_NOTION_BLOCK_ID: return
+    if not notion or not FALLBACK_NOTION_BLOCK_ID:
+        return
     try:
         notion.blocks.children.append(
             block_id=FALLBACK_NOTION_BLOCK_ID,
-            children=[{
-                "object": "block", 
-                "type": "paragraph", 
-                "paragraph": {"rich_text": [{"type": "text", "text": {"content": raw_text}}]}
-            }]
+            children=[
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {"content": raw_text}}]
+                    },
+                }
+            ],
         )
         print("--- Fallback: Appended to Quick Notes ---")
     except Exception as e:
         print(f"Fallback failed: {e}")
 
+
 def fetch_existing_page(category, value, key="Name"):
     db_id = get_db_id(category)
-    if not notion or not db_id: return None
-    
+    if not notion or not db_id:
+        return None
+
     # 1. Clean the search term for better matching
     clean_val = value.replace("The ", "").strip()
-    
+
     try:
         print(f"🔍 Searching {category} for '{value}' (Smart Search: '{clean_val}')...")
-        
+
         # FIX: Use raw notion.request() to bypass SDK version issues
         resp = notion.request(
             path=f"databases/{db_id}/query",
             method="POST",
-            body={
-                "filter": {
-                    "property": key, 
-                    "title": {"contains": clean_val} 
-                }
-            }
+            body={"filter": {"property": key, "title": {"contains": clean_val}}},
         )
-        
+
         results = resp.get("results", [])
-        
+
         if results:
             found_page = results[0]
-            
+
             # Safely extract title
             title_prop = found_page["properties"].get(key, {}).get("title", [])
             found_title = title_prop[0]["plain_text"] if title_prop else "Unknown"
             found_id = found_page["id"]
-            
+
             print(f"   ✅ Found match: '{found_title}' (ID: {found_id})")
             return found_id
-            
+
         print(f"   🔸 No match found for '{clean_val}'")
     except Exception as e:
         print(f"   ❌ Search failed for '{value}': {e}")
     return None
 
+
 def create_page(category, props):
     # DEBUG: See the exact structure and characters sending to Notion
     print(f"🔍 DEBUG NOTION PAYLOAD REPR: {repr(props)}")
-    
+
     # Build the base arguments for the API call
-    body_params = {
-        "parent": {"database_id": get_db_id(category)},
-        "properties": props
-    }
-    
+    body_params = {"parent": {"database_id": get_db_id(category)}, "properties": props}
+
     # --- ICON LOGIC ---
     # Automatically add the headphones icon for new podcasts
     if category == "podcasts":
@@ -566,33 +676,37 @@ def create_page(category, props):
         print(f"❌ Notion Create Error: {e}")
         raise e
 
+
 def update_status(page_id, status):
     print(f"🔄 Updating status for {page_id} to '{status}'...")
-    try: 
-        return notion.pages.update(page_id=page_id, properties={"Status": {"status": {"name": status}}})
+    try:
+        return notion.pages.update(
+            page_id=page_id, properties={"Status": {"status": {"name": status}}}
+        )
     except Exception as e:
         print(f"   ❌ Update Status Failed: {e}")
         return None
 
+
 def append_note(page_id, text):
     print(f"📎 Appending note to {page_id}...")
-    
+
     def get_utf16_split(content, limit=2000):
         chunks = []
         current_chunk = []
         current_len = 0
-        
+
         for char in content:
-            char_len = len(char.encode('utf-16-le')) // 2
-            
+            char_len = len(char.encode("utf-16-le")) // 2
+
             if current_len + char_len > limit:
                 chunks.append("".join(current_chunk))
                 current_chunk = []
                 current_len = 0
-            
+
             current_chunk.append(char)
             current_len += char_len
-            
+
         if current_chunk:
             chunks.append("".join(current_chunk))
         return chunks
@@ -600,53 +714,57 @@ def append_note(page_id, text):
     try:
         page = notion.pages.retrieve(page_id)
         current_notes = page["properties"].get("Notes", {}).get("rich_text", [])
-        
+
         safe_notes = []
-        
+
         for note_obj in current_notes:
             content = note_obj.get("text", {}).get("content", "")
             anns = note_obj.get("annotations", {})
-            
+
             chunks = get_utf16_split(content)
             for chunk in chunks:
-                safe_notes.append({
-                    "type": "text",
-                    "text": {"content": chunk},
-                    "annotations": anns
-                })
-        
+                safe_notes.append(
+                    {"type": "text", "text": {"content": chunk}, "annotations": anns}
+                )
+
         new_chunks = get_utf16_split(f"{text}")
         for chunk in new_chunks:
-            safe_notes.append({
-                "type": "text",
-                "text": {"content": chunk if chunk != new_chunks[0] else f"\n{chunk}"},
-            })
-        
+            safe_notes.append(
+                {
+                    "type": "text",
+                    "text": {
+                        "content": chunk if chunk != new_chunks[0] else f"\n{chunk}"
+                    },
+                }
+            )
+
         notion.pages.update(
-            page_id=page_id, 
-            properties={"Notes": {"rich_text": safe_notes}}
+            page_id=page_id, properties={"Notes": {"rich_text": safe_notes}}
         )
         print("   ✅ Note appended successfully.")
-        
+
     except Exception as e:
         print(f"   ❌ Append Note Failed: {e}")
+
+
 def create_cleanup_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
     props = {
-        "Name": _notion_title(desc), 
-        "Status": _notion_status("To Do"), 
-        "Tags": _notion_multi_select(["Chore"]), 
-        "Due Date": _notion_date(date.today().isoformat())
+        "Name": _notion_title(desc),
+        "Status": _notion_status("To Do"),
+        "Tags": _notion_multi_select(["Chore"]),
+        "Due Date": _notion_date(date.today().isoformat()),
     }
-    
+
     # If we have a link, add it to the 'Links' property
     if link_url:
         props["Links"] = _notion_rich_text(link_url)
 
-    try: 
+    try:
         create_page("tasks", props)
-    except Exception as e: 
+    except Exception as e:
         print(f"   ❌ Cleanup Task Creation Failed: {e}")
+
 
 def fetch_active_projects():
     """
@@ -655,8 +773,9 @@ def fetch_active_projects():
       - id_map: Dict mapping Project Name -> Page ID {"Synapse": "123-abc"}
     """
     db_id = get_db_id("tasks")
-    if not notion or not db_id: return [], {}
-    
+    if not notion or not db_id:
+        return [], {}
+
     try:
         # Use raw request to ensure it works regardless of SDK version
         response = notion.request(
@@ -666,29 +785,33 @@ def fetch_active_projects():
                 "filter": {
                     "and": [
                         {"property": "Tags", "multi_select": {"contains": "Projects"}},
-                        {"property": "Status", "status": {"does_not_equal": "Completed"}}
+                        {
+                            "property": "Status",
+                            "status": {"does_not_equal": "Completed"},
+                        },
                     ]
                 },
-                "page_size": 100
-            }
+                "page_size": 100,
+            },
         )
-        
+
         prompt_list = []
         id_map = {}
-        
+
         for p in response.get("results", []):
             props = p["properties"]
             page_id = p["id"]
-            
+
             # Dynamic Name Lookup
             name = "Unknown"
             for prop_name, prop_data in props.items():
                 if prop_data["type"] == "title" and prop_data.get("title"):
                     name = prop_data["title"][0]["plain_text"]
                     break
-            
-            if name == "Unknown": continue
-            
+
+            if name == "Unknown":
+                continue
+
             # Store ID for later
             id_map[name] = page_id
 
@@ -696,15 +819,17 @@ def fetch_active_projects():
             notes_obj = props.get("Notes", {}).get("rich_text", [])
             notes_text = "".join([t["plain_text"] for t in notes_obj])
             clean_notes = notes_text.replace("\n", " ").strip()
-            if len(clean_notes) > 150: clean_notes = clean_notes[:150] + "..."
-            
+            if len(clean_notes) > 150:
+                clean_notes = clean_notes[:150] + "..."
+
             entry = f"{name} (Context: {clean_notes})" if clean_notes else name
             prompt_list.append(entry)
-            
+
         return prompt_list, id_map
-    except Exception as e: 
+    except Exception as e:
         print(f"❌ Project Fetch Error: {e}")
         return [], {}
+
 
 # ==========================================
 # 7. MAIN HANDLERS & EXECUTORS
@@ -712,121 +837,177 @@ def fetch_active_projects():
 CATEGORY_SCHEMA_CLASSIFY = {
     "type": "object",
     "properties": {
-        "category": {"type": "string", "enum": list(CONFIG.get("databases", {}).keys())},
-        "related_project": {"type": "string"}
+        "category": {
+            "type": "string",
+            "enum": list(CONFIG.get("databases", {}).keys()),
+        },
+        "related_project": {"type": "string"},
     },
-    "required": ["category"]
+    "required": ["category"],
 }
+
 
 def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
-    
+
     if category == "groceries":
         name = data.get("Name")
         if inventory_map and name in inventory_map:
             page_id = inventory_map[name]
-            print(f"   ✅ Matched existing item '{name}' (ID: {page_id}). Updating Status...")
+            print(
+                f"   ✅ Matched existing item '{name}' (ID: {page_id}). Updating Status..."
+            )
             return update_status(page_id, data.get("Status")).get("url")
         else:
             print(f"   ✨ Item '{name}' not in inventory. Creating new page.")
-            return create_page(category, build_notion_properties(category, data)).get("url")
-    
+            return create_page(category, build_notion_properties(category, data)).get(
+                "url"
+            )
+
     # UNIFIED MOVIE & TV LOGIC
     elif category in ["movies", "tv-shows"]:
         status = data.get("Status")
         eid = fetch_existing_page(category, data["Title"], "Title")
-        
+
         if eid:
             print(f"   -> Found existing {category} {eid}...")
-            
+
             # Logic: Only update if the user provided a "significant" status.
-            # We ignore "Not Started" updates so we don't accidentally reset "Finished" items 
+            # We ignore "Not Started" updates so we don't accidentally reset "Finished" items
             # if we mention them again without context.
-            significant_statuses = ["Priority", "Finished", "In Progress", "Watched Parts", "Gave Up"]
-            
-            if status in significant_statuses: 
+            significant_statuses = [
+                "Priority",
+                "Finished",
+                "In Progress",
+                "Watched Parts",
+                "Gave Up",
+            ]
+
+            if status in significant_statuses:
                 print(f"   -> Updating status to {status}")
                 return update_status(eid, status).get("url")
-            
-            print("   -> Existing item found, but new status was default/insignificant. No update made.")
+
+            print(
+                "   -> Existing item found, but new status was default/insignificant. No update made."
+            )
             return f"https://www.notion.so/{eid.replace('-','')}"
-            
+
         return create_page(category, build_notion_properties(category, data)).get("url")
-    
+
     elif category == "youtube-videos":
         props = build_notion_properties(category, data)
-        cid = fetch_existing_page("youtube-channels", data.get("channel_handle"), "Name")
-        if cid: 
+        cid = fetch_existing_page(
+            "youtube-channels", data.get("channel_handle"), "Name"
+        )
+        if cid:
             props["Channel"] = {"relation": [{"id": cid}]}
-        else: 
-            create_cleanup_task(f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'")
+        else:
+            create_cleanup_task(
+                f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'"
+            )
         return create_page(category, props).get("url")
-    
+
     else:
         resp = create_page(category, build_notion_properties(category, data))
         created_url = resp.get("url")
-        if category == "quotes": 
+        if category == "quotes":
             if not data.get("Context"):
                 quote_preview = data.get("Quote") or data.get("Name") or "Unknown Quote"
-                create_cleanup_task(f"Link person to quote: {quote_preview[:30]}...", link_url=created_url)
+                create_cleanup_task(
+                    f"Link person to quote: {quote_preview[:30]}...",
+                    link_url=created_url,
+                )
         return created_url
 
-def run_pipeline(item_data, project_prompts, project_id_map, inventory_map, inventory_list):
+
+def run_pipeline(
+    item_data, project_prompts, project_id_map, inventory_map, inventory_list
+):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
-    full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
-    
+    full_str_for_log = (
+        f"{raw_text} (Context: {user_context})" if user_context else raw_text
+    )
+
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
-    
+
     try:
-        print(f"🚀 Pipeline Start: {repr(raw_text)}") # Debugging the input to the pipeline
+        print(
+            f"🚀 Pipeline Start: {repr(raw_text)}"
+        )  # Debugging the input to the pipeline
 
         # 2. Classify
         proj_str = ", ".join(project_prompts) if project_prompts else "None"
         cat_prompt = generate_classification_prompt(proj_str)
-        classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
-        
-        classified = json.loads(gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
-            contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
-            config=types.GenerateContentConfig(system_instruction=cat_prompt, 
-            response_mime_type="application/json", response_json_schema=CATEGORY_SCHEMA_CLASSIFY)).text) or {}
-        
+        classify_input = (
+            f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+        )
+
+        classified = (
+            json.loads(
+                gemini_client.models.generate_content(
+                    model="gemini-2.5-flash-preview-09-2025",
+                    contents=[
+                        types.Content(
+                            parts=[types.Part(text=classify_input)], role="user"
+                        )
+                    ],
+                    config=types.GenerateContentConfig(
+                        system_instruction=cat_prompt,
+                        response_mime_type="application/json",
+                        response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
+                    ),
+                ).text
+            )
+            or {}
+        )
+
         category = classified.get("category", "tasks")
         project = classified.get("related_project")
         print(f"🤖 Classification: {category}")
 
         # 3. Extract
-        url_context = enrich_context(category, raw_text) or "No URL" if category in ["podcasts", "youtube-videos"] else None
-        extract_prompt = generate_extraction_prompt(category, raw_text, url_context, inventory_list, user_context)
+        url_context = (
+            enrich_context(category, raw_text) or "No URL"
+            if category in ["podcasts", "youtube-videos"]
+            else None
+        )
+        extract_prompt = generate_extraction_prompt(
+            category, raw_text, url_context, inventory_list, user_context
+        )
 
         # DEBUG: Capture Raw AI Response before JSON Load
         ai_response_obj = gemini_client.models.generate_content(
             model="gemini-2.5-flash-preview-09-2025",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
-            config=types.GenerateContentConfig(system_instruction=extract_prompt, 
-            response_mime_type="application/json", response_json_schema=get_gemini_schema(category)))
-        
+            config=types.GenerateContentConfig(
+                system_instruction=extract_prompt,
+                response_mime_type="application/json",
+                response_json_schema=get_gemini_schema(category),
+            ),
+        )
+
         raw_ai_text = ai_response_obj.text
         print(f"🔍 DEBUG AI EXTRACT REPR: {repr(raw_ai_text)}")
 
         extracted = json.loads(raw_ai_text) or {}
-        
+
         # 4. Execute
         if not extracted:
-             print("   ⚠️ Extraction returned empty.")
-             extracted = {"Name": raw_text}
+            print("   ⚠️ Extraction returned empty.")
+            extracted = {"Name": raw_text}
 
         extracted = apply_business_logic(category, extracted, project)
         log_payload["Extractor_Data"] = extracted
-        
+
         url = None
         if project and category == "tasks":
             eid = project_id_map.get(project)
             if eid:
                 print(f"   -> Appending to Project: {project}")
                 note_content = extracted.get("Name", raw_text)
-                if user_context: note_content += f" ({user_context})"
+                if user_context:
+                    note_content += f" ({user_context})"
                 append_note(eid, note_content)
                 url = f"https://www.notion.so/{eid.replace('-','')}"
                 log_payload["Extractor_Data"]["Action"] = "Appended"
@@ -835,21 +1016,25 @@ def run_pipeline(item_data, project_prompts, project_id_map, inventory_map, inve
         else:
             url = execute_logic(category, extracted, inventory_map)
 
-        log_job_outcome(full_str_for_log, category, "Success", created_url=url, ai_data=log_payload)
+        log_job_outcome(
+            full_str_for_log, category, "Success", created_url=url, ai_data=log_payload
+        )
 
     except Exception as e:
         print(f"❌ Pipeline Error: {e}")
-        log_job_outcome(full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload) # Changed "Failure" to "Error"
+        log_job_outcome(
+            full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload
+        )  # Changed "Failure" to "Error"
         append_to_quick_notes(full_str_for_log)
 
 
 @functions_framework.cloud_event
 def processor(cloud_event):
     print("🧠 Worker awake!")
-    if not GEMINI_API_KEY or not PROMPTS: 
+    if not GEMINI_API_KEY or not PROMPTS:
         print("❌ Critical: Missing API Key or Prompts")
         return
-    
+
     hydrate_dynamic_options()
     project_prompts, project_id_map = fetch_active_projects()
     inventory_map = fetch_inventory_map("groceries")
@@ -857,18 +1042,22 @@ def processor(cloud_event):
 
     try:
         # DECODE
-        full_text = str(base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8"))
-        
+        full_text = str(
+            base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8")
+        )
+
         # DEBUG LOG: See exactly what Python sees immediately after decode
         print(f"🔍 DEBUG INPUT REPR: {repr(full_text)}")
-        
+
         # STEP 1: AI PARSING
         parsed_items = parse_raw_input(full_text)
         print(f"📋 Processing Batch: {len(parsed_items)} item(s)")
 
         # STEP 2: LOOP
         for item in parsed_items:
-            run_pipeline(item, project_prompts, project_id_map, inventory_map, inventory_list)
+            run_pipeline(
+                item, project_prompts, project_id_map, inventory_map, inventory_list
+            )
 
         print("--- BATCH COMPLETE ---")
 
