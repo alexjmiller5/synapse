@@ -109,13 +109,18 @@ Your goal is to parse the input into a structured list of items.
 --- DELIMITER RULES ---
 1. Item Separator (@): The user uses '@' to separate distinct tasks or ideas.
     - Example: "Buy milk @ Call John" -> [Item 1: Buy milk, Item 2: Call John]
-    - EXCEPTION: Ignore '@' if it is part of an email (john@gmail.com) or a handle (@MKBHD).
 
 2. Context Separator ($): The user uses '$' to separate the 'Core Content' from 'Metadata/Context'.
     - Example: "Finish report $ urgent due friday" -> Core: "Finish report", Context: "urgent due friday"
     - Example: "Eli quote $ this guy dresses like he wants to get wegied" -> Core: "this guy dresses like he wants to get wegied", Context: "Eli quote"
     - EXCEPTION: Ignore '$' if it is part of a price ($50) or a variable name.
     - The context would be on either side of the '$' depending on user intent.
+    - The context would be on either side of the '$'.
+
+--- STRICT FORMATTING RULES ---
+- Do NOT split text on dashes (- or —). Treat them as literal text.
+- Do NOT convert dashes to newlines.
+- Keep the user's capitalization and punctuation exactly as is.
 
 --- OUTPUT FORMAT ---
 Return a JSON list of objects. Each object must have:
@@ -151,11 +156,18 @@ def parse_raw_input(raw_text):
                 response_json_schema=PARSER_SCHEMA,
             ),
         )
+        
+        # LOGGING ADDED: Check raw response text
+        print(f"🔍 RAW PARSER RESPONSE: {repr(response.text)}") 
+
         parsed = json.loads(response.text)
         print(f"   ✅ Parsed {len(parsed)} item(s).")
         return parsed
     except Exception as e:
         print(f"   ⚠️ Parsing failed: {e}. Fallback to raw text.")
+        # Only log the raw text if available to avoid cluttering logs on other errors
+        if 'response' in locals() and hasattr(response, 'text'):
+             print(f"   ⚠️ Failed Response Text: {response.text}")
         return [{"core_text": raw_text, "context_notes": ""}]
 
 
@@ -517,7 +529,7 @@ def extract_url(text):
     return None
 
 def fetch_web_metadata(url):
-    """Fetches HTML Title AND Body Text for Bookmarks."""
+    """Fetches Page Title (Preferring Open Graph) AND Body Text."""
     print(f"   ⏳ Fetching Web Metadata for: {url}...")
     try:
         headers = {
@@ -526,24 +538,42 @@ def fetch_web_metadata(url):
         res = requests.get(url, headers=headers, timeout=5)
         res.raise_for_status()
         
-        # 1. Scrape Body Text (The Upgrade)
-        # Using inscriptis to get clean text (ignoring navbars/ads usually)
+        # 1. Scrape Body Text
         full_text = get_text(res.text)
-        cleaned_body = re.sub(r'\s+', ' ', full_text).strip()[:1500] # Limit to 1500 chars context
+        cleaned_body = re.sub(r'\s+', ' ', full_text).strip()[:1500]
         
-        # 2. Get Title (Fallback regex if inscriptis misses it)
-        title_match = re.search(r'<title>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
-        title = title_match.group(1).strip() if title_match else "No Title"
-        title = title.replace("–", "-").replace(" ", " ")
+        # 2. Get Title (Strategy: Open Graph -> Standard Title)
+        
+        # A. Try Open Graph Title first (Usually cleaner/better)
+        og_match = re.search(r'<meta property="og:title" content="(.*?)"', res.text, re.IGNORECASE)
+        
+        # B. Fallback to standard <title> tag
+        title_match = re.search(r'<title[^>]*>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
+        
+        title = "No Title Found"
+        
+        if og_match:
+            title = og_match.group(1).strip()
+            print(f"   ✅ Scraped (OG): {title}")
+        elif title_match:
+            title = title_match.group(1).strip()
+            print(f"   ✅ Scraped (HTML): {title}")
 
-        print(f"   ✅ Scraped: {title}")
+        # --- GLOBAL CLEANUP ---
+        # 1. Fix HTML entities
+        title = title.replace("–", "-").replace(" ", " ").replace("&amp;", "&").replace("&#39;", "'")
+        
+        # 2. Remove "GitHub - " prefix (Because GitHub forces this in the title tag)
+        if title.startswith("GitHub - "): 
+            title = title.replace("GitHub - ", "", 1)
+
         return f"HTML Title: {title}\nPage Content Preview:\n{cleaned_body}..."
 
     except Exception as e:
         print(f"   ⚠️ Web fetch failed: {e}")
         # FALLBACK: Create Task
         print("   🧹 Triggering cleanup task for failed web scrape...")
-        create_cleanup_task(f"Manual Bookmark Entry (Scrape Failed): {url}", link_url=url)
+        # create_cleanup_task(f"Manual Bookmark Entry (Scrape Failed): {url}", link_url=url)
         return "Error fetching metadata"
 
 def get_tal_metadata(url):
@@ -597,7 +627,7 @@ def get_youtube_metadata(url):
         print(f"   ⚠️ YT Metadata fetch failed: {e}")
         # FALLBACK: Create Task
         print("   🧹 Triggering cleanup task for failed YT extraction...")
-        create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
+        # create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
         return f"YT Error: {e}"
 
 
@@ -803,6 +833,7 @@ def create_cleanup_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
     props = {
         "Name": _notion_title(desc),
+        "AI Title": _notion_rich_text(desc),
         "Status": _notion_status("To Do"),
         "Tags": _notion_multi_select(["Chore"]),
         "Due Date": _notion_date(date.today().isoformat()),
@@ -939,6 +970,38 @@ def execute_logic(category, data, inventory_map=None):
     # --- 2. YOUTUBE VIDEO LOGIC ---
     elif category == "youtube-videos":
         props = build_notion_properties(category, data)
+        target_url = data.get("Video URL")
+        
+        # A. DEDUPLICATION CHECK (Exact URL Match)
+        if target_url:
+            db_id = get_db_id("youtube-videos")
+            try:
+                # Query specifically for the "Video URL" property
+                resp = notion.request(
+                    path=f"databases/{db_id}/query",
+                    method="POST",
+                    body={
+                        "filter": {
+                            "property": "Video URL",
+                            "url": {"equals": target_url}
+                        }
+                    }
+                )
+                
+                # If found, update status instead of creating new
+                if resp.get("results"):
+                    existing_page = resp["results"][0]
+                    eid = existing_page["id"]
+                    print(f"   ✅ Video already exists: {target_url} (ID: {eid})")
+                    
+                    # Update status if the user implies a change (e.g. "Watched")
+                    # Default is "Watched", so we generally want to ensure it's marked as such if re-submitted
+                    return update_status(eid, data.get("Status", "Watched")).get("url")
+                    
+            except Exception as e:
+                print(f"   ⚠️ YouTube duplicate check failed: {e}")
+
+        # B. CHANNEL LINKING (Only if new)
         channel_name = data.get("channel_handle", "").replace("@", "")
         
         # Search for Channel in Relation DB
@@ -947,7 +1010,7 @@ def execute_logic(category, data, inventory_map=None):
             print(f"   -> Linked Channel ID: {cid}")
             props["Channel"] = {"relation": [{"id": cid}]}
             
-        # Create Page First
+        # Create Page
         resp = create_page(category, props)
         created_url = resp.get("url")
 
@@ -1130,6 +1193,14 @@ def run_pipeline(
                 url = execute_logic(category, extracted)
         else:
             url = execute_logic(category, extracted, inventory_map)
+            
+            if url and url_context:
+                is_scrape_error = category == "bookmarks" and "Error fetching metadata" in url_context
+                is_yt_error = category == "youtube-videos" and "YT Error" in url_context
+                
+                if is_scrape_error or is_yt_error:
+                    print(f"   🧹 Creating cleanup task for {category} failure (linked to new page)...")
+                    create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
         log_job_outcome(
             full_str_for_log, category, "Success", created_url=url, ai_data=log_payload
@@ -1138,8 +1209,8 @@ def run_pipeline(
     except Exception as e:
         print(f"❌ Pipeline Error: {e}")
         log_job_outcome(
-            full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload
-        )  # Changed "Failure" to "Error"
+            full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload
+        ) 
         append_to_quick_notes(full_str_for_log)
 
 
