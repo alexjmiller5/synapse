@@ -23,6 +23,11 @@ databases:
           5. "Learning": "Something to explore"—like looking through a website, looking into a tool, or figuring out how something works (e.g. "how the python tool uv works").
           6. "Career": General career stuff (not specific to the current Capital One job).
           7. "Social Planning": ONLY if actually scheduling a specific event with other people. Even if it involves interaction with others that doesn't necesarily mean it has this tag -- for this tag it MUST be specifically for me to plan some kind of social event with others. If I have to ask someone something or talk to them about something that's not social planning. Updating a bucket list or profile solo is a CHORE.
+      Priority:
+        type: "select"
+        allowlist: ["Low", "Medium", "High"]
+        instruction: |
+          Unless there is sepcifically a context section where the user mentions High, Low or Medium priority, DO NOT fill in this category. Leave it empty. If the user does mention priority specifically, use that to fill in this field based on the three available options.
       Links:
         type: "rich_text_list"
         required: true
