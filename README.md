@@ -258,8 +258,16 @@ gcloud api-gateway gateways describe processor-gateway \
 ## Synapse Prompting Guide
 
 - **Core Syntax**
-  - **`@` Splitter:** Separate multiple distinct items.
+  - **`@` Splitter:** Separate multiple distinct items in one message.
   - **`$` Context:** Define the Project, Date, Status, or specific Category.
+
+- **Defaults (If NOT specified)**
+  - **Tasks:** Status: `To Do` | Tag: `Chore` | Date: `Today`
+  - **Movies/TV:** Status: `Not Started`
+  - **YouTube:** Status: `Watched` | Date Watched: `Today`
+  - **Podcasts:** Status: `Not Started`
+  - **Fun Activities:** Status: `To Do`
+  - **Groceries:** Status: `On List`
 
 - **Category Cheatsheet**
   - **Tasks (Default):** `Update hinge profile` (Solo actions = Chore).
@@ -267,7 +275,7 @@ gcloud api-gateway gateways describe processor-gateway \
   - **URLs:** `https://...` (Auto-routes to **YouTube**, **Bookmarks**, or **Podcasts** which are spotify and thisamericanlife urls).
   - **People:** `Will Tkay Caleb's Friend` (Pattern: `Name $ Company`).
   - **Movies/TV:** `Love is blnd $ watched` (Typos are auto-fixed via TMDB).
-  - **Fun/Bucket:** `Skydiving $ bucket list` or `Walk around Seaport $ fun`.
+  - **Fun Activity/Bucket List:** `Skydiving $ bucket list` or `Walk around Seaport $ fun`.
 
 - **Dates & Status**
   - **Due Date:** `Cancel Uber One $ Jan 1` (Context overrides text).
