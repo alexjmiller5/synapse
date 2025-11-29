@@ -7,6 +7,24 @@ categorize_template: |
   - Example: "Apple [Context: Tech]" -> Category: ideas (or tech-related).
   - Example: "Apple [Context: Fruit]" -> Category: groceries.
   - Example: "Weapons [Context: Horror movie]" -> Category: movies.
+  # NEW EXAMPLES FOR NEW DBS
+  - Example: "Go Skydiving [Context: Bucket list]" -> Category: bucket-list.
+  - Example: "Arun [Context: People]" -> Category: people.
+  - Example: "Union Square [Context: Fun]" -> Category: fun-activities.
+
+  --- SPECIALIZED LOGIC (CHECK BEFORE PROJECTS) ---
+  1. **URL DETECTION**: 
+     - If input contains a YouTube URL -> "youtube-videos"
+     - If input contains Spotify/ThisAmericanLife URL -> "podcasts"
+     - If input contains ANY OTHER URL -> "bookmarks"
+  
+  2. **PEOPLE vs TASKS**:
+     - "Arun Vantage Senior Associate" -> "people" (Creating a contact).
+     - "Call Arun about the plans" -> "tasks" (Action item).
+  
+  3. **YOUTUBE (NO LINK)**:
+     - "Add YouTube video about cats" (No Link) -> "tasks" (Chore).
+     - "Watch MKBHD video" (No Link) -> "tasks" (Chore).
 
   --- CONTEXT: ACTIVE PROJECTS ---
   The user is currently working on these projects:
@@ -21,7 +39,6 @@ categorize_template: |
 
   If the intent is unclear or a mix of categories, default to "tasks".
   Return ONLY the JSON object with the determined category.
-
 extraction_template: |
   You are a data extraction assistant. The user's text is a "{category}".
   Your goal is to extract all relevant information based on the rules below.
