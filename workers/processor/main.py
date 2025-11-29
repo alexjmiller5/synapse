@@ -260,9 +260,7 @@ def hydrate_dynamic_options():
             )
     print("✅ Hydration complete.")
 
-
 # --- PROMPT BUILDERS ---
-
 
 def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
@@ -519,7 +517,7 @@ def extract_url(text):
     return None
 
 def fetch_web_metadata(url):
-    """Fetches HTML Title for Bookmarks."""
+    """Fetches HTML Title AND Body Text for Bookmarks."""
     print(f"   ⏳ Fetching Web Metadata for: {url}...")
     try:
         headers = {
@@ -528,17 +526,24 @@ def fetch_web_metadata(url):
         res = requests.get(url, headers=headers, timeout=5)
         res.raise_for_status()
         
-        # Simple Regex to get <title> content
-        match = re.search(r'<title>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
-        if match:
-            title = match.group(1).strip()
-            # Basic cleanup
-            title = title.replace("–", "-").replace(" ", " ")
-            print(f"   ✅ Found Title: {title}")
-            return f"HTML Title: {title}"
-        return "No Title Found"
+        # 1. Scrape Body Text (The Upgrade)
+        # Using inscriptis to get clean text (ignoring navbars/ads usually)
+        full_text = get_text(res.text)
+        cleaned_body = re.sub(r'\s+', ' ', full_text).strip()[:1500] # Limit to 1500 chars context
+        
+        # 2. Get Title (Fallback regex if inscriptis misses it)
+        title_match = re.search(r'<title>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
+        title = title_match.group(1).strip() if title_match else "No Title"
+        title = title.replace("–", "-").replace(" ", " ")
+
+        print(f"   ✅ Scraped: {title}")
+        return f"HTML Title: {title}\nPage Content Preview:\n{cleaned_body}..."
+
     except Exception as e:
         print(f"   ⚠️ Web fetch failed: {e}")
+        # FALLBACK: Create Task
+        print("   🧹 Triggering cleanup task for failed web scrape...")
+        create_cleanup_task(f"Manual Bookmark Entry (Scrape Failed): {url}", link_url=url)
         return "Error fetching metadata"
 
 def get_tal_metadata(url):
@@ -587,7 +592,12 @@ def get_youtube_metadata(url):
             info = ydl.extract_info(url, download=False)
             handle = info.get("uploader_id", "")
             return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
+            
     except Exception as e:
+        print(f"   ⚠️ YT Metadata fetch failed: {e}")
+        # FALLBACK: Create Task
+        print("   🧹 Triggering cleanup task for failed YT extraction...")
+        create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
         return f"YT Error: {e}"
 
 

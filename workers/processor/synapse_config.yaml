@@ -248,14 +248,14 @@ databases:
       Description:
         type: "title"
         required: true
-        instruction: "The actual HTML Title of the webpage (from metadata) or the website name."
-      Title:
-        type: "rich_text"
-        required: true
         instruction: |
           A short summary of what the website is about. 
           - If it's a GitHub link, use the repo description.
-          - Otherwise, summarize the content based on the URL or metadata.
+          - Otherwise, summarize breifly the content based on the URL or metadata.
+      Title:
+        type: "rich_text"
+        required: true
+        instruction: "The actual HTML Title of the webpage (from metadata) or the website name."
       URL:
         type: "url"
         required: true
