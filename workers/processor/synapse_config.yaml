@@ -267,7 +267,7 @@ databases:
       Item:
         type: "title"
         required: true
-        instruction: "The specific item to do (e.g. 'Go Skydiving', 'Visit Portugal')."
+        instruction: "The specific item to do. Use the user's original phrasing. DO NOT remove URLs/Links. DO NOT remove details (e.g. 'with someone'). DO NOT add a period at the end."
       Tags:
         type: "multi_select"
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
