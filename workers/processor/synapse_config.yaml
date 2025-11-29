@@ -259,7 +259,7 @@ databases:
       URL:
         type: "url"
         required: true
-        instruction: "The URL."
+        instruction: "The URL. If the user provides a domain without a protocol (e.g. 'test.com' or 'www.google.com'), you MUST prepend 'https://' to ensure it is a valid link."
       Tags:
         type: "multi_select"
         instruction: "Select 'Github' if the URL contains github.com. Otherwise select relevant tags based on content."

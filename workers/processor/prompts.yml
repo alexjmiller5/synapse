@@ -8,13 +8,14 @@ categorize_template: |
   - Example: "Go Skydiving [Context: Bucket List]" -> Category: bucket-list.
   - Example: "Union Square [Context: Fun]" -> Category: fun-activities.
   - Example: "Python link [Context: Bookmark]" -> Category: bookmarks.
+  - Example: "Bookmark test.com" -> Category: bookmarks.
 
   --- URL HANDLING (HIGHEST PRIORITY) ---
-  If the input contains a URL (http...):
+  If the input contains a URL or a Domain (e.g. `http...` OR `example.com`):
   1. **YouTube URL** -> "youtube-videos"
   2. **Spotify / ThisAmericanLife URL** -> "podcasts"
   3. **Other URLs**:
-     - IF the input is **JUST the URL** (or accompanied by "bookmark this", "save link") -> "bookmarks".
+     - IF the input is **JUST the URL or domain** (or accompanied by "bookmark example.com", "save this link: https://hhub.io") -> "bookmarks".
      - IF the input is an **ACTION** containing a URL (e.g. "Buy this rice cooker [URL]", "Read this article [URL]") -> "tasks" (Shopping/Chore).
 
   --- CATEGORY RULES ---
