@@ -106,9 +106,10 @@ databases:
       Director:
         type: "select"
         instruction: "The director's name (if known)."
-      Studio:
-        type: "select"
-        instruction: "The production studio (e.g., Netflix, HBO, Disney, Studio Ghibli)."
+      Tags:
+        type: "multi_select"
+        instruction: "Additional info life if the user specifies it's an All Time favorite, or specifically by Studio Ghibli (the user might specifc that, but if you know that it's a studio ghibli movie even if they don't say that, you should still tag it as such)."
+        allowlist: ["All Time Favorite", "Studio Ghibli"]
       Famous Cast Members:
         type: "multi_select"
         instruction: "Famous actors in the movie."
@@ -139,9 +140,9 @@ databases:
         type: "multi_select"
         required: true
         instruction: "Select relevant genres."
-      Studio:
+      Director: 
         type: "select"
-        instruction: "The production studio/network (Netflix, HBO, etc)."
+        instruction: "The director's name (if known)."
       Famous Cast Members:
         type: "multi_select"
         instruction: "Famous actors in the show."
