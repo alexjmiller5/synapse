@@ -181,39 +181,99 @@ databases:
         virtual: true
 
   youtube-videos:
-    description: "A YouTube video (often contains a youtube.com or youtu.be link)."
+    description: "A YouTube video. MUST contain a valid 'youtube.com' or 'youtu.be' or m.youtube.com link. If the user just describes a video without a link, classify as a TASK (Chore)."
     properties:
       Title:
         type: "title"
         required: true
-        instruction: "The video title. Use the Context if available."
+        instruction: "The title of the video. Use the 'Context from URL' if available. If not, extract from text."
+      Video URL:
+        type: "url"
+        required: true
+        instruction: "The valid YouTube URL. If missing, this is invalid."
       channel_handle:
         type: "ignore"
         required: true
-        instruction: "The creator's handle (e.g., '@MKBHD'). Ensure it starts with '@'."
+        instruction: "The creator's handle (e.g. @MKBHD) or channel name. Extract this from the 'Context from URL' metadata if possible."
       Status:
         type: "status"
         required: true
         allowlist: ["Priority", "Not Started", "In Progress", "Watched"]
-        instruction: "Priority if 'must watch', Watched if 'seen', In Progress if watching."
-      Video URL:
-        type: "url"
+        instruction: "Default to 'Watched' (assuming user just finished it). Only use 'Not Started' or 'In Progress' if the user explicitly says 'need to watch' or 'watching'."
+      Tags:
+        type: "multi_select"
+        instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
+
+  fun-activities:
+    description: "A fun activity, event, or place to visit. User usually specifies a location or implies 'fun thing to do'."
+    properties:
+      Title:
+        type: "title"
         required: true
-        instruction: "The valid YouTube URL."
-      Date Watched:
-        type: "date"
-        virtual: true
+        instruction: "The specific name of the activity or place (e.g. 'Walk around Union Square', 'Visit Seaport')."
+      Location:
+        type: "select"
+        required: true
+        allowlist: ["Boston", "Dallas", "NYC"]
+        instruction: |
+          Infer the city from the text/landmarks:
+          - "NYC": Union Square, Central Park, Brooklyn, Manhattan.
+          - "Boston": Seaport, Fenway, Cambridge, The Charles.
+          - "Dallas": Deep Ellum, Bishop Arts, Katy Trail.
+          - If the location is totally ambiguous, leave empty (the system will create a manual cleanup task).
+      Tags:
+        type: "multi_select"
+        instruction: "Select relevant tags (Food, Nightlife, Social, Cultural, Show). Use 'Food' for restaurants, 'Nightlife' for bars/clubs."
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["To Do", "Planned", "Done"]
+        instruction: "Default to 'To Do'. Use 'Done' if the user implies they already did it."
+
   people:
-    description: "A database where each page represents a person I know, maybe a work colleague, friend, or family member."
+    description: "A database for people/contacts. Use ONLY if the user provides a name with context/job info (e.g. 'Rishi TDP senior associate')."
     properties:
       Name:
         type: "title"
         required: true
-        instruction: "The full name of the person."
-      Context:
+        instruction: "The full name, Title Cased. If only a first name is given, use that. (e.g. 'will tkay' -> 'Will Tkay')."
+      Company:
         type: "rich_text"
         required: true
-        instruction: "Any additional context about the person (e.g., how you know them)."
+        instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Rishi TDP senior associate' -> Company: 'TDP Senior Associate'. input: 'Will Tkay Caleb's camp friend' -> Company: 'Caleb's Camp Friend')."
+
+  bookmarks:
+    description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify or 'thisamericanlife.org')."
+    properties:
+      Description:
+        type: "title"
+        required: true
+        instruction: "The actual HTML Title of the webpage (from metadata) or the website name."
+      Title:
+        type: "rich_text"
+        required: true
+        instruction: |
+          A short summary of what the website is about. 
+          - If it's a GitHub link, use the repo description.
+          - Otherwise, summarize the content based on the URL or metadata.
+      URL:
+        type: "url"
+        required: true
+        instruction: "The URL."
+      Tags:
+        type: "multi_select"
+        instruction: "Select 'Github' if the URL contains github.com. Otherwise select relevant tags based on content."
+
+  bucket-list:
+    description: "Items to do before dying. Context usually contains 'bucket list'."
+    properties:
+      Item:
+        type: "title"
+        required: true
+        instruction: "The specific item to do (e.g. 'Go Skydiving', 'Visit Portugal')."
+      Tags:
+        type: "multi_select"
+        instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
 
   # Helpers
   youtube-channels:

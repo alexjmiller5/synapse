@@ -476,8 +476,6 @@ def apply_business_logic(category, data, related_project=None):
             data["Quote"] = f"“{clean_quote}”"
 
     elif category == "movies":
-        # REMOVED: is_watched logic.
-        # Just ensure we have a default if AI somehow sends nothing.
         if "Status" not in data:
             data["Status"] = "Not Started"
 
@@ -488,6 +486,14 @@ def apply_business_logic(category, data, related_project=None):
     elif category == "youtube-videos":
         if data.get("Status") == "Watched":
             data["Date Watched"] = today_str
+    
+    elif category == "bookmarks":
+        # Check URL for github.com
+        if "github.com" in data.get("URL", ""):
+            tags = data.get("Tags", [])
+            if isinstance(tags, list) and "Github" not in tags:
+                tags.append("Github")
+                data["Tags"] = tags
 
     return data
 
@@ -499,6 +505,28 @@ def extract_url(text):
     match = re.search(r"(https?://\S+)", text)
     return match.group(0) if match else None
 
+def fetch_web_metadata(url):
+    """Fetches HTML Title for Bookmarks."""
+    print(f"   ⏳ Fetching Web Metadata for: {url}...")
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=5)
+        res.raise_for_status()
+        
+        # Simple Regex to get <title> content
+        match = re.search(r'<title>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
+        if match:
+            title = match.group(1).strip()
+            # Basic cleanup
+            title = title.replace("–", "-").replace(" ", " ")
+            print(f"   ✅ Found Title: {title}")
+            return f"HTML Title: {title}"
+        return "No Title Found"
+    except Exception as e:
+        print(f"   ⚠️ Web fetch failed: {e}")
+        return "Error fetching metadata"
 
 def get_tal_metadata(url):
     print(f"   ⏳ Fetching URL metadata from: {url}...")
@@ -555,7 +583,7 @@ def enrich_context(category, raw_text):
     if not url:
         return None
 
-    print(f"   🔗 Enriched Context Triggered for: {url}")  # <--- Add this log
+    print(f"   🔗 Enriched Context Triggered for: {url}")
 
     if category == "podcasts":
         if "spotify.com" in url:
@@ -564,6 +592,8 @@ def enrich_context(category, raw_text):
             return get_tal_metadata(url)
     elif category == "youtube-videos":
         return get_youtube_metadata(url)
+    elif category == "bookmarks":
+        return fetch_web_metadata(url)
 
     return None
 
@@ -661,12 +691,11 @@ def create_page(category, props):
     body_params = {"parent": {"database_id": get_db_id(category)}, "properties": props}
 
     # --- ICON LOGIC ---
-    # Automatically add the headphones icon for new podcasts
     if category == "podcasts":
         body_params["icon"] = {"type": "emoji", "emoji": "🎧"}
-    if category == "movies":
+    elif category == "movies":
         body_params["icon"] = {"type": "emoji", "emoji": "🎬"}
-    if category == "tv-shows":
+    elif category == "tv-shows":
         body_params["icon"] = {"type": "emoji", "emoji": "📺"}
 
     try:
@@ -850,21 +879,64 @@ CATEGORY_SCHEMA_CLASSIFY = {
 def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
 
-    if category == "groceries":
-        name = data.get("Name")
-        if inventory_map and name in inventory_map:
-            page_id = inventory_map[name]
-            print(
-                f"   ✅ Matched existing item '{name}' (ID: {page_id}). Updating Status..."
-            )
-            return update_status(page_id, data.get("Status")).get("url")
-        else:
-            print(f"   ✨ Item '{name}' not in inventory. Creating new page.")
-            return create_page(category, build_notion_properties(category, data)).get(
-                "url"
-            )
+    # --- 1. GROCERIES / FUN ACTIVITIES (Deduplication Logic) ---
+    if category in ["groceries", "fun-activities"]:
+        # Map 'Name' vs 'Title' depending on DB
+        search_key = "Name" if category == "groceries" else "Title"
+        search_val = data.get(search_key)
+        
+        if category == "groceries" and inventory_map and search_val in inventory_map:
+             page_id = inventory_map[search_val]
+             print(f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating...")
+             return update_status(page_id, data.get("Status")).get("url")
+        
+        # For Fun Activities, perform a smart search
+    if category == "fun-activities":
+            search_val = data.get("Title")
+            
+            # 1. Check for duplicates first
+            existing_id = fetch_existing_page(category, search_val, key="Title")
+            if existing_id:
+                 print(f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status...")
+                 return update_status(existing_id, data.get("Status")).get("url")
 
-    # UNIFIED MOVIE & TV LOGIC
+            # 2. Create the new page
+            print(f"   ✨ Creating new {category} page.")
+            resp = create_page(category, build_notion_properties(category, data))
+            created_url = resp.get("url")
+
+            # 3. NOW check for Location Ambiguity (passing the new URL)
+            if not data.get("Location"):
+                print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
+                create_cleanup_task(f"Classify Location for: {search_val}", link_url=created_url)
+            
+            return created_url
+
+    # --- 2. YOUTUBE VIDEO LOGIC ---
+    elif category == "youtube-videos":
+        props = build_notion_properties(category, data)
+        channel_name = data.get("channel_handle", "").replace("@", "")
+        
+        # Search for Channel in Relation DB
+        cid = fetch_existing_page("youtube-channels", channel_name, "Name")
+        if cid: 
+            print(f"   -> Linked Channel ID: {cid}")
+            props["Channel"] = {"relation": [{"id": cid}]}
+            
+        # Create the Video Page FIRST
+        resp = create_page(category, props)
+        created_url = resp.get("url")
+
+        # If Channel was missing, create cleanup task linking to the new video
+        if not cid:
+            print(f"   -> Channel {channel_name} not found.")
+            create_cleanup_task(f"Add YT Channel: {channel_name}", link_url=created_url)
+            
+        return created_url
+            
+        return create_page(category, props).get("url")
+
+    # --- 3. MOVIES / TV ---
     elif category in ["movies", "tv-shows"]:
         status = data.get("Status")
         eid = fetch_existing_page(category, data["Title"], "Title")
@@ -893,20 +965,20 @@ def execute_logic(category, data, inventory_map=None):
             return f"https://www.notion.so/{eid.replace('-','')}"
 
         return create_page(category, build_notion_properties(category, data)).get("url")
+    
+    # --- 4. BOOKMARKS ---
+    elif category == "bookmarks":
+        return create_page(category, build_notion_properties(category, data)).get("url")
 
-    elif category == "youtube-videos":
-        props = build_notion_properties(category, data)
-        cid = fetch_existing_page(
-            "youtube-channels", data.get("channel_handle"), "Name"
-        )
-        if cid:
-            props["Channel"] = {"relation": [{"id": cid}]}
-        else:
-            create_cleanup_task(
-                f"Add Channel: {data.get('channel_handle')} for '{data['Title']}'"
-            )
-        return create_page(category, props).get("url")
+    # --- 5. PEOPLE ---
+    elif category == "people":
+        return create_page(category, build_notion_properties(category, data)).get("url")
+        
+    # --- 6. BUCKET LIST ---
+    elif category == "bucket-list":
+        return create_page(category, build_notion_properties(category, data)).get("url")
 
+    # --- DEFAULT (Tasks, Quotes) ---
     else:
         resp = create_page(category, build_notion_properties(category, data))
         created_url = resp.get("url")
@@ -932,7 +1004,9 @@ def run_pipeline(
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
     try:
-        print(f"🚀 Pipeline Start: {repr(raw_text)}")
+        print(
+            f"🚀 Pipeline Start: {repr(raw_text)}"
+        )  # Debugging the input to the pipeline
 
         # 2. Classify
         proj_str = ", ".join(project_prompts) if project_prompts else "None"
@@ -967,7 +1041,7 @@ def run_pipeline(
         # 3. Extract
         url_context = (
             enrich_context(category, raw_text) or "No URL"
-            if category in ["podcasts", "youtube-videos"]
+            if category in ["podcasts", "youtube-videos", "bookmarks"]
             else None
         )
         extract_prompt = generate_extraction_prompt(
@@ -1009,13 +1083,9 @@ def run_pipeline(
             eid = project_id_map.get(project)
             if eid:
                 print(f"   -> Appending to Project: {project}")
-
-                # --- KEY FIX: USE RAW TEXT FOR APPEND ---
-                # Use raw_text directly so it's exactly what you typed/dictated
-                note_content = raw_text
+                note_content = extracted.get("Name", raw_text)
                 if user_context:
                     note_content += f" ({user_context})"
-
                 append_note(eid, note_content)
                 url = f"https://www.notion.so/{eid.replace('-','')}"
                 log_payload["Extractor_Data"]["Action"] = "Appended"
@@ -1032,7 +1102,7 @@ def run_pipeline(
         print(f"❌ Pipeline Error: {e}")
         log_job_outcome(
             full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload
-        )
+        )  # Changed "Failure" to "Error"
         append_to_quick_notes(full_str_for_log)
 
 
