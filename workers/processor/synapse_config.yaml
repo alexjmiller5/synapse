@@ -39,9 +39,6 @@ databases:
       Status:
         type: "status"
         virtual: true
-      Notes:
-        type: "rich_text"
-        virtual: true
 
   groceries:
     description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping)."
@@ -148,7 +145,7 @@ databases:
         instruction: "Famous actors in the show."
 
   podcasts:
-    description: "A podcast episode or series (often contains a Spotify or 'thisamericanlife.org' link)."
+    description: "A podcast episode or series (MUST contains a Spotify or 'thisamericanlife.org' link). If the user just describes a podcast without a link, classify as a TASK (Chore). Or if they say add these podcasts to my db for example, that is also a task."
     properties:
       Episode Title:
         type: "title"
@@ -186,7 +183,7 @@ databases:
       Title:
         type: "title"
         required: true
-        instruction: "The title of the video. Use the 'Context from URL' if available. If not, extract from text."
+        instruction: "Use the EXACT title provided in the 'Context from URL' section - don't take the id of the video from the actual url. Do not guess or modify it."
       Video URL:
         type: "url"
         required: true
@@ -223,7 +220,7 @@ databases:
           - If the location is totally ambiguous, leave empty (the system will create a manual cleanup task).
       Tags:
         type: "multi_select"
-        instruction: "Select relevant tags (Food, Nightlife, Social, Cultural, Show). Use 'Food' for restaurants, 'Nightlife' for bars/clubs."
+        instruction: "Select relevant tags (Food, Nightlife, Social, Cultural, Show). Use 'Food' for restaurants, 'Nightlife' for bars/clubs. Isn't necessary if an item doesn't fit any of these categories or if you're unsue -- it's okay to leave empty. Also cultural really ahs to mean cultural - The Edge in nyc is more of a touristy cool thing but it's not cultural"
       Status:
         type: "status"
         required: true
@@ -249,13 +246,13 @@ databases:
         type: "title"
         required: true
         instruction: |
-          A short summary of what the website is about. 
-          - If it's a GitHub link, use the repo description.
-          - Otherwise, summarize breifly the content based on the URL or metadata.
+          This is the Summary property. Write a short summary of what the website is about. 
+          - If it's a GitHub link, use the repo description exactly as is.
+          - Otherwise, " Write a short 1-2 sentence description of what the website is about (based on the page content preview)."
       Title:
         type: "rich_text"
         required: true
-        instruction: "The actual HTML Title of the webpage (from metadata) or the website name."
+        instruction: "The actual HTML Title of the webpage (from metadata) or the website name.This is the Page Name property. Fill this with the exact 'HTML Title' extracted from the webpage metadata (e.g. 'Socket - Secure your dependencies...'). Do NOT write a summary here."
       URL:
         type: "url"
         required: true
