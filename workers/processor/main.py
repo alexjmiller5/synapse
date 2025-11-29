@@ -1184,8 +1184,9 @@ def run_pipeline(
             if eid:
                 print(f"   -> Appending to Project: {project}")
                 note_content = extracted.get("Name", raw_text)
-                if user_context:
-                    note_content += f" ({user_context})"
+                # Don't append user context - that's just for categorization
+                # if user_context:
+                    # note_content += f" ({user_context})"
                 append_note(eid, note_content)
                 url = f"https://www.notion.so/{eid.replace('-','')}"
                 log_payload["Extractor_Data"]["Action"] = "Appended"
