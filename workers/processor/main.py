@@ -932,9 +932,7 @@ def run_pipeline(
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
     try:
-        print(
-            f"🚀 Pipeline Start: {repr(raw_text)}"
-        )  # Debugging the input to the pipeline
+        print(f"🚀 Pipeline Start: {repr(raw_text)}")
 
         # 2. Classify
         proj_str = ", ".join(project_prompts) if project_prompts else "None"
@@ -992,6 +990,12 @@ def run_pipeline(
 
         extracted = json.loads(raw_ai_text) or {}
 
+        # --- KEY FIX: IGNORE AI NAME FOR TASKS ---
+        # If it's a task, we force the Name to be the raw input.
+        # This prevents the AI from mangling smart quotes or newlines.
+        if category == "tasks":
+            extracted["Name"] = raw_text
+
         # 4. Execute
         if not extracted:
             print("   ⚠️ Extraction returned empty.")
@@ -1005,9 +1009,13 @@ def run_pipeline(
             eid = project_id_map.get(project)
             if eid:
                 print(f"   -> Appending to Project: {project}")
-                note_content = extracted.get("Name", raw_text)
+
+                # --- KEY FIX: USE RAW TEXT FOR APPEND ---
+                # Use raw_text directly so it's exactly what you typed/dictated
+                note_content = raw_text
                 if user_context:
                     note_content += f" ({user_context})"
+
                 append_note(eid, note_content)
                 url = f"https://www.notion.so/{eid.replace('-','')}"
                 log_payload["Extractor_Data"]["Action"] = "Appended"
@@ -1024,7 +1032,7 @@ def run_pipeline(
         print(f"❌ Pipeline Error: {e}")
         log_job_outcome(
             full_str_for_log, "Unknown", "Error", details=e, ai_data=log_payload
-        )  # Changed "Failure" to "Error"
+        )
         append_to_quick_notes(full_str_for_log)
 
 
