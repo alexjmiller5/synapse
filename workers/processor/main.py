@@ -502,8 +502,21 @@ def apply_business_logic(category, data, related_project=None):
 # 6. HELPERS (External APIs & Notion)
 # ==========================================
 def extract_url(text):
-    match = re.search(r"(https?://\S+)", text)
-    return match.group(0) if match else None
+    # Regex Explanation:
+    # 1. (https?://)?  -> Optional Protocol
+    # 2. (www\.)?      -> Optional www
+    # 3. [\w-]+\.      -> Domain name (e.g. 'google.')
+    # 4. [\w.]{2,}     -> TLD (e.g. 'com', 'co.uk')
+    # 5. \S* -> Any trailing path/query
+    match = re.search(r"\b((?:https?://)?(?:www\.)?[\w-]+\.[\w.]{2,}\S*)", text, re.IGNORECASE)
+    
+    if match:
+        url = match.group(1)
+        # Fix: Prepend https:// if missing so requests library doesn't fail
+        if not url.startswith(("http://", "https://")):
+            return f"https://{url}"
+        return url
+    return None
 
 def fetch_web_metadata(url):
     """Fetches HTML Title for Bookmarks."""
@@ -891,26 +904,27 @@ def execute_logic(category, data, inventory_map=None):
              return update_status(page_id, data.get("Status")).get("url")
         
         # For Fun Activities, perform a smart search
-    if category == "fun-activities":
-            search_val = data.get("Title")
-            
-            # 1. Check for duplicates first
+        if category == "fun-activities":
+            # Check for duplicates first
             existing_id = fetch_existing_page(category, search_val, key="Title")
             if existing_id:
                  print(f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status...")
                  return update_status(existing_id, data.get("Status")).get("url")
 
-            # 2. Create the new page
+            # Create new
             print(f"   ✨ Creating new {category} page.")
             resp = create_page(category, build_notion_properties(category, data))
             created_url = resp.get("url")
 
-            # 3. NOW check for Location Ambiguity (passing the new URL)
+            # Check for Location Ambiguity (After creation, so we have a link)
             if not data.get("Location"):
                 print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
                 create_cleanup_task(f"Classify Location for: {search_val}", link_url=created_url)
             
             return created_url
+
+        print(f"   ✨ Creating new {category} page.")
+        return create_page(category, build_notion_properties(category, data)).get("url")
 
     # --- 2. YOUTUBE VIDEO LOGIC ---
     elif category == "youtube-videos":
@@ -923,18 +937,16 @@ def execute_logic(category, data, inventory_map=None):
             print(f"   -> Linked Channel ID: {cid}")
             props["Channel"] = {"relation": [{"id": cid}]}
             
-        # Create the Video Page FIRST
+        # Create Page First
         resp = create_page(category, props)
         created_url = resp.get("url")
 
-        # If Channel was missing, create cleanup task linking to the new video
-        if not cid:
+        # Cleanup Task if Channel Missing
+        if not cid: 
             print(f"   -> Channel {channel_name} not found.")
             create_cleanup_task(f"Add YT Channel: {channel_name}", link_url=created_url)
             
         return created_url
-            
-        return create_page(category, props).get("url")
 
     # --- 3. MOVIES / TV ---
     elif category in ["movies", "tv-shows"]:
@@ -943,31 +955,46 @@ def execute_logic(category, data, inventory_map=None):
 
         if eid:
             print(f"   -> Found existing {category} {eid}...")
-
-            # Logic: Only update if the user provided a "significant" status.
-            # We ignore "Not Started" updates so we don't accidentally reset "Finished" items
-            # if we mention them again without context.
-            significant_statuses = [
-                "Priority",
-                "Finished",
-                "In Progress",
-                "Watched Parts",
-                "Gave Up",
-            ]
-
+            significant_statuses = ["Priority", "Finished", "In Progress", "Watched Parts", "Gave Up"]
             if status in significant_statuses:
                 print(f"   -> Updating status to {status}")
                 return update_status(eid, status).get("url")
-
-            print(
-                "   -> Existing item found, but new status was default/insignificant. No update made."
-            )
             return f"https://www.notion.so/{eid.replace('-','')}"
 
         return create_page(category, build_notion_properties(category, data)).get("url")
     
-    # --- 4. BOOKMARKS ---
+    # --- 4. BOOKMARKS (With URL Deduplication) ---
     elif category == "bookmarks":
+        target_url = data.get("URL")
+        
+        # A. Check for Duplicates (Exact URL Match)
+        if target_url:
+            db_id = get_db_id("bookmarks")
+            try:
+                # Specific query for URL property type
+                resp = notion.request(
+                    path=f"databases/{db_id}/query",
+                    method="POST",
+                    body={
+                        "filter": {
+                            "property": "URL",
+                            "url": {"equals": target_url}
+                        }
+                    }
+                )
+                if resp.get("results"):
+                    print(f"   ✅ Bookmark already exists: {target_url}")
+                    return f"https://www.notion.so/{resp['results'][0]['id'].replace('-','')}"
+            except Exception as e:
+                print(f"   ⚠️ Bookmark duplicate check failed: {e}")
+
+        # B. Apply Logic (GitHub Tags)
+        if "github.com" in target_url:
+            tags = data.get("Tags", [])
+            if isinstance(tags, list) and "Github" not in tags:
+                tags.append("Github")
+                data["Tags"] = tags
+                
         return create_page(category, build_notion_properties(category, data)).get("url")
 
     # --- 5. PEOPLE ---
