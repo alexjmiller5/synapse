@@ -4,27 +4,23 @@ categorize_template: |
   --- INPUT HANDLING (CRITICAL) ---
   The input text may include a context block like this: "Main Text [Context: Extra Info]".
   You MUST use this context as the STRONGEST signal for classification.
-  - Example: "Apple [Context: Tech]" -> Category: ideas (or tech-related).
-  - Example: "Apple [Context: Fruit]" -> Category: groceries.
-  - Example: "Weapons [Context: Horror movie]" -> Category: movies.
-  # NEW EXAMPLES FOR NEW DBS
-  - Example: "Go Skydiving [Context: Bucket list]" -> Category: bucket-list.
   - Example: "Arun [Context: People]" -> Category: people.
+  - Example: "Go Skydiving [Context: Bucket List]" -> Category: bucket-list.
   - Example: "Union Square [Context: Fun]" -> Category: fun-activities.
+  - Example: "Python link [Context: Bookmark]" -> Category: bookmarks.
 
-  --- SPECIALIZED LOGIC (CHECK BEFORE PROJECTS) ---
-  1. **URL DETECTION**: 
-     - If input contains a YouTube URL -> "youtube-videos"
-     - If input contains Spotify/ThisAmericanLife URL -> "podcasts"
-     - If input contains ANY OTHER URL -> "bookmarks"
-  
-  2. **PEOPLE vs TASKS**:
-     - "Arun Vantage Senior Associate" -> "people" (Creating a contact).
-     - "Call Arun about the plans" -> "tasks" (Action item).
-  
-  3. **YOUTUBE (NO LINK)**:
-     - "Add YouTube video about cats" (No Link) -> "tasks" (Chore).
-     - "Watch MKBHD video" (No Link) -> "tasks" (Chore).
+  --- URL HANDLING (HIGHEST PRIORITY) ---
+  If the input contains a URL (http...):
+  1. **YouTube URL** -> "youtube-videos"
+  2. **Spotify / ThisAmericanLife URL** -> "podcasts"
+  3. **Other URLs**:
+     - IF the input is **JUST the URL** (or accompanied by "bookmark this", "save link") -> "bookmarks".
+     - IF the input is an **ACTION** containing a URL (e.g. "Buy this rice cooker [URL]", "Read this article [URL]") -> "tasks" (Shopping/Chore).
+
+  --- CATEGORY RULES ---
+  - **people**: Only use if the input follows a "[Name] [Job/Context]" pattern (e.g. "Will Theo's friend"). If it is an action (e.g. "Call Will"), it is a "task".
+  - **youtube-videos**: Only use if there is a LINK. If text says "watch youtube video" but has no link, it is a "task" (chore).
+  - **fun-activities**: Must imply a location or "fun thing to do".
 
   --- CONTEXT: ACTIVE PROJECTS ---
   The user is currently working on these projects:

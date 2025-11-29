@@ -254,10 +254,23 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] Get ai to help me make my giant conditional statements into a flowchart so I can see high level how requests are being processed and how the decisions are made by ai. Some decsions that are sticking out to me: intent getting from the ai, getting from the ai's knowledge (i.e. asking it to fill in the producer of a movie), summarizing a title/description, then this all plays into either page creation or page modification
 - [ ] Fetch the notes of the project in addition to the titles to make sure the ai will be able to have the right when determining if a raw text belongs with a project
 
-## Guide to Prompting the AI Well
+## Synapse Prompting Guide
 
-- Use the @ symbol to separate multiple items in a single input.
-- Provide context using the $ tag to help the AI understand the intent better.
-- Example: "Read 'Atomic Habits' @ Buy groceries $ Reminder for weekend tasks"
-- For movie input, just include the title, then include that it's a movie in the context: "Becoming Led Zeppelin $ Movie to watch"
-- The status for most everything can be included in the context - just say in progress, completed, not started, etc.
+- **Core Syntax**
+  - **`@` Splitter:** Separate multiple distinct items.
+  - **`$` Context:** Define the Project, Date, Status, or specific Category.
+
+- **Category Cheatsheet**
+  - **Tasks (Default):** `Update dating profile` (Solo actions = Chore).
+  - **Projects:** `Refactor code $ Synapse` (**Strict Rule:** Must name project in context).
+  - **URLs:** `https://...` (Auto-routes to **YouTube**, **Bookmarks**, or **Podcasts** which are spotify and thisamericanlife urls).
+  - **People:** `Will Barlow Theo's Friend` (Pattern: `Name $ Company`).
+  - **Movies/TV:** `Love is blnd $ watched` (Typos are auto-fixed via TMDB).
+  - **Fun/Bucket:** `Skydiving $ bucket list` or `Walk around Seaport $ fun`.
+
+- **Dates & Status**
+  - **Due Date:** `Cancel Uber One $ Jan 1` (Context overrides text).
+  - **Media Status:** `The Matrix $ movie priority` or `Severance $ show finished`.
+
+- **Batch Example:**
+  - `Arun Vantage Senior Associate @ https://youtu.be/xyz @ Buy eggs $ groceries`
