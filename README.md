@@ -198,6 +198,7 @@ gcloud api-gateway gateways describe processor-gateway \
 - [Gemini Chat About Design](https://gemini.google.com/app/59fe912cc890af6d)
 - [GCloud Project Functions](https://console.cloud.google.com/run?deploymentType=function&project=synapse-477401)
 - [GitHub Repository](https://github.com/alexjmiller5/synapse)
+- [TMDB API Reference](https://developer.themoviedb.org/reference/authentication)
 
 ## General thoughts and important TODOs
 
