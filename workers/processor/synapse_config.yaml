@@ -30,8 +30,7 @@ databases:
           Unless there is sepcifically a context section where the user mentions High, Low or Medium priority, DO NOT fill in this category. Leave it empty. If the user does mention priority specifically, use that to fill in this field based on the three available options.
       Links:
         type: "rich_text_list"
-        required: true
-        instruction: "Extract all valid URLs (e.g., http, https). Return empty list if none."
+        instruction: "Extract all valid URLs (e.g., http, https). Don't need this property if there aren't any urls."
       Due Date:
         type: "date"
         required: true
