@@ -837,6 +837,7 @@ def create_cleanup_task(desc, link_url=None):
         "Status": _notion_status("To Do"),
         "Tags": _notion_multi_select(["Chore"]),
         "Due Date": _notion_date(date.today().isoformat()),
+        "Priority": _notion_select("Low"),
     }
 
     # If we have a link, add it to the 'Links' property
