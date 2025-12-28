@@ -72,6 +72,7 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-card-games-list-id",
     "notion-fun-activities-db-id",
     "notion-people-db-id",
+    "notion-places-db-id",
     "notion-quick-notes-last-block-id",
     "notion-languages-db-id",
     "notion-ideas-db-id",
