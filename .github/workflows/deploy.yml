@@ -88,6 +88,10 @@ jobs:
 
       - name: Copy config.yml to service directory
         run: |
+          if [ ! -f "config.yml" ]; then
+            echo "❌ Error: config.yml not found in repository root"
+            exit 1
+          fi
           cp config.yml ${{ matrix.service.path }}/config.yml
           echo "✅ Copied config.yml to ${{ matrix.service.path }}/"
 

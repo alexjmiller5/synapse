@@ -20,6 +20,8 @@ import yt_dlp
 # ==========================================
 
 CONFIG = {}
+GLOBAL_CONFIG = {}
+
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_dir, "synapse_config.yaml"), "r") as f:
@@ -28,10 +30,7 @@ except Exception as e:
     print(f"❌ Critical Config Error: {e}")
 
 # Load global config for project-wide settings
-GLOBAL_CONFIG = {}
 try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
     # Try to find config.yml in multiple locations
     # 1. Same directory as main.py (for deployed environments)
     # 2. Repository root (for local development)
@@ -40,11 +39,7 @@ try:
         os.path.join(script_dir, "..", "..", "config.yml"),
     ]
     
-    global_config_path = None
-    for path in possible_paths:
-        if os.path.exists(path):
-            global_config_path = path
-            break
+    global_config_path = next((path for path in possible_paths if os.path.exists(path)), None)
     
     if global_config_path:
         with open(global_config_path, "r") as f:
