@@ -13,7 +13,8 @@ resource "google_project_service" "services" {
     "apigateway.googleapis.com",
     "servicemanagement.googleapis.com",
     "servicecontrol.googleapis.com",
-    "places-backend.googleapis.com"
+    "places-backend.googleapis.com",
+    "apikeys.googleapis.com"
   ])
 
   service            = each.value
