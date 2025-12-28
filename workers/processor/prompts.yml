@@ -12,13 +12,15 @@ categorize_template: |
 
   --- URL HANDLING (HIGHEST PRIORITY) ---
   If the input contains a URL or a Domain (e.g. `http...` OR `example.com`):
-  1. **YouTube URL** -> "youtube-videos"
-  2. **Spotify / ThisAmericanLife URL** -> "podcasts"
-  3. **Other URLs**:
+  1. **Google Maps URL** -> "places"
+  2. **YouTube URL** -> "youtube-videos"
+  3. **Spotify / ThisAmericanLife URL** -> "podcasts"
+  4. **Other URLs**:
      - IF the input is **JUST the URL or domain** (or accompanied by "bookmark example.com", "save this link: https://hhub.io") -> "bookmarks".
      - IF the input is an **ACTION** containing a URL (e.g. "Buy this rice cooker [URL]", "Read this article [URL]") -> "tasks" (Shopping/Chore).
 
   --- CATEGORY RULES ---
+  - **places**: STRICTLY require a Google Maps URL. If the user says "Go to Central Park" but provides NO link, classify as "tasks" (or "fun-activities" if context implies).
   - **people**: Only use if the input follows a "[Name] [Job/Context]" pattern (e.g. "Will Theo's friend"). If it is an action (e.g. "Call Will"), it is a "task".
   - **youtube-videos**: Only use if there is a LINK. If text says "watch youtube video" but has no link, it is a "task" (chore).
   - **fun-activities**: Must imply a location or "fun thing to do".
@@ -39,12 +41,14 @@ categorize_template: |
 extraction_template: |
   You are a data extraction assistant. The user's text is a "{category}".
   Your goal is to extract all relevant information based on the rules below.
-  
+
   {context_section}
 
   {valid_options_section}
 
   {inventory_section}
+
+  {trips_section}
 
   --- INSTRUCTIONS ---
   {instructions_section}

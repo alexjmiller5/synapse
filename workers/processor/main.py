@@ -14,6 +14,7 @@ from inscriptis import get_text
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import yt_dlp
+import googlemaps
 
 # ==========================================
 # 1. CONFIGURATION ENGINE (SSOT)
@@ -90,10 +91,16 @@ if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
         )
     except Exception:
         pass
+GOOGLE_PLACES_KEY = get_secret("google-places-api-key")
+gmaps = googlemaps.Client(key=GOOGLE_PLACES_KEY) if GOOGLE_PLACES_KEY else None
 
-# Pre-fetch Database IDs for those defined in Config + Logs
+# Pre-fetch Database IDs
 DATABASE_IDS = {}
-for cat in list(CONFIG.get("databases", {}).keys()) + ["logs", "youtube-channels"]:
+for cat in list(CONFIG.get("databases", {}).keys()) + [
+    "logs",
+    "youtube-channels",
+    "trips",
+]:
     val = get_secret(f"notion-{cat}-db-id")
     if val:
         DATABASE_IDS[cat] = val
@@ -320,6 +327,10 @@ def generate_extraction_prompt(
     if inventory_list:
         inventory_section = f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
 
+    # NEW: Trips Section
+    trips_section = ""
+    if category == "places" and trips_inventory:
+        trips_section = f"--- AVAILABLE TRIPS (For 'Linked Trip' Logic) ---\n{json.dumps(trips_inventory)}"
     # 3. Context Section
     combined_context = ""
     if url_context:
@@ -346,6 +357,7 @@ def generate_extraction_prompt(
         context_section=combined_context.strip(),
         valid_options_section="\n\n".join(valid_opts_lines),
         inventory_section=inventory_section,
+        trips_section=trips_section,  # Added this
         instructions_section="\n".join(instr_lines),
     )
 
@@ -646,8 +658,122 @@ def get_youtube_metadata(url):
         return f"YT Error: {e}"
 
 
+def get_place_details(query):
+    """
+    Fetches details from Google Places API.
+    Returns RAW types for the AI to map.
+    """
+    if not gmaps:
+        return None
+
+    print(f"🗺️ Fetching Google Place Details for: {query}")
+    try:
+        # 1. Text Search to get Place ID
+        resp = gmaps.find_place(
+            input=query, input_type="textquery", fields=["place_id"]
+        )
+
+        if resp["status"] != "OK" or not resp["candidates"]:
+            print("   ⚠️ No place found.")
+            return None
+
+        place_id = resp["candidates"][0]["place_id"]
+
+        # 2. Get Full Details
+        details = gmaps.place(
+            place_id=place_id,
+            fields=[
+                "name",
+                "formatted_address",
+                "address_component",
+                "type",
+                "url",
+                "website",
+            ],
+        )
+        result = details.get("result", {})
+
+        # 3. Extract City/Country
+        city = None
+        country = None
+        for comp in result.get("address_components", []):
+            types = comp.get("types", [])
+            if "locality" in types:
+                city = comp["long_name"]
+            elif "country" in types:
+                country = comp["long_name"]
+
+        # 4. Return Raw Data for AI
+        return {
+            "Name": result.get("name"),
+            "Address": result.get("formatted_address"),
+            "City": city,
+            "Country": country,
+            "Google Maps URL": result.get("url"),
+            "Raw Types": result.get("types", []),  # AI will map these to Notion Tags
+        }
+    except Exception as e:
+        print(f"❌ Google Maps Error: {e}")
+        return None
+
+
+def fetch_trips_inventory():
+    """
+    Fetches Trips with Dates to help the AI decide on 'Most Recent'.
+    Returns:
+      - inventory_text: List of strings "Name (Date: YYYY-MM-DD)" for the prompt.
+      - id_map: Dict {"Name": "Page_ID"} for code execution.
+    """
+    db_id = get_db_id("trips")
+    if not notion or not db_id:
+        return [], {}
+
+    print(f"✈️ Fetching Trips Inventory...")
+    id_map = {}
+    inventory_text = []
+
+    try:
+        resp = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={"sorts": [{"property": "Date", "direction": "descending"}]},
+        )
+
+        for page in resp.get("results", []):
+            try:
+                # Extract Name
+                title_prop = page["properties"].get("Name", {}).get("title", [])
+                name = title_prop[0]["plain_text"] if title_prop else "Untitled"
+
+                # Extract Date (Start)
+                date_prop = page["properties"].get("Date", {}).get("date", {})
+                date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
+
+                id_map[name] = page["id"]
+                inventory_text.append(f"{name} (Date: {date_str})")
+            except Exception:
+                continue
+
+        print(f"   ✅ Loaded {len(inventory_text)} trips.")
+        return inventory_text, id_map
+    except Exception as e:
+        print(f"   ❌ Trips fetch failed: {e}")
+        return [], {}
+
+
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
+
+    # 1. Google Places (Prioritize URL, fallback to raw text if needed)
+    if category == "places":
+        print(f"   🔗 Enriched Context Triggered for Places")
+        query = url if url else raw_text
+        details = get_place_details(query)
+        if details:
+            return f"--- GOOGLE MAPS DATA ---\n{json.dumps(details)}"
+        return None
+
+    # 2. Existing Logic
     if not url:
         return None
 
@@ -946,8 +1072,38 @@ CATEGORY_SCHEMA_CLASSIFY = {
 }
 
 
-def execute_logic(category, data, inventory_map=None):
+def execute_logic(category, data, inventory_map=None, trips_id_map=None):
     print(f"⚙️ Executing Logic for: {category}")
+
+    if category == "places":
+        # 1. Handle Linked Trip (Relation)
+        trip_name = data.get("Linked Trip")
+
+        # Remove from data payload to prevent Notion API error
+        if "Linked Trip" in data:
+            del data["Linked Trip"]
+
+        # 2. Create Page
+        resp = create_page(category, build_notion_properties(category, data))
+        created_url = resp.get("url")
+        new_page_id = resp.get("id")
+
+        # 3. Link Trip (Using the Map passed from pipeline)
+        if trip_name and new_page_id and trips_id_map:
+            trip_id = trips_id_map.get(trip_name)
+            if trip_id:
+                print(f"   🔗 Linking to Trip: {trip_name} ({trip_id})")
+                try:
+                    notion.pages.update(
+                        page_id=new_page_id,
+                        properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
+                    )
+                except Exception as e:
+                    print(f"   ⚠️ Failed to link trip: {e}")
+            else:
+                print(f"   🔸 Trip '{trip_name}' not found in map.")
+
+        return created_url
 
     # --- 1. GROCERIES / FUN ACTIVITIES (Deduplication Logic) ---
     if category in ["groceries", "fun-activities"]:
@@ -1116,7 +1272,13 @@ def execute_logic(category, data, inventory_map=None):
 
 
 def run_pipeline(
-    item_data, project_prompts, project_id_map, inventory_map, inventory_list
+    item_data,
+    project_prompts,
+    project_id_map,
+    inventory_map,
+    inventory_list,
+    trips_list,
+    trips_id_map,
 ):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
@@ -1168,7 +1330,7 @@ def run_pipeline(
             else None
         )
         extract_prompt = generate_extraction_prompt(
-            category, raw_text, url_context, inventory_list, user_context
+            category, raw_text, url_context, inventory_list, trips_list, user_context
         )
 
         # DEBUG: Capture Raw AI Response before JSON Load
@@ -1216,7 +1378,7 @@ def run_pipeline(
             else:
                 url = execute_logic(category, extracted)
         else:
-            url = execute_logic(category, extracted, inventory_map)
+            url = execute_logic(category, extracted, inventory_map, trips_id_map)
 
             if url and url_context:
                 is_scrape_error = (
@@ -1253,6 +1415,8 @@ def processor(cloud_event):
     project_prompts, project_id_map = fetch_active_projects()
     inventory_map = fetch_inventory_map("groceries")
     inventory_list = list(inventory_map.keys())
+    
+    trips_list, trips_id_map = fetch_trips_inventory()
 
     try:
         # DECODE
@@ -1270,7 +1434,7 @@ def processor(cloud_event):
         # STEP 2: LOOP
         for item in parsed_items:
             run_pipeline(
-                item, project_prompts, project_id_map, inventory_map, inventory_list
+                item, project_prompts, project_id_map, inventory_map, inventory_list, trips_list, trips_id_map
             )
 
         print("--- BATCH COMPLETE ---")
