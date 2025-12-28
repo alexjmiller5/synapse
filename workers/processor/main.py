@@ -27,11 +27,38 @@ try:
 except Exception as e:
     print(f"❌ Critical Config Error: {e}")
 
+# Load global config for project-wide settings
+GLOBAL_CONFIG = {}
+try:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Try to find config.yml in multiple locations
+    # 1. Same directory as main.py (for deployed environments)
+    # 2. Repository root (for local development)
+    possible_paths = [
+        os.path.join(script_dir, "config.yml"),
+        os.path.join(script_dir, "..", "..", "config.yml"),
+    ]
+    
+    global_config_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            global_config_path = path
+            break
+    
+    if global_config_path:
+        with open(global_config_path, "r") as f:
+            GLOBAL_CONFIG = yaml.safe_load(f)
+        print(f"✅ Loaded global config from {global_config_path}")
+    else:
+        print("⚠️ Global config.yml not found in expected locations")
+except Exception as e:
+    print(f"❌ Global Config Error: {e}")
+
 # ==========================================
 # 2. CLIENT INITIALIZATION
 # ==========================================
-# TODO: remove this from being a hardcoded value to getting from global conifg.yml
-PROJECT_ID = "synapse-477401"
+PROJECT_ID = GLOBAL_CONFIG.get("gcp_project_id", "synapse-477401")
 SECRETS = {}
 sm_client = None
 gemini_client = None

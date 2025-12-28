@@ -18,3 +18,7 @@ __pycache__/
 
 # Local requests to the processor worker
 scripts/local-requests.txt
+
+# Config files copied to service/worker directories during deployment
+services/*/config.yml
+workers/*/config.yml

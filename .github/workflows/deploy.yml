@@ -86,6 +86,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      - name: Copy config.yml to service directory
+        run: |
+          cp config.yml ${{ matrix.service.path }}/config.yml
+          echo "✅ Copied config.yml to ${{ matrix.service.path }}/"
+
       - name: Generate requirements.txt
         run: |
           cd ${{ matrix.service.path }}
