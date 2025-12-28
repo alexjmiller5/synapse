@@ -196,6 +196,12 @@ gcloud api-gateway gateways describe processor-gateway \
 --project=<project-id>
 ```
 
+- Add a package to a specific service's pyproject.toml and install it in the local development environment:
+
+```bash
+uv add --package <workspace-member-name> <package-name>
+```
+
 ---
 
 ---
@@ -253,6 +259,7 @@ gcloud api-gateway gateways describe processor-gateway \
 - [ ] make it so the hydration only happens on a per category/db basis after classification is done so it doesn't have to hydrate everything all at the beginning
 - [ ] add checks at the beginning of my function to make sure that the synapse_config.yaml matches the actual notion db structure -- this way if i change something in notion and forget to update the config file, the function will error out and maybe send me an email? and notify me instead of just failing silently or misbehaving
 - [ ] Make a standardized duplicate checking function instead of specific one for each db
+- [ ] Separate the infra into a separate repo
 
 ### **Feature Related Stuff**
 

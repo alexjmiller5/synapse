@@ -1,6 +1,8 @@
 [project]
-name = "processor"
+name = "synapse-processor"
 version = "1.0.0"
+description = "Worker for processing Synapse tasks"
+requires-python = ">=3.14"
 authors = [{name = "Alex Miller", email = "redacted-usr@gmail.com"}]
 
 dependencies = [
@@ -13,4 +15,5 @@ dependencies = [
   "inscriptis~=2.7.0",
   "spotipy~=2.25.1",
   "yt-dlp>=2025.11.12",
+  "googlemaps>=4.10.0",
 ]

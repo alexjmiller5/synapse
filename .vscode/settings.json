@@ -1,5 +1,7 @@
 {
   "powerClipper.alwaysExclude": [
-    "**/uv.lock"
+    "**/uv.lock",
+    "**/.venv",
+    "**/.terraform"
   ]
 }
