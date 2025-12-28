@@ -40,5 +40,3 @@
     ```bash
     rm terraform.tfstate
     ```
-
-<!-- Gotta add however I got the ci / cd auth working cause that's part of the bootstrappinga -->

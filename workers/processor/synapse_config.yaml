@@ -40,6 +40,7 @@ databases:
           2. CHECK TEXT: If no date is in the Context, look for date mentions in the text itself.
           3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
           *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
+          *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025).*
       Status:
         type: "status"
         virtual: true
@@ -275,6 +276,20 @@ databases:
       Tags:
         type: "multi_select"
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
+  
+  places:
+    description: "A place to visit or keep track of (e.g. restaurant, city, landmark)."
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "The specific name of the place (e.g. 'Central Park', 'Eataly NYC'). Use the user's original phrasing."
+      Location:
+        type: "rich_text"
+        instruction: "The location details (e.g. 'New York City', 'Downtown Boston'). Use the user's original phrasing."
+      Tags:
+        type: "multi_select"
+        instruction: "Select relevant tags (Restaurant, Landmark, City, Nature, etc)."
 
   # Helpers
   youtube-channels:
