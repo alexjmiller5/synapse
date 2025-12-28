@@ -278,16 +278,79 @@ databases:
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
 
   places:
-    description: "Just a google maps URL. A place to visit or remember. If the user just describes a place without a google maps url, this is NOT the correct classification"
+    description: "A Google Maps URL representing a place to visit or remember. The user context provides status/notes. STRICT RULE: The input MUST contain a valid Google Maps URL. If the user just describes a place in text without a link, do NOT use this category."
     properties:
       Name:
         type: "title"
         required: true
-        instruction: "The specific name of the place (e.g. 'Japan', 'Eiffel Tower'). Use the user's original phrasing."
+        instruction: "Use the official name from the Google Maps data"
+      Status:
+        type: "status"
+        required: true
+        allowlist: ["Haven't Been", "Priority", "Been"]
+        instruction: |
+          Determine status based on user intent:
+          - "Priority": If the user expresses urgency (e.g. "must go", "dying to try", "need to visit").
+          - "Been": If the user implies they have already visited (e.g. "went to", "visited", "was at").
+          - "Haven't Been": (DEFAULT) For general bookmarks or future plans.
       # https://developers.google.com/maps/documentation/places/web-service/legacy/supported_types
       Tags:
         type: "multi_select"
-        instruction: "Select relevant tags (Travel, Nature, Historical, Urban, etc)."
+        required: false
+        instruction: |
+          Analyze the 'Raw Types' list from the Google Maps data and map them to the Notion Tags below.
+          Use this mapping guide:
+
+          - "Accomodation": campground, lodging
+          - "Bar": bar, liquor_store
+          - "Club": night_club
+          - "Cafe": cafe
+          - "Bakery": bakery
+          - "Restuarant": restaurant, meal_takeaway, meal_delivery
+          - "Park": park
+          - "Sightseeing": tourist_attraction, city_hall, cemetery, embassy, local_government_office, point_of_interest
+          - "Museum": museum, art_gallery
+          - "Place of Worship": church, hindu_temple, mosque, synagogue, place_of_worship
+          - "Shopping": shopping_mall, clothing_store, department_store, store, electronics_store, home_goods_store, book_store, car_dealer, drugstore, furniture_store, hardware_store, jewelry_store, pet_store, shoe_store
+          - "Concert Venu": stadium
+          - "Activity": bowling_alley, casino, spa, movie_theater, beauty_salon, amusement_park, rv_park, zoo, aquarium
+          - "Transit": airport, transit_station, subway_station, bus_station, train_station, light_rail_station, taxi_stand
+          - "Parking": parking
+          - "Study Spot": If the user mentions this is a good study spot
+          - "Service": bank, atm, hospital, doctor, police, post_office, real_estate_agency, hair_care, laundry, gas_station, accounting, car_rental, car_repair, car_wash, courthouse, dentist, electrician, fire_station, funeral_home, insurance_agency, lawyer, locksmith, moving_company, painter, physiotherapist, plumber, roofing_contractor, storage, travel_agency, veterinary_care, pharmacy, florist, bicycle_store, grocery_or_supermarket, supermarket, convenience_store, gym
+          - "View": If the user mentions "good view" or "scenic".
+
+          Not tag at all: If the google maps type is one of the following, you may leave this field empty; however, if the google maps type is one of the following in addition to something else that matches the type, you can choose the other tag if that tag is better. Also, :if the user mentions one of the tags that doesn't have a google maps type associated with it and the google maps type is one of the following, you may select that tag. Here are the google maps types: university, library, school, primary_school, secondary_school, movie_rental
+
+          *If a place matches multiple (e.g. a Cafe inside a Museum), select BOTH tags.*
+
+          Finally, if the user context is very specific about the type of place (e.g. "great cafe spot"), PRIORITIZE that over the google maps types.
+      Address:
+        type: "rich_text"
+        instruction: "The formatted address from Google Maps."
+      City:
+        type: "select"
+        create_new: true
+        instruction: "The city/locality component from the Google Maps address."
+      Country:
+        type: "select"
+        create_new: true
+        instruction: "The country component from the Google Maps address."
+      Notes:
+        type: "rich_text"
+        instruction: "Extract user commentary that is NOT part of the address or name (e.g. '$10 cover', 'Best ceviche', 'Ask for the corner table')."
+      Google Maps URL:
+        type: "url"
+        instruction: "The official Google Maps link of the place."
+      Linked Trip:
+        type: "relation"
+        instruction: |
+          Review the 'AVAILABLE TRIPS' list provided in the context.
+          1. TRIGGER: Only attempt this if the user explicitly mentions a trip (e.g. "for my Cabo trip", "LA trip", "Japan 2025").
+          2. MATCHING: Find the best match from the list.
+             - If user says "LA Trip" and list has "LA to Visit Derek", select "LA to Visit Derek".
+             - If multiple matches exist (e.g. "NYC 2024", "NYC 2025"), select the one with the most recent or future date.
+          3. OUTPUT: Return the EXACT Name of the trip from the list. If no match or no trip mentioned, return null.
 
   # Helpers
   youtube-channels:
@@ -313,3 +376,10 @@ databases:
         type: "rich_text"
       Created Item:
         type: "url"
+  trips:
+    description: "Internal inventory of trips."
+    properties:
+      Name:
+        type: "title"
+      Date:
+        type: "date"
