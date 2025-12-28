@@ -40,6 +40,7 @@ databases:
           2. CHECK TEXT: If no date is in the Context, look for date mentions in the text itself.
           3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
           *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
+          *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025).*
       Status:
         type: "status"
         virtual: true
@@ -244,7 +245,7 @@ databases:
         instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
 
   bookmarks:
-    description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify or 'thisamericanlife.org')."
+    description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify, 'thisamericanlife.org', or Google Maps URL)."
     properties:
       Description:
         type: "title"
@@ -275,6 +276,18 @@ databases:
       Tags:
         type: "multi_select"
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
+
+  places:
+    description: "Just a google maps URL. A place to visit or remember. If the user just describes a place without a google maps url, this is NOT the correct classification"
+    properties:
+      Name:
+        type: "title"
+        required: true
+        instruction: "The specific name of the place (e.g. 'Japan', 'Eiffel Tower'). Use the user's original phrasing."
+      # https://developers.google.com/maps/documentation/places/web-service/legacy/supported_types
+      Tags:
+        type: "multi_select"
+        instruction: "Select relevant tags (Travel, Nature, Historical, Urban, etc)."
 
   # Helpers
   youtube-channels:
