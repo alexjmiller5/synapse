@@ -12,7 +12,8 @@ resource "google_project_service" "services" {
     "artifactregistry.googleapis.com",
     "apigateway.googleapis.com",
     "servicemanagement.googleapis.com",
-    "servicecontrol.googleapis.com"
+    "servicecontrol.googleapis.com",
+    "places-backend.googleapis.com"
   ])
 
   service            = each.value
@@ -37,10 +38,33 @@ resource "google_storage_bucket" "terraform_state" {
   }
 }
 
+# --- API Keys ---
+
+resource "google_apikeys_key" "places_key" {
+  provider     = google-beta
+  name         = "synapse-places-api-key"
+  display_name = "Synapse Places API Key"
+  project      = var.gcp_project_id
+
+  restrictions {
+    api_targets {
+      service = "places-backend.googleapis.com"
+    }
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+# --- Secrets ---
+
 resource "google_secret_manager_secret" "secrets" {
   for_each = toset([
     "gemini-api-key",
+    "spotify-client-id",
+    "spotify-client-secret",
+    "tmdb-api-key",
     "notion-integration-token",
+    "notion-trips-db-id",
     "notion-tasks-db-id",
     "notion-groceries-db-id",
     "notion-cheers-note-last-block-id",
@@ -61,11 +85,7 @@ resource "google_secret_manager_secret" "secrets" {
     "notion-video-games-db-id",
     "notion-quotes-db-id",
     "notion-bookmarks-db-id",
-    "gmail-app-password",
     "notion-logs-db-id",
-    "spotify-client-id",
-    "spotify-client-secret",
-    "tmdb-api-key"
   ])
 
   secret_id = each.value
@@ -75,6 +95,19 @@ resource "google_secret_manager_secret" "secrets" {
   }
 
   depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret" "places_api_key_secret" {
+  secret_id = "google-places-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "places_api_key_version" {
+  secret      = google_secret_manager_secret.places_api_key_secret.id
+  secret_data = google_apikeys_key.places_key.key_string
 }
 
 # --- Eventarc Trigger for Reporter Service ---
