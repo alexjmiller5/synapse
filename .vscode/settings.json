@@ -1,0 +1,5 @@
+{
+  "powerClipper.alwaysExclude": [
+    "**/uv.lock"
+  ]
+}

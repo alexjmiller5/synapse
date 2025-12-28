@@ -156,9 +156,9 @@ def parse_raw_input(raw_text):
                 response_json_schema=PARSER_SCHEMA,
             ),
         )
-        
+
         # LOGGING ADDED: Check raw response text
-        print(f"🔍 RAW PARSER RESPONSE: {repr(response.text)}") 
+        print(f"🔍 RAW PARSER RESPONSE: {repr(response.text)}")
 
         parsed = json.loads(response.text)
         print(f"   ✅ Parsed {len(parsed)} item(s).")
@@ -166,8 +166,8 @@ def parse_raw_input(raw_text):
     except Exception as e:
         print(f"   ⚠️ Parsing failed: {e}. Fallback to raw text.")
         # Only log the raw text if available to avoid cluttering logs on other errors
-        if 'response' in locals() and hasattr(response, 'text'):
-             print(f"   ⚠️ Failed Response Text: {response.text}")
+        if "response" in locals() and hasattr(response, "text"):
+            print(f"   ⚠️ Failed Response Text: {response.text}")
         return [{"core_text": raw_text, "context_notes": ""}]
 
 
@@ -272,7 +272,9 @@ def hydrate_dynamic_options():
             )
     print("✅ Hydration complete.")
 
+
 # --- PROMPT BUILDERS ---
+
 
 def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
@@ -496,7 +498,7 @@ def apply_business_logic(category, data, related_project=None):
     elif category == "youtube-videos":
         if data.get("Status") == "Watched":
             data["Date Watched"] = today_str
-    
+
     elif category == "bookmarks":
         # Check URL for github.com
         if "github.com" in data.get("URL", ""):
@@ -518,8 +520,10 @@ def extract_url(text):
     # 3. [\w-]+\.      -> Domain name (e.g. 'google.')
     # 4. [\w.]{2,}     -> TLD (e.g. 'com', 'co.uk')
     # 5. \S* -> Any trailing path/query
-    match = re.search(r"\b((?:https?://)?(?:www\.)?[\w-]+\.[\w.]{2,}\S*)", text, re.IGNORECASE)
-    
+    match = re.search(
+        r"\b((?:https?://)?(?:www\.)?[\w-]+\.[\w.]{2,}\S*)", text, re.IGNORECASE
+    )
+
     if match:
         url = match.group(1)
         # Fix: Prepend https:// if missing so requests library doesn't fail
@@ -527,6 +531,7 @@ def extract_url(text):
             return f"https://{url}"
         return url
     return None
+
 
 def fetch_web_metadata(url):
     """Fetches Page Title (Preferring Open Graph) AND Body Text."""
@@ -537,21 +542,25 @@ def fetch_web_metadata(url):
         }
         res = requests.get(url, headers=headers, timeout=5)
         res.raise_for_status()
-        
+
         # 1. Scrape Body Text
         full_text = get_text(res.text)
-        cleaned_body = re.sub(r'\s+', ' ', full_text).strip()[:1500]
-        
+        cleaned_body = re.sub(r"\s+", " ", full_text).strip()[:1500]
+
         # 2. Get Title (Strategy: Open Graph -> Standard Title)
-        
+
         # A. Try Open Graph Title first (Usually cleaner/better)
-        og_match = re.search(r'<meta property="og:title" content="(.*?)"', res.text, re.IGNORECASE)
-        
+        og_match = re.search(
+            r'<meta property="og:title" content="(.*?)"', res.text, re.IGNORECASE
+        )
+
         # B. Fallback to standard <title> tag
-        title_match = re.search(r'<title[^>]*>(.*?)</title>', res.text, re.IGNORECASE | re.DOTALL)
-        
+        title_match = re.search(
+            r"<title[^>]*>(.*?)</title>", res.text, re.IGNORECASE | re.DOTALL
+        )
+
         title = "No Title Found"
-        
+
         if og_match:
             title = og_match.group(1).strip()
             print(f"   ✅ Scraped (OG): {title}")
@@ -561,10 +570,15 @@ def fetch_web_metadata(url):
 
         # --- GLOBAL CLEANUP ---
         # 1. Fix HTML entities
-        title = title.replace("–", "-").replace(" ", " ").replace("&amp;", "&").replace("&#39;", "'")
-        
+        title = (
+            title.replace("–", "-")
+            .replace(" ", " ")
+            .replace("&amp;", "&")
+            .replace("&#39;", "'")
+        )
+
         # 2. Remove "GitHub - " prefix (Because GitHub forces this in the title tag)
-        if title.startswith("GitHub - "): 
+        if title.startswith("GitHub - "):
             title = title.replace("GitHub - ", "", 1)
 
         return f"HTML Title: {title}\nPage Content Preview:\n{cleaned_body}..."
@@ -575,6 +589,7 @@ def fetch_web_metadata(url):
         print("   🧹 Triggering cleanup task for failed web scrape...")
         # create_cleanup_task(f"Manual Bookmark Entry (Scrape Failed): {url}", link_url=url)
         return "Error fetching metadata"
+
 
 def get_tal_metadata(url):
     print(f"   ⏳ Fetching URL metadata from: {url}...")
@@ -622,7 +637,7 @@ def get_youtube_metadata(url):
             info = ydl.extract_info(url, download=False)
             handle = info.get("uploader_id", "")
             return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
-            
+
     except Exception as e:
         print(f"   ⚠️ YT Metadata fetch failed: {e}")
         # FALLBACK: Create Task
@@ -939,19 +954,23 @@ def execute_logic(category, data, inventory_map=None):
         # Map 'Name' vs 'Title' depending on DB
         search_key = "Name" if category == "groceries" else "Title"
         search_val = data.get(search_key)
-        
+
         if category == "groceries" and inventory_map and search_val in inventory_map:
-             page_id = inventory_map[search_val]
-             print(f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating...")
-             return update_status(page_id, data.get("Status")).get("url")
-        
+            page_id = inventory_map[search_val]
+            print(
+                f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating..."
+            )
+            return update_status(page_id, data.get("Status")).get("url")
+
         # For Fun Activities, perform a smart search
         if category == "fun-activities":
             # Check for duplicates first
             existing_id = fetch_existing_page(category, search_val, key="Title")
             if existing_id:
-                 print(f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status...")
-                 return update_status(existing_id, data.get("Status")).get("url")
+                print(
+                    f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status..."
+                )
+                return update_status(existing_id, data.get("Status")).get("url")
 
             # Create new
             print(f"   ✨ Creating new {category} page.")
@@ -961,8 +980,10 @@ def execute_logic(category, data, inventory_map=None):
             # Check for Location Ambiguity (After creation, so we have a link)
             if not data.get("Location"):
                 print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
-                create_cleanup_task(f"Classify Location for: {search_val}", link_url=created_url)
-            
+                create_cleanup_task(
+                    f"Classify Location for: {search_val}", link_url=created_url
+                )
+
             return created_url
 
         print(f"   ✨ Creating new {category} page.")
@@ -972,7 +993,7 @@ def execute_logic(category, data, inventory_map=None):
     elif category == "youtube-videos":
         props = build_notion_properties(category, data)
         target_url = data.get("Video URL")
-        
+
         # A. DEDUPLICATION CHECK (Exact URL Match)
         if target_url:
             db_id = get_db_id("youtube-videos")
@@ -984,42 +1005,42 @@ def execute_logic(category, data, inventory_map=None):
                     body={
                         "filter": {
                             "property": "Video URL",
-                            "url": {"equals": target_url}
+                            "url": {"equals": target_url},
                         }
-                    }
+                    },
                 )
-                
+
                 # If found, update status instead of creating new
                 if resp.get("results"):
                     existing_page = resp["results"][0]
                     eid = existing_page["id"]
                     print(f"   ✅ Video already exists: {target_url} (ID: {eid})")
-                    
+
                     # Update status if the user implies a change (e.g. "Watched")
                     # Default is "Watched", so we generally want to ensure it's marked as such if re-submitted
                     return update_status(eid, data.get("Status", "Watched")).get("url")
-                    
+
             except Exception as e:
                 print(f"   ⚠️ YouTube duplicate check failed: {e}")
 
         # B. CHANNEL LINKING (Only if new)
         channel_name = data.get("channel_handle", "").replace("@", "")
-        
+
         # Search for Channel in Relation DB
         cid = fetch_existing_page("youtube-channels", channel_name, "Name")
-        if cid: 
+        if cid:
             print(f"   -> Linked Channel ID: {cid}")
             props["Channel"] = {"relation": [{"id": cid}]}
-            
+
         # Create Page
         resp = create_page(category, props)
         created_url = resp.get("url")
 
         # Cleanup Task if Channel Missing
-        if not cid: 
+        if not cid:
             print(f"   -> Channel {channel_name} not found.")
             create_cleanup_task(f"Add YT Channel: {channel_name}", link_url=created_url)
-            
+
         return created_url
 
     # --- 3. MOVIES / TV ---
@@ -1029,18 +1050,24 @@ def execute_logic(category, data, inventory_map=None):
 
         if eid:
             print(f"   -> Found existing {category} {eid}...")
-            significant_statuses = ["Priority", "Finished", "In Progress", "Watched Parts", "Gave Up"]
+            significant_statuses = [
+                "Priority",
+                "Finished",
+                "In Progress",
+                "Watched Parts",
+                "Gave Up",
+            ]
             if status in significant_statuses:
                 print(f"   -> Updating status to {status}")
                 return update_status(eid, status).get("url")
             return f"https://www.notion.so/{eid.replace('-','')}"
 
         return create_page(category, build_notion_properties(category, data)).get("url")
-    
+
     # --- 4. BOOKMARKS (With URL Deduplication) ---
     elif category == "bookmarks":
         target_url = data.get("URL")
-        
+
         # A. Check for Duplicates (Exact URL Match)
         if target_url:
             db_id = get_db_id("bookmarks")
@@ -1049,12 +1076,7 @@ def execute_logic(category, data, inventory_map=None):
                 resp = notion.request(
                     path=f"databases/{db_id}/query",
                     method="POST",
-                    body={
-                        "filter": {
-                            "property": "URL",
-                            "url": {"equals": target_url}
-                        }
-                    }
+                    body={"filter": {"property": "URL", "url": {"equals": target_url}}},
                 )
                 if resp.get("results"):
                     print(f"   ✅ Bookmark already exists: {target_url}")
@@ -1068,13 +1090,13 @@ def execute_logic(category, data, inventory_map=None):
             if isinstance(tags, list) and "Github" not in tags:
                 tags.append("Github")
                 data["Tags"] = tags
-                
+
         return create_page(category, build_notion_properties(category, data)).get("url")
 
     # --- 5. PEOPLE ---
     elif category == "people":
         return create_page(category, build_notion_properties(category, data)).get("url")
-        
+
     # --- 6. BUCKET LIST ---
     elif category == "bucket-list":
         return create_page(category, build_notion_properties(category, data)).get("url")
@@ -1187,7 +1209,7 @@ def run_pipeline(
                 note_content = extracted.get("Name", raw_text)
                 # Don't append user context - that's just for categorization
                 # if user_context:
-                    # note_content += f" ({user_context})"
+                # note_content += f" ({user_context})"
                 append_note(eid, note_content)
                 url = f"https://www.notion.so/{eid.replace('-','')}"
                 log_payload["Extractor_Data"]["Action"] = "Appended"
@@ -1195,13 +1217,17 @@ def run_pipeline(
                 url = execute_logic(category, extracted)
         else:
             url = execute_logic(category, extracted, inventory_map)
-            
+
             if url and url_context:
-                is_scrape_error = category == "bookmarks" and "Error fetching metadata" in url_context
+                is_scrape_error = (
+                    category == "bookmarks" and "Error fetching metadata" in url_context
+                )
                 is_yt_error = category == "youtube-videos" and "YT Error" in url_context
-                
+
                 if is_scrape_error or is_yt_error:
-                    print(f"   🧹 Creating cleanup task for {category} failure (linked to new page)...")
+                    print(
+                        f"   🧹 Creating cleanup task for {category} failure (linked to new page)..."
+                    )
                     create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
         log_job_outcome(
@@ -1212,7 +1238,7 @@ def run_pipeline(
         print(f"❌ Pipeline Error: {e}")
         log_job_outcome(
             full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload
-        ) 
+        )
         append_to_quick_notes(full_str_for_log)
 
 
