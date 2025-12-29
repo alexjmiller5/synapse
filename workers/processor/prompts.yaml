@@ -12,7 +12,7 @@ categorize_template: |
 
   --- URL HANDLING (HIGHEST PRIORITY) ---
   If the input contains a URL or a Domain (e.g. `http...` OR `example.com`):
-  1. **Google Maps URL** -> "places"
+  1. **Google Maps URL** (includes `maps.google.com`, `goo.gl`, `maps.app.goo.gl`, `googleusercontent.com/maps`) -> "places"
   2. **YouTube URL** -> "youtube-videos"
   3. **Spotify / ThisAmericanLife URL** -> "podcasts"
   4. **Other URLs**:

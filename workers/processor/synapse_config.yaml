@@ -381,5 +381,5 @@ databases:
     properties:
       Name:
         type: "title"
-      Date:
+      Dates:
         type: "date"
