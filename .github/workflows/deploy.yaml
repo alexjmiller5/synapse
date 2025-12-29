@@ -61,14 +61,14 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: intaker
+          - name: synapse-intaker
             path: services/intaker
             entry_point: intaker
             trigger_http: true
-          - name: reporter
+          - name: synapse-reporter
             path: services/reporter
             entry_point: report
-          - name: processor
+          - name: synapse-processor
             path: workers/processor
             entry_point: processor
 
