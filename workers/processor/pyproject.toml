@@ -2,7 +2,7 @@
 name = "synapse-processor"
 version = "1.0.0"
 description = "Worker for processing Synapse tasks"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 authors = [{name = "Alex Miller", email = "amiller06880@gmail.com"}]
 
 dependencies = [
