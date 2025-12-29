@@ -2,6 +2,7 @@ import functions_framework
 import base64
 import json
 
+
 @functions_framework.http
 def report(request):
     """
@@ -13,13 +14,13 @@ def report(request):
     # The Pub/Sub message is sent by Eventarc in the HTTP request body
     try:
         data = request.get_json()
-        
+
         # The actual data is base64-encoded inside the 'message' object
-        message_data_str = base64.b64decode(data['message']['data']).decode('utf-8')
+        message_data_str = base64.b64decode(data["message"]["data"]).decode("utf-8")
         message_json = json.loads(message_data_str)
-        
+
         print(f"Received Pub/Sub message: {message_json}")
-        
+
         # Your real reporter logic will go here
         # (e.g., query databases, send email)
 

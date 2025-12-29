@@ -36,8 +36,10 @@ Synapse is a serverless application designed to eliminate the friction of manual
 
 ### Project Setup
 
+#### Account Creation and Secrets Configuration
+
 1. Create a Google Cloud Project
-2. Save the settings to the config.yml file as below
+2. Save the settings to the config.yaml file as below
 
 ```yaml
 gcp_project_id: <your-gcp-project-id>
@@ -46,7 +48,52 @@ region: <your-gcp-region>
 github_repo: <your-github-repo>
 ```
 
-1. Generate and set the secrets via the set secrets script
+##### Creating terraform backend bucket and migrating state for initial setup
+
+1. **Authenticate as Admin:**
+
+    ```bash
+    gcloud auth application-default login --project=$(yq e '.gcp_project_id' config.yaml)
+    ```
+
+2. **Modify Terraform Code:**
+
+    * Commented out the entire `backend "gcs" {}` block in `infrastructure/terraform.tf`.
+
+3. **Initialize Local Backend:**
+
+    ```bash
+    terraform init
+    ```
+
+4. **Apply Initial Infrastructure:**
+
+    ```bash
+    terraform apply
+    ```
+
+5. **Modify Terraform Code:**
+    * Un-commented the `backend "gcs" {}` block in `infrastructure/terraform.tf`.
+
+6. **Migrate State to GCS:**
+
+    ```bash
+    terraform init -migrate-state \
+      -backend-config="bucket=$(yq e '.google_cloud_project_id' ../config.yaml)-terraform-state" \
+      -backend-config="prefix=synapse"
+    ```
+
+    * Confirmed `yes` at the prompt.
+
+7. **Clean Up Local State:**
+
+    ```bash
+    rm terraform.tfstate
+    ```
+
+<!-- Gotta add however I got the ci / cd auth working cause that's part of the bootstrappinga -->
+
+3. Generate and set the secrets via the set secrets script
 
 ```bash
 ./scripts/set-secrets.sh
@@ -57,7 +104,7 @@ github_repo: <your-github-repo>
 1. **Set up local development environment :**
 
  ```bash
- eval $(./scripts/setup_local_env.sh)
+ ./scripts/setup_local_env.sh
  ```
 
 1. **Test Functionality Locally:**
@@ -65,7 +112,8 @@ github_repo: <your-github-repo>
 - **Run the function(s) you are interested in testing:**
 
 ```bash
-uv run functions-framework --target=<name-of-python-function> --source=<path-to-python-service> --debug
+cd <python-service-directory>
+uv run functions-framework --target=<name-of-python-function> --source=<python-service-main-file> --debug
 ```
 
 - **Add the following to your shell's startup file:**
@@ -158,7 +206,7 @@ chmod +x ./scripts/set-secrets.sh
 ./scripts/set-secrets.sh
 ```
 
-### Config variables in config.yml
+### Config variables in config.yaml
 
 - `gmail_sender_email`: Gmail address for sending reports
 - `gmail_recipient_email`: Email to receive reports
@@ -224,13 +272,13 @@ uv add --package <workspace-member-name> <package-name>
 - [x] Let the cloud functions do most things in one go. They’re really cheap and the logic for setting up aynschronous api calls and responses looks really complicated. My singular preocessor function might just be good for all the logic. I think the Gemini and notion APIs will be pretty much fast enough
 - [ ] I can still use some kinda script to validate that the requests actually make sense with some kinda json validator. Maybe I can start with a template for adding a new page to a database (this’ll be the most common request) and patching the quick notes as the fallback. Those are the two key capabilities and ai doesn’t really have to write that json instead of writing json and using requests actually ill just use the notion client for python and give it the proper input for allxthe properties I need. Just have to convert it from the ais way of interpreting it vs the programmatic json notion client way of seeing the data
 - [ ] add dependabot to keep dependencies up to date functionality \-- this would be a nice to have functionality that I'll just let sit there and eventually old dependencies will be updated automatically over time and I'll learn about how it works
-- [ ] Add terragrunt to be able to manage the version of terraform in one place (the config.yml) instead of two \-- also it gives flexibility in the future if i have mulitple environments. It also has an autoinit feature where I don't have to run terraform init
+- [ ] Add terragrunt to be able to manage the version of terraform in one place (the config.yaml) instead of two \-- also it gives flexibility in the future if i have mulitple environments. It also has an autoinit feature where I don't have to run terraform init
 - [ ] terraform version is managed via the main.tf file in addition to the github actions env var \-- those need to be kept in sync. Other dependency versions are just kept in the pyproject.toml
 - [ ] create an automated solution / docs for updating the secrets in GCP so that it's documented and not solely based manually updating them in the UI
 - [ ] cut down the scripts in the scripts folder. \-- they are kind of verbose with a lot of comments and I haven't looked through them in depth
 - [ ] set up a container only keep latest 10 images in artifact registry to save on costs
 - [ ] eventually I should set up the services to just call cloud run jobs in the background instead of cloud functions. This would be more scalable and I wouldn't have to worry about function timeouts. But for now functions are fine
-- [ ] eventually make environment variables in deploy.yml to be uppercase since they're lowercase rn since they take from the config.yml file
+- [ ] eventually make environment variables in deploy.yaml to be uppercase since they're lowercase rn since they take from the config.yaml file
 - [ ] Add something about how when you add new config variables you gotta rerun the setup script to get them in the tfvars file
 - [ ] refactor the setup local env script to work with python file structure / figure out how the functions framework works with local development and set it up with my project's structure. Do i want to have a bunch of duped pyproject.tomls???
 - [x] Add authentication to the cloud function so that not just anyone can ping it there's a firebase api and something else i'll need \-- i'll add this after i get the pipeline working
@@ -260,6 +308,9 @@ uv add --package <workspace-member-name> <package-name>
 - [ ] add checks at the beginning of my function to make sure that the synapse_config.yaml matches the actual notion db structure -- this way if i change something in notion and forget to update the config file, the function will error out and maybe send me an email? and notify me instead of just failing silently or misbehaving
 - [ ] Make a standardized duplicate checking function instead of specific one for each db
 - [ ] Separate the infra into a separate repo
+- [ ] Fix the requirements.txt to use the global lockfile with the dependencies from the specific module instead of exporting the pypojrect.toml which just has minimum versions
+- [ ] migrate from cloud run to cloud run v2
+- [ ] Switch to docker instead of cloud run's built python image
 
 ### **Feature Related Stuff**
 
@@ -271,6 +322,7 @@ uv add --package <workspace-member-name> <package-name>
 - [ ] Get ai to help me make my giant conditional statements into a flowchart so I can see high level how requests are being processed and how the decisions are made by ai. Some decsions that are sticking out to me: intent getting from the ai, getting from the ai's knowledge (i.e. asking it to fill in the producer of a movie), summarizing a title/description, then this all plays into either page creation or page modification
 - [ ] Fetch the notes of the project in addition to the titles to make sure the ai will be able to have the right when determining if a raw text belongs with a project
 - [ ] Refactor this readme to be a clear guide on how to setup synapse from the ground up if nothing was created because rn there's a lot of stuff that's not actually useful or specific to my implementation of the project. Then there can be a section about how this project is designed and a section about how to use it well
+- [ ] Rewrite the database getting to use pagination for dbs over 100 pages
 
 ## Synapse Prompting Guide
 
