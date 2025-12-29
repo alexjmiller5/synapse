@@ -77,8 +77,7 @@ jobs:
 
       - name: Load config
         run: |
-          yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yaml >> $GITHUB_ENV
-
+          yq e 'to_entries | .[] | select(.value | kind == "scalar") | .key + "=" + .value' config.yaml >> $GITHUB_ENV
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
