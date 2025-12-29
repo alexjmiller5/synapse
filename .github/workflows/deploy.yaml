@@ -1,0 +1,115 @@
+name: Deploy Synapse Application
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "workers/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "config.yaml"
+      - ".github/workflows/deploy.yaml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: intaker
+            path: services/intaker
+          - name: reporter
+            path: services/reporter
+          - name: processor
+            path: workers/processor
+    defaults:
+      run:
+        working-directory: ${{ matrix.service.path }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install service + test deps
+        run: |
+          echo "TODO: When implement tests, install test dependencies here!"
+        # uv sync --frozen --all-extras
+
+      - name: Run tests
+        run: |
+          echo "TODO: Implement tests!"
+        # TODO: Implement tests
+        # uv run pytest tests/ -v --cov=src --cov-report=term-missing
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      matrix:
+        service:
+          - name: intaker
+            path: services/intaker
+            entry_point: intaker
+            trigger_http: true
+          - name: reporter
+            path: services/reporter
+            entry_point: report
+          - name: processor
+            path: workers/processor
+            entry_point: processor
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Load config
+        run: |
+          yq e 'to_entries | .[] | select(.value | type != "object" and type != "array") | .key + "=" + .value' config.yaml >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Generate requirements.txt
+        run: |
+            uv export \
+              --frozen \
+              --format requirements-txt \
+              --no-hashes \
+              --package "${{ matrix.service.name }}" \
+              --output-file "${{ matrix.service.path }}/requirements.txt"
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: "projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          service_account: "deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
+
+      - name: Deploy ${{ matrix.service.name }}
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ matrix.service.name }}
+          region: ${{ env.region }}
+          source: ${{ matrix.service.path }}
+          env_vars: |
+            GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
+          flags: >-
+            --function=${{ matrix.service.entry_point }}
+            --no-allow-unauthenticated
