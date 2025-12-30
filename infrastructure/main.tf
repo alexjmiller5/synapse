@@ -286,7 +286,7 @@ resource "google_project_iam_member" "deploy_sa_artifact_writer" {
 }
 resource "google_project_iam_member" "terraform_sa_roles" {
   project = local.config.gcp_project_id
-  role    = "roles/run.admin"
+  role    = "roles/editor"
   member  = google_service_account.terraform_sa.member
 }
 resource "google_project_iam_member" "deploy_sa_run_admin" {
