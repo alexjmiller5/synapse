@@ -213,12 +213,12 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 - `github_repo`: GitHub repository URL
 - `region`: GCP region for cloud resources
 
-### Adding New Notion Databases in `synapse_config.yaml`
+### Adding New Notion Databases in `databases.yaml`
 
 To add a new Notion database to Synapse:
 
 1. Add the Database ID to Google Secret Manager as `notion-<category>-db-id`.
-2. Add the category definition to `synapse_config.yaml` using the schema below.
+2. Add the category definition to `databases.yaml` using the schema below.
 
 #### 1. Database Level
 
@@ -345,13 +345,14 @@ uv add --package <workspace-member-name> <package-name>
 - [ ] rewrok the setuplocalenv script to use uv correctly -- idrk how it works tbh there's uv sync, uv add, uv pip install, where does the venv get created? Also how does the pyproject.toml work with having various projects? Should they even have one at the root level? Maybe not? But it seems like maybe lmaooo
 - [ ] It would be great to not be hardcoding my helper dbs --the logs and youtube-channels, but it is what it is for now
 - [ ] make it so the hydration only happens on a per category/db basis after classification is done so it doesn't have to hydrate everything all at the beginning
-- [ ] add checks at the beginning of my function to make sure that the synapse_config.yaml matches the actual notion db structure -- this way if i change something in notion and forget to update the config file, the function will error out and maybe send me an email? and notify me instead of just failing silently or misbehaving
+- [ ] add checks at the beginning of my function to make sure that the databases.yaml matches the actual notion db structure -- this way if i change something in notion and forget to update the config file, the function will error out and maybe send me an email? and notify me instead of just failing silently or misbehaving
 - [ ] Make a standardized duplicate checking function instead of specific one for each db
 - [ ] Separate the infra into a separate repo
 - [ ] Fix the requirements.txt to use the global lockfile with the dependencies from the specific module instead of exporting the pypojrect.toml which just has minimum versions
 - [ ] migrate from cloud run to cloud run v2
 - [ ] Switch to docker instead of cloud run's built python image
 - [ ] Add a check to my deployment pipeline to make sure when it deploys the cloud run services that it's just updating existing services - not creating new ones - the functions they update must also specifically be the ones created by the terraform sa because that's the way I want to do this
+- [ ] move db ids from being secrets to going into the databases.yaml file
 
 ### **Feature Related Stuff**
 

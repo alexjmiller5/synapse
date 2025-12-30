@@ -1,7 +1,7 @@
 import json
 from datetime import date
 from google.genai import types
-from config import CONFIG, PROMPTS
+from config import DATABASES, PROMPTS
 from clients import gemini_client
 
 # ==========================================
@@ -52,7 +52,7 @@ CATEGORY_SCHEMA_CLASSIFY = {
     "properties": {
         "category": {
             "type": "string",
-            "enum": list(CONFIG.get("databases", {}).keys()),
+            "enum": list(DATABASES.get("databases", {}).keys()),
         },
         "related_project": {"type": "string"},
     },
@@ -96,7 +96,7 @@ def parse_raw_input(raw_text):
 def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
     category_lines = []
-    for cat, details in CONFIG.get("databases", {}).items():
+    for cat, details in DATABASES.get("databases", {}).items():
         if cat in ["youtube-channels", "logs"]:
             continue
         desc = details.get("description", "No description.")
@@ -119,7 +119,7 @@ def generate_extraction_prompt(
     """
     Builds extraction prompt using instructions, valid options, and contexts.
     """
-    db_config = CONFIG.get("databases", {}).get(category)
+    db_config = DATABASES.get("databases", {}).get(category)
     if not db_config:
         return "Error: Unknown category"
 
@@ -179,7 +179,7 @@ def generate_extraction_prompt(
 
 def get_gemini_schema(category):
     """Generates JSON Schema from YAML + Runtime Options."""
-    db_config = CONFIG.get("databases", {}).get(category)
+    db_config = DATABASES.get("databases", {}).get(category)
     if not db_config:
         return {"type": "object", "properties": {"Name": {"type": "string"}}}
 
