@@ -10,11 +10,11 @@ paths:
   /process:
     post:
       summary: 'Intake Requests'
-      operationId: 'intaker'
+      operationId: 'synapse-intaker'
       x-google-backend:
         # This "DUMMY_URL" will be replaced by the CI/CD pipeline
-        address: ${intaker_service_url}
-        jwt_audience: ${intaker_service_url}
+        address: ${synapse_intaker_service_url}
+        jwt_audience: ${synapse_intaker_service_url}
       security:
         - api_key_query: []
       responses:
