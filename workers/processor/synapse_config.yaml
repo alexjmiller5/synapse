@@ -327,23 +327,28 @@ databases:
           Finally, if the user context is very specific about the type of place (e.g. "great cafe spot"), PRIORITIZE that over the google maps types.
       Address:
         type: "rich_text"
+        required: true
         instruction: "The formatted address from Google Maps."
       City:
         type: "select"
+        required: true
         create_new: true
         instruction: "The city/locality component from the Google Maps address."
       Country:
         type: "select"
+        required: true
         create_new: true
         instruction: "The country component from the Google Maps address."
       Notes:
         type: "rich_text"
+        required: false
         instruction: "Extract user commentary that is NOT part of the address or name (e.g. '$10 cover', 'Best ceviche', 'Ask for the corner table')."
       Google Maps URL:
         type: "url"
         instruction: "The official Google Maps link of the place."
       Linked Trip:
         type: "relation"
+        required: false
         instruction: |
           Review the 'AVAILABLE TRIPS' list provided in the context.
           1. TRIGGER: Only attempt this if the user explicitly mentions a trip (e.g. "for my Cabo trip", "LA trip", "Japan 2025").

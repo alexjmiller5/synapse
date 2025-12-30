@@ -150,7 +150,7 @@ def resolve_final_url(url):
     print(f"   🔍 Resolving URL: {url}")
     try:
         # We use a HEAD request to follow redirects without downloading body
-        response = requests.head(url, allow_redirects=True, timeout=5)
+        response = requests.get(url, allow_redirects=True, timeout=5)
         print(f"   ✅ Resolved URL to: {response.url}")
         return response.url
     except Exception as e:

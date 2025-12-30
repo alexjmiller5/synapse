@@ -201,15 +201,20 @@ def log_job_outcome(
     if not notion or not log_id:
         return
 
+    ai_summary_text = ""
+    if ai_data:
+        try:
+            ai_summary_text = json.dumps(ai_data, indent=2, ensure_ascii=False)[:2000]
+        except:
+            ai_summary_text = str(ai_data)[:2000]
+
     props = {
         "Raw Input": _notion_title(raw_text[:2000]),
         "Code Execution": _notion_status(status),
         "Category": _notion_select(category),
         "Reported": {"checkbox": False},
         "Error Details": _notion_rich_text(str(details)[:2000]),
-        "AI Summary": _notion_rich_text(
-            json.dumps(ai_data, indent=2)[:2000] if ai_data else ""
-        ),
+        "AI Summary": _notion_rich_text(ai_summary_text),
     }
     if created_url:
         props["Created Item"] = {"url": created_url}

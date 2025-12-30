@@ -58,7 +58,7 @@ github_repo: <your-github-repo>
 
 2. **Modify Terraform Code:**
 
-    * Commented out the entire `backend "gcs" {}` block in `infrastructure/terraform.tf`.
+    - Commented out the entire `backend "gcs" {}` block in `infrastructure/terraform.tf`.
 
 3. **Initialize Local Backend:**
 
@@ -73,7 +73,7 @@ github_repo: <your-github-repo>
     ```
 
 5. **Modify Terraform Code:**
-    * Un-commented the `backend "gcs" {}` block in `infrastructure/terraform.tf`.
+    - Un-commented the `backend "gcs" {}` block in `infrastructure/terraform.tf`.
 
 6. **Migrate State to GCS:**
 
@@ -83,7 +83,7 @@ github_repo: <your-github-repo>
       -backend-config="prefix=synapse"
     ```
 
-    * Confirmed `yes` at the prompt.
+    - Confirmed `yes` at the prompt.
 
 7. **Clean Up Local State:**
 
@@ -93,7 +93,7 @@ github_repo: <your-github-repo>
 
 <!-- Gotta add however I got the ci / cd auth working cause that's part of the bootstrappinga -->
 
-3. Generate and set the secrets via the set secrets script
+1. Generate and set the secrets via the set secrets script
 
 ```bash
 ./scripts/set-secrets.sh
@@ -169,7 +169,7 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 
 ## Configuration
 
-### Getting an API Key for Shortcuts
+### Getting an API Key for Receptors
 
 - Run the following commands to create or find and print the processor service API Key
 
@@ -214,6 +214,49 @@ chmod +x ./scripts/set-secrets.sh
 - `github_repo`: GitHub repository URL
 - `region`: GCP region for cloud resources
 
+### Adding New Notion Databases in `synapse_config.yaml`
+
+To add a new Notion database to Synapse:
+
+1. Add the Database ID to Google Secret Manager as `notion-<category>-db-id`.
+2. Add the category definition to `synapse_config.yaml` using the schema below.
+
+#### 1. Database Level
+
+| Field | Required | Usage |
+| :--- | :--- | :--- |
+| **`description`** | ✅ Yes | **The Classifier Prompt.** Used by the AI to decide if an incoming item belongs to this category. Be descriptive (e.g., *"A movie to watch..."* vs *"A generic task..."*). |
+| **`properties`** | ✅ Yes | A dictionary mapping **Exact Notion Column Names** to their configuration rules. |
+
+---
+
+#### 2. Property Level
+
+Each key under `properties` must match the column name in Notion exactly (case-sensitive).
+
+##### Core Fields
+
+- **`type`**: *(String)* Defines how the data is sent to Notion and how the AI validates it.
+  - **Options:** `title`, `rich_text`, `url`, `date`, `select`, `multi_select`, `status`, `relation`, `checkbox`.
+- **`required`**: *(Boolean)*
+  - `true`: The AI is forced to generate a value for this field.
+  - `false` (Default): The AI may leave this field empty/null if the user didn't provide info.
+- **`instruction`**: *(String)* **The Extraction Prompt.** Tells the AI how to extract or format this specific data.
+  - *Tip:* You can use placeholders `{current_date}` and `{raw_text}`.
+
+##### Logic Control
+
+- **`virtual`**: *(Boolean)*
+  - `true`: **Hides this field from the AI.** The AI will not see or output this field. It is populated strictly by Python code (e.g., `Date Created`, calculated statuses).
+  - `false` (Default): The AI attempts to extract this data.
+- **`allowlist`**: *(List of Strings)*
+  - Defines valid options for `select`, `multi_select`, or `status` types.
+  - The AI is strictly restricted to these values (it becomes an `enum` in the JSON schema).
+  - If this is omitted, the AI may select any of the valid options defined in Notion.
+- **`create_new`**: *(Boolean)*
+  - `true`: overrides the strictness of `allowlist`. The AI is shown the existing options but is **allowed** to generate new strings (useful for dynamic Tags/Cities).
+  - `false` (Default): The AI must pick from the `allowlist` or the runtime inventory; if it invents a new tag, validation will fail.
+
 ---
 
 ## Deployment
@@ -249,8 +292,6 @@ gcloud api-gateway gateways describe processor-gateway \
 ```bash
 uv add --package <workspace-member-name> <package-name>
 ```
-
----
 
 ---
 
