@@ -1,21 +1,22 @@
-resource "google_api_gateway_api" "processor_api" {
+resource "google_api_gateway_api" "intaker_api" {
   provider = google-beta
   project  = local.config.gcp_project_id
-  api_id   = "processor-api"
+  api_id   = "intaker-api"
 
   depends_on = [google_project_service.services]
 }
 
-resource "google_api_gateway_api_config" "processor_api_config" {
+# 2. The Config (Specific to the Intaker spec)
+resource "google_api_gateway_api_config" "intaker_api_config" {
   provider = google-beta
   project  = local.config.gcp_project_id
-  api      = google_api_gateway_api.processor_api.api_id
+  api      = google_api_gateway_api.intaker_api.api_id
 
   api_config_id_prefix = "intaker-config-"
 
   openapi_documents {
     document {
-      path = "processor-spec.yaml"
+      path = "intaker-spec.yaml"
       contents = base64encode(templatefile("${path.root}/../api-gateways/intaker-spec-template.yaml", {
         intaker_service_url = module.intaker_service.service_url
       }))
@@ -33,7 +34,7 @@ resource "google_api_gateway_api_config" "processor_api_config" {
   }
 
   depends_on = [
-    google_api_gateway_api.processor_api,
+    google_api_gateway_api.intaker_api,
     module.intaker_service
   ]
 }
@@ -41,17 +42,17 @@ resource "google_api_gateway_api_config" "processor_api_config" {
 resource "google_project_service" "api_gateway_managed_service" {
   provider           = google-beta
   project            = local.config.gcp_project_id
-  service            = google_api_gateway_api.processor_api.managed_service
+  service            = google_api_gateway_api.intaker_api.managed_service
   disable_on_destroy = false
 }
 
-resource "google_api_gateway_gateway" "processor_gateway" {
+resource "google_api_gateway_gateway" "intaker_gateway" {
   provider   = google-beta
   project    = local.config.gcp_project_id
   region     = local.config.region
-  api_config = google_api_gateway_api_config.processor_api_config.id
-  gateway_id = "processor-gateway"
+  api_config = google_api_gateway_api_config.intaker_api_config.id
+  gateway_id = "intaker-gateway"
 
-  # This depends on the service being enabled, which depends on everything else
-  depends_on = [google_project_service.api_gateway_managed_service]
+  # Depends on the TIMER, not the service directly
+  depends_on = [time_sleep.wait_for_api_service]
 }
