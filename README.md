@@ -175,8 +175,8 @@ terraform plan -var="project_id=your-gcp-project-id" -var="region=your-gcp-regio
 
 ```bash
 # --- Configuration ---
-export KEY_DISPLAY_NAME="Processor Gateway Key"
-export API_ID="processor-api" # TODO:The ID set in the terraform code (Should be moved to the config.yaml)
+export KEY_DISPLAY_NAME="Intaker Gateway Key"
+export API_ID="intaker-api" # TODO:The ID set in the terraform code (Should be moved to the config.yaml)
 
 # --- Execution ---
 
