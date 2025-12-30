@@ -96,7 +96,7 @@ github_repo: <your-github-repo>
 1. Generate and set the secrets via the set secrets script
 
 ```bash
-./scripts/set-secrets.sh
+./scripts/set_secrets.sh
 ```
 
 ### Local Development
@@ -154,7 +154,7 @@ syn-local "Your test input text here"
 - **Send local batch requests (fill the `local-requests.txt` file with your requests separated by newlines):**
 
 ```bash
-uv run --with requests send-local-requests.py local-requests.txt
+uv run --with requests send_local_requests.py local_requests.txt
 ```
 
 - **Test infrastructure changes with Terraform:**
@@ -202,8 +202,7 @@ gcloud services api-keys get-key-string "$KEY_NAME" --format="value(keyString)"
 Use the scripts/manage_secrets.sh script to create and update secrets in Google Secret Manager.
 
 ```bash
-chmod +x ./scripts/set-secrets.sh
-./scripts/set-secrets.sh
+./scripts/set_secrets.sh
 ```
 
 ### Config variables in config.yaml
