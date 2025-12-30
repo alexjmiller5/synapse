@@ -23,8 +23,6 @@ jobs:
   terraform:
     name: Terraform
     runs-on: ubuntu-latest
-    outputs:
-      tfplanExitCode: ${{ steps.tf-plan.outputs.exitcode }}
 
     permissions:
       contents: read
@@ -34,7 +32,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v5
 
-    - name: Load Configuration from yaml
+    - name: Load config into deployment environment
       run: |
         yq e 'to_entries | .[] | select(.value | (tag != "!!map" and tag != "!!seq")) | .key + "=" + .value' config.yaml >> $GITHUB_ENV
 

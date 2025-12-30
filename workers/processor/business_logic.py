@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from config import CONFIG
+from config import DATABASES
 from gcp_secrets import get_db_id
 from clients import notion
 from notion_utils import (
@@ -83,7 +83,7 @@ def fetch_property_options(db_id, prop_name):
 
 def hydrate_dynamic_options():
     print("🔄 Hydrating Options...")
-    for category, details in CONFIG.get("databases", {}).items():
+    for category, details in DATABASES.get("databases", {}).items():
         if category in ["logs", "youtube-channels"]:
             continue
         db_id = get_db_id(category)

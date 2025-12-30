@@ -158,7 +158,7 @@ resource "google_pubsub_topic" "reporter_topic" {
 }
 
 resource "google_pubsub_topic" "processor_topic" {
-  name       = "synapse-processor"
+  name       = local.config.processor_topic_name
   depends_on = [google_project_service.services]
 }
 
