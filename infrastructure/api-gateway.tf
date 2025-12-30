@@ -18,7 +18,7 @@ resource "google_api_gateway_api_config" "intaker_api_config" {
     document {
       path = "intaker-spec.yaml"
       contents = base64encode(templatefile("${path.root}/../api-gateways/intaker-spec-template.yaml", {
-        intaker_service_url = module.intaker_service.service_url
+        synapse_intaker_service_url = module.intaker_service.service_url
       }))
     }
   }
