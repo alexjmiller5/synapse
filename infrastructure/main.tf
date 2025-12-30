@@ -389,7 +389,7 @@ resource "google_service_account_iam_member" "cloud_build_sa_user" {
 module "intaker_service" {
   source = "./modules/cloud-service"
 
-  name                  = "intaker"
+  name                  = "synapse-intaker"
   location              = local.config.region
   gcp_project_id        = local.config.gcp_project_id
   service_account_email = google_service_account.function_sa.email
@@ -405,7 +405,7 @@ module "intaker_service" {
 module "reporter_service" {
   source = "./modules/cloud-service"
 
-  name                  = "reporter"
+  name                  = "synapse-reporter"
   location              = local.config.region
   gcp_project_id        = local.config.gcp_project_id
   service_account_email = google_service_account.function_sa.email
@@ -420,7 +420,7 @@ module "reporter_service" {
 module "processor_worker" {
   source = "./modules/cloud-service"
 
-  name                  = "processor"
+  name                  = "synapse-processor"
   location              = local.config.region
   gcp_project_id        = local.config.gcp_project_id
   service_account_email = google_service_account.function_sa.email
