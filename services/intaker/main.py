@@ -7,7 +7,7 @@ from google.cloud import pubsub_v1
 # --- Global Config ---
 # TODO: remove hardcoded configuration and have it point back to conifg.yaml. This will be complicated given that the deployment only really looks at main.py. Also not sure what the best practices are here in general but I want the SSOT method -- something where I can somehow load the config.yaml into this build, maybe similar to how i generate the requirements.txt at deploy time
 PROJECT_ID = "synapse-477401"
-TOPIC_ID = "processor-jobs"  # As defined in your main.tf TODO: move to to config.yaml which will go hand in hand with moving hardcoded project_id. Also I need to move the terraform to use variables for topic_id just like project_id
+TOPIC_ID = "synapse-processor"  # As defined in your main.tf TODO: move to to config.yaml which will go hand in hand with moving hardcoded project_id. Also I need to move the terraform to use variables for topic_id just like project_id
 
 # Initialize client on first request (cold start)
 try:
