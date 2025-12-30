@@ -131,7 +131,7 @@ resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
 # --- Pub/Sub Topics & Subscriptions ---
 
 resource "google_pubsub_subscription" "processor_subscription" {
-  name  = "processor-jobs-sub"
+  name  = "synapse-processor-jobs-sub"
   topic = google_pubsub_topic.processor_topic.name
 
   ack_deadline_seconds = 600
@@ -153,12 +153,12 @@ resource "google_pubsub_subscription" "processor_subscription" {
 }
 
 resource "google_pubsub_topic" "reporter_topic" {
-  name       = "reporter"
+  name       = "synapse-reporter"
   depends_on = [google_project_service.services]
 }
 
 resource "google_pubsub_topic" "processor_topic" {
-  name       = "processor-jobs"
+  name       = "synapse-processor"
   depends_on = [google_project_service.services]
 }
 
