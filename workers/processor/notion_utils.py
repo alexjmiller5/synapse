@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from config import CONFIG
+from config import DATABASES
 from gcp_secrets import get_db_id
 from clients import notion, FALLBACK_NOTION_BLOCK_ID
 
@@ -45,7 +45,7 @@ def build_notion_properties(category, data):
     print(f"--- Building Props for {category} ---")
     properties = {}
 
-    db_config = CONFIG.get("databases", {}).get(category)
+    db_config = DATABASES.get("databases", {}).get(category)
     if not db_config:
         return {"Name": _notion_title(data.get("Name", "Untitled"))}
 

@@ -1,7 +1,7 @@
 from google.cloud import secretmanager
-from config import CONFIG
+from config import DATABASES, CONFIG
 
-PROJECT_ID = "synapse-477401"
+PROJECT_ID = CONFIG.get("gcp_project_id")
 SECRETS = {}
 sm_client = None
 
@@ -33,7 +33,7 @@ def get_db_id(category):
 
 # Pre-fetch Database IDs
 DATABASE_IDS = {}
-for cat in list(CONFIG.get("databases", {}).keys()) + [
+for cat in list(DATABASES.get("databases", {}).keys()) + [
     "logs",
     "youtube-channels",
     "trips",
