@@ -110,5 +110,4 @@ jobs:
           env_vars: |
             GOOGLE_FUNCTION_TARGET=${{ matrix.service.entry_point }}
           flags: >-
-            --function=${{ matrix.service.entry_point }}
             --no-allow-unauthenticated
