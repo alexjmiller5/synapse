@@ -52,7 +52,4 @@ resource "google_api_gateway_gateway" "intaker_gateway" {
   region     = local.config.region
   api_config = google_api_gateway_api_config.intaker_api_config.id
   gateway_id = "intaker-gateway"
-
-  # Depends on the TIMER, not the service directly
-  depends_on = [time_sleep.wait_for_api_service]
 }
