@@ -53,6 +53,7 @@ def run_pipeline(
 
         # 2. Classify
         proj_str = ", ".join(project_prompts) if project_prompts else "None"
+        print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
         cat_prompt = generate_classification_prompt(proj_str)
         classify_input = (
             f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
@@ -80,6 +81,12 @@ def run_pipeline(
         category = classified.get("category", "tasks")
         project = classified.get("related_project")
         print(f"🤖 Classification: {category}")
+        if project:
+            print(f"   🔍 AI identified project: '{project}'")
+            if project in project_id_map:
+                print(f"   ✅ Exact match found: {project_id_map[project]}")
+            else:
+                print(f"   ❌ MATCH FAILED. Available keys: {list(project_id_map.keys())}")
 
         # 3. Extract
         url_context = (

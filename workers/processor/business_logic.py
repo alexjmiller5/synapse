@@ -115,10 +115,10 @@ def hydrate_dynamic_options():
 
 def fetch_trips_inventory():
     """
-    Fetches Trips with Dates to help the AI decide on 'Most Recent'.
-    Returns:
-      - inventory_text: List of strings "Name (Date: YYYY-MM-DD)" for the prompt.
-      - id_map: Dict {"Name": "Page_ID"} for code execution.
+    Fetches Trips.
+    LOGIC MATCH: Groceries DB.
+    - Prompt gets: "Trip Name (Date: ...)" (Context for AI)
+    - ID Map gets: "Trip Name" -> "ID" (Simple Lookup)
     """
     db_id = get_db_id("trips")
     if not notion or not db_id:
@@ -143,8 +143,13 @@ def fetch_trips_inventory():
                 date_prop = page["properties"].get("Dates", {}).get("date", {})
                 date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
 
+                # --- CORRECTED LOGIC ---
+                # 1. Map uses STRICT Name (Matches Groceries logic)
                 id_map[name] = page["id"]
+
+                # 2. Prompt gets Name + Date (So AI can distinguish old vs new)
                 inventory_text.append(f"{name} (Date: {date_str})")
+
             except Exception:
                 continue
 
@@ -173,7 +178,7 @@ def fetch_active_projects():
             body={
                 "filter": {
                     "and": [
-                        {"property": "Tags", "multi_select": {"contains": "Projects"}},
+                        {"property": "Tags", "multi_select": {"contains": "Project"}},
                         {
                             "property": "Status",
                             "status": {"does_not_equal": "Completed"},
@@ -214,6 +219,9 @@ def fetch_active_projects():
             entry = f"{name} (Context: {clean_notes})" if clean_notes else name
             prompt_list.append(entry)
 
+            print(f"   👉 Loaded Project: '{name}' (ID: {page_id})")
+
+        print(f"✅ Total Projects Loaded: {len(prompt_list)}")
         return prompt_list, id_map
     except Exception as e:
         print(f"❌ Project Fetch Error: {e}")
@@ -269,40 +277,86 @@ def execute_logic(category, data, inventory_map=None, trips_id_map=None):
     if category == "places":
         print("   🏗️ Handling 'Places' logic...")
 
-        # 1. Handle Linked Trip (Relation)
+        # 1. Resolve Trip ID (We do this early so we can use it for Update OR Create)
         trip_name = data.get("Linked Trip")
-        print(f"      - Linked Trip Requested: {trip_name}")
+        trip_id = None
+        if trip_name and trips_id_map:
+            trip_id = trips_id_map.get(trip_name)
+            if not trip_id:
+                print(f"      🔸 Trip Name '{trip_name}' NOT found in loaded map.")
 
-        # Remove from data payload to prevent Notion API error
+        # Clean up data payload
         if "Linked Trip" in data:
             del data["Linked Trip"]
 
-        # 2. Create Page
+        # 2. Check for Duplicates (Google Maps URL)
+        target_url = data.get("Google Maps URL")
+        existing_id = None
+
+        if target_url:
+            db_id = get_db_id("places")
+            try:
+                resp = notion.request(
+                    path=f"databases/{db_id}/query",
+                    method="POST",
+                    body={
+                        "filter": {
+                            "property": "Google Maps URL",
+                            "url": {"equals": target_url},
+                        }
+                    },
+                )
+                if resp.get("results"):
+                    existing_id = resp["results"][0]["id"]
+                    print(f"      ✅ Found existing place: {existing_id}")
+            except Exception as e:
+                print(f"      ⚠️ Duplicate check failed: {e}")
+
+        # 3. PATH A: UPDATE EXISTING
+        if existing_id:
+            print("      🔄 Updating existing Place...")
+
+            # Construct a mini-payload of just the fields we want to update
+            update_data = {}
+            if "Status" in data:
+                update_data["Status"] = data["Status"]
+            if "Notes" in data:
+                update_data["Notes"] = data["Notes"]
+
+            # Use the helper to format them correctly for Notion
+            update_props = build_notion_properties(category, update_data)
+
+            # Manually add the Relation (since we removed it from 'data' earlier)
+            if trip_id:
+                update_props["Linked Trip"] = {"relation": [{"id": trip_id}]}
+
+            if update_props:
+                try:
+                    notion.pages.update(page_id=existing_id, properties=update_props)
+                    print("      ✅ Place updated.")
+                except Exception as e:
+                    print(f"      ❌ Failed to update place: {e}")
+
+            return f"https://www.notion.so/{existing_id.replace('-','')}"
+
+        # 4. PATH B: CREATE NEW
         print("      - Creating new Place page...")
         resp = create_page(category, build_notion_properties(category, data))
         created_url = resp.get("url")
         new_page_id = resp.get("id")
-        print(f"      ✅ Page Created: {created_url} (ID: {new_page_id})")
+        print(f"      ✅ Page Created: {created_url}")
 
-        # 3. Link Trip (Using the Map passed from pipeline)
-        if trip_name and new_page_id and trips_id_map:
-            print(f"      - Attempting to link trip: '{trip_name}'")
-            trip_id = trips_id_map.get(trip_name)
-
-            if trip_id:
-                print(f"      ✅ Found Trip ID: {trip_id}. Linking now...")
-                try:
-                    notion.pages.update(
-                        page_id=new_page_id,
-                        properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
-                    )
-                    print("      ✅ Trip linked successfully.")
-                except Exception as e:
-                    print(f"      ❌ Failed to link trip via API: {e}")
-            else:
-                print(
-                    f"      🔸 Trip Name '{trip_name}' NOT found in loaded map. Available keys: {list(trips_id_map.keys())[:5]}..."
+        # Link Trip (Post-Creation)
+        if trip_id and new_page_id:
+            print(f"      - Linking trip: '{trip_name}'")
+            try:
+                notion.pages.update(
+                    page_id=new_page_id,
+                    properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
                 )
+                print("      ✅ Trip linked successfully.")
+            except Exception as e:
+                print(f"      ❌ Failed to link trip via API: {e}")
 
         return created_url
 
