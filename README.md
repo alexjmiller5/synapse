@@ -351,6 +351,7 @@ uv add --package <workspace-member-name> <package-name>
 - [ ] Fix the requirements.txt to use the global lockfile with the dependencies from the specific module instead of exporting the pypojrect.toml which just has minimum versions
 - [ ] migrate from cloud run to cloud run v2
 - [ ] Switch to docker instead of cloud run's built python image
+- [ ] Add a check to my deployment pipeline to make sure when it deploys the cloud run services that it's just updating existing services - not creating new ones - the functions they update must also specifically be the ones created by the terraform sa because that's the way I want to do this
 
 ### **Feature Related Stuff**
 
