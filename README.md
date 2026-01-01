@@ -116,6 +116,12 @@ cd <python-service-directory>
 uv run functions-framework --target=<name-of-python-function> --source=<python-service-main-file> --debug
 ```
 
+OR use the justfile command:
+
+```bash
+just run-<python-package-name>
+```
+
 - **Add the following to your shell's startup file:**
 
 ```bash
