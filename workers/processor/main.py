@@ -7,7 +7,7 @@ from config import PROMPTS
 from clients import gemini_client, GEMINI_API_KEY
 from notion_utils import (
     log_job_outcome,
-    append_to_quick_notes,
+    create_high_priority_task,
     append_note,
     create_cleanup_task,
 )
@@ -59,24 +59,39 @@ def run_pipeline(
             f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
         )
 
-        classified = (
-            json.loads(
-                gemini_client.models.generate_content(
-                    model="gemini-2.5-flash-preview-09-2025",
-                    contents=[
-                        types.Content(
-                            parts=[types.Part(text=classify_input)], role="user"
-                        )
-                    ],
-                    config=types.GenerateContentConfig(
-                        system_instruction=cat_prompt,
-                        response_mime_type="application/json",
-                        response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
-                    ),
-                ).text
-            )
-            or {}
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-09-2025",
+            contents=[
+                types.Content(parts=[types.Part(text=classify_input)], role="user")
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=cat_prompt,
+                response_mime_type="application/json",
+                response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
+            ),
         )
+
+        # --- VERBOSE DEBUGGING START ---
+        print(f"🔍 DEBUG: Response Object ID: {id(response)}")
+
+        # 1. Check raw text value
+        print(f"🔍 DEBUG: response.text is type: {type(response.text)}")
+        print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
+
+        # 2. Check Finish Reason (The key indicator for blocks)
+        if response.candidates and len(response.candidates) > 0:
+            candidate = response.candidates[0]
+            print(f"🔍 DEBUG: Finish Reason: {candidate.finish_reason}")
+
+            # 3. Check Safety Ratings (if available)
+            if hasattr(candidate, "safety_ratings"):
+                print(f"🔍 DEBUG: Safety Ratings: {candidate.safety_ratings}")
+        else:
+            print("🔍 DEBUG: No candidates returned in response.")
+        # --- VERBOSE DEBUGGING END ---
+
+        # Check if text is None (Safety Filter Trigger)
+        classified = json.loads(response.text)
 
         category = classified.get("category", "tasks")
         project = classified.get("related_project")
@@ -86,7 +101,9 @@ def run_pipeline(
             if project in project_id_map:
                 print(f"   ✅ Exact match found: {project_id_map[project]}")
             else:
-                print(f"   ❌ MATCH FAILED. Available keys: {list(project_id_map.keys())}")
+                print(
+                    f"   ❌ MATCH FAILED. Available keys: {list(project_id_map.keys())}"
+                )
 
         # 3. Extract
         url_context = (
@@ -166,7 +183,7 @@ def run_pipeline(
         log_job_outcome(
             full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload
         )
-        append_to_quick_notes(full_str_for_log)
+        create_high_priority_task(full_str_for_log)
 
 
 @functions_framework.cloud_event

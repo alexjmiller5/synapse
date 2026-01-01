@@ -193,6 +193,29 @@ def create_cleanup_task(desc, link_url=None):
         print(f"   ❌ Cleanup Task Creation Failed: {e}")
 
 
+def create_high_priority_task(desc, link_url=None):
+    print(f"🧹 Creating cleanup task: {desc}")
+    classification_message="Classify the following thought (it failed due to pipeline errors): "
+    task_text = f"{classification_message}{desc}"
+    props = {
+        "Name": _notion_title(task_text),
+        "AI Title": _notion_rich_text(task_text),
+        "Status": _notion_status("To Do"),
+        "Tags": _notion_multi_select(["Chore"]),
+        "Due Date": _notion_date(date.today().isoformat()),
+        "Priority": _notion_select("High"),
+    }
+
+    # If we have a link, add it to the 'Links' property
+    if link_url:
+        props["Links"] = _notion_rich_text(link_url)
+
+    try:
+        create_page("tasks", props)
+    except Exception as e:
+        print(f"   ❌ Cleanup Task Creation Failed: {e}")
+
+
 def log_job_outcome(
     raw_text, category, status, details="", created_url=None, ai_data=None
 ):
@@ -222,28 +245,6 @@ def log_job_outcome(
         notion.pages.create(parent={"database_id": log_id}, properties=props)
     except Exception as e:
         print(f"Log failed: {e}")
-
-
-def append_to_quick_notes(raw_text):
-    """Fallback: Appends text to a specific Notion Block if processing fails."""
-    if not notion or not FALLBACK_NOTION_BLOCK_ID:
-        return
-    try:
-        notion.blocks.children.append(
-            block_id=FALLBACK_NOTION_BLOCK_ID,
-            children=[
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"type": "text", "text": {"content": raw_text}}]
-                    },
-                }
-            ],
-        )
-        print("--- Fallback: Appended to Quick Notes ---")
-    except Exception as e:
-        print(f"Fallback failed: {e}")
 
 
 def fetch_existing_page(category, value, key="Name"):
