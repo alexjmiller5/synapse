@@ -1,9 +1,9 @@
 import re
 import json
 import requests
+from urllib.parse import urlparse, parse_qs
 from inscriptis import get_text
-import yt_dlp
-from clients import spotify, gmaps
+from clients import spotify, youtube, gmaps
 from notion_utils import create_cleanup_task
 
 
@@ -128,19 +128,65 @@ def get_spotify_metadata(url):
         return f"Spotify Error: {e}"
 
 
+def get_youtube_video_id(url):
+    """Parses Video ID from various YouTube URL formats."""
+    parsed = urlparse(url)
+    if parsed.hostname in ["youtu.be"]:
+        return parsed.path[1:]
+    if parsed.hostname in ["www.youtube.com", "youtube.com", "m.youtube.com"]:
+        if parsed.path == "/watch":
+            qs = parse_qs(parsed.query)
+            return qs.get("v", [None])[0]
+        if parsed.path.startswith("/shorts/"):
+            return parsed.path.split("/")[2]
+    return None
+
+
 def get_youtube_metadata(url):
+    if not youtube:
+        return "No YouTube Client Configured"
+
+    video_id = get_youtube_video_id(url)
+    if not video_id:
+        return "Could not extract Video ID"
+
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            handle = info.get("uploader_id", "")
-            return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
+        request = youtube.videos().list(part="snippet", id=video_id)
+        response = request.execute()
+
+        if not response.get("items"):
+            return "Video not found or private."
+
+        item = response["items"][0]
+        snippet = item["snippet"]
+
+        title = snippet.get("title")
+        channel_title = snippet.get("channelTitle")
+        # Notion logic expects a handle if possible, but channel title works for search too
+        # API doesn't return @handle in snippet, so we use Channel Title.
+
+        return f"Title: {title}\nHandle: {channel_title}"
 
     except Exception as e:
         print(f"   ⚠️ YT Metadata fetch failed: {e}")
-        # FALLBACK: Create Task
         print("   🧹 Triggering cleanup task for failed YT extraction...")
         # create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
         return f"YT Error: {e}"
+
+
+# def get_youtube_metadata(url):
+#     try:
+#         with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
+#             info = ydl.extract_info(url, download=False)
+#             handle = info.get("uploader_id", "")
+#             return f"Title: {info.get('title')}\nHandle: {handle if handle.startswith('@') else '@'+handle}"
+
+#     except Exception as e:
+#         print(f"   ⚠️ YT Metadata fetch failed: {e}")
+#         # FALLBACK: Create Task
+#         print("   🧹 Triggering cleanup task for failed YT extraction...")
+#         # create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
+#         return f"YT Error: {e}"
 
 
 def resolve_final_url(url):
