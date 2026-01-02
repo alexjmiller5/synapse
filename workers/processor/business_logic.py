@@ -3,17 +3,39 @@ from datetime import date
 from config import DATABASES
 from gcp_secrets import get_db_id
 from clients import notion
-from notion_utils import (
-    create_page,
-    update_status,
-    create_cleanup_task,
-    fetch_existing_page,
-    build_notion_properties,
+from handlers import (
+    handle_groceries_fun_logic,
+    handle_youtube_logic,
+    handle_movies_tv_logic,
+    handle_bookmarks_logic,
+    handle_people_logic,
+    handle_bucket_list_logic,
+    handle_places_logic,
+    handle_default_logic,
 )
+
 
 # ==========================================
 # 3. DYNAMIC HYDRATION
 # ==========================================
+def query_notion_db(category_key, query_body=None):
+    """Generic helper to safely query a Notion database."""
+    db_id = get_db_id(category_key)
+    if not notion or not db_id:
+        return []
+
+    # Default body if none provided
+    if query_body is None:
+        query_body = {"page_size": 100}
+
+    try:
+        resp = notion.request(
+            path=f"databases/{db_id}/query", method="POST", body=query_body
+        )
+        return resp.get("results", [])
+    except Exception as e:
+        print(f"❌ Failed to query {category_key}: {e}")
+        return []
 
 
 def fetch_inventory_map(category):
@@ -21,33 +43,22 @@ def fetch_inventory_map(category):
     Fetches ALL pages from a DB and returns a dict: {'Item Name': 'Page ID'}
     Uses raw .request() to bypass missing SDK methods.
     """
-    db_id = get_db_id(category)
-    if not notion or not db_id:
-        return {}
-
     print(f"📚 Fetching full inventory for {category}...")
+    results = query_notion_db(category)
+
     inventory = {}
-    try:
-        # FIX: Use raw request to bypass "object has no attribute 'query'" error
-        resp = notion.request(
-            path=f"databases/{db_id}/query", method="POST", body={"page_size": 100}
-        )
+    for page in results:
+        try:
+            # Safe title extraction
+            title_prop = page["properties"].get("Name", {}).get("title", [])
+            if title_prop:
+                name = title_prop[0]["plain_text"]
+                inventory[name] = page["id"]
+        except Exception:
+            continue
 
-        for page in resp.get("results", []):
-            try:
-                title_prop = page["properties"].get("Name", {}).get("title", [])
-                if title_prop:
-                    name = title_prop[0]["plain_text"]
-                    # Store as-is. AI instructions will handle mapping.
-                    inventory[name] = page["id"]
-            except Exception:
-                continue
-
-        print(f"   ✅ Loaded {len(inventory)} items.")
-        return inventory
-    except Exception as e:
-        print(f"   ❌ Inventory fetch failed: {e}")
-        return {}
+    print(f"   ✅ Loaded {len(inventory)} items.")
+    return inventory
 
 
 def fetch_property_options(db_id, prop_name):
@@ -115,90 +126,77 @@ def hydrate_dynamic_options():
 
 def fetch_trips_inventory():
     """
-    Fetches Trips.
-    LOGIC MATCH: Groceries DB.
-    - Prompt gets: "Trip Name (Date: ...)" (Context for AI)
-    - ID Map gets: "Trip Name" -> "ID" (Simple Lookup)
+    Fetches Trips sorted by date.
+    Returns:
+      - inventory_text: ["Trip Name (Date: 2025-01-01)", ...]
+      - id_map: {"Trip Name": "page-id"}
     """
-    db_id = get_db_id("trips")
-    if not notion or not db_id:
-        return [], {}
-
     print(f"✈️ Fetching Trips Inventory...")
+
+    # Specific query: Sort by 'Dates' descending
+    query_body = {"sorts": [{"property": "Dates", "direction": "descending"}]}
+
+    results = query_notion_db("trips", query_body)
+
     id_map = {}
     inventory_text = []
 
-    try:
-        resp = notion.request(
-            path=f"databases/{db_id}/query",
-            method="POST",
-            body={"sorts": [{"property": "Dates", "direction": "descending"}]},
-        )
+    for page in results:
+        try:
+            # Extract Name
+            title_prop = page["properties"].get("Name", {}).get("title", [])
+            name = title_prop[0]["plain_text"] if title_prop else "Untitled"
 
-        for page in resp.get("results", []):
-            try:
-                title_prop = page["properties"].get("Name", {}).get("title", [])
-                name = title_prop[0]["plain_text"] if title_prop else "Untitled"
+            # Extract Date
+            date_prop = page["properties"].get("Dates", {}).get("date", {})
+            date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
 
-                date_prop = page["properties"].get("Dates", {}).get("date", {})
-                date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
+            # 1. Map uses STRICT Name (Matches Groceries logic)
+            id_map[name] = page["id"]
 
-                # --- CORRECTED LOGIC ---
-                # 1. Map uses STRICT Name (Matches Groceries logic)
-                id_map[name] = page["id"]
+            # 2. Prompt gets Name + Date (So AI can distinguish old vs new)
+            inventory_text.append(f"{name} (Date: {date_str})")
 
-                # 2. Prompt gets Name + Date (So AI can distinguish old vs new)
-                inventory_text.append(f"{name} (Date: {date_str})")
+        except Exception:
+            continue
 
-            except Exception:
-                continue
-
-        print(f"   ✅ Loaded {len(inventory_text)} trips.")
-        return inventory_text, id_map
-    except Exception as e:
-        print(f"   ❌ Trips fetch failed: {e}")
-        return [], {}
+    print(f"   ✅ Loaded {len(inventory_text)} trips.")
+    return inventory_text, id_map
 
 
 def fetch_active_projects():
     """
     Returns:
-      - prompt_list: List of strings for the AI prompt ["Synapse (Context: ...)", ...]
-      - id_map: Dict mapping Project Name -> Page ID {"Synapse": "123-abc"}
+      - prompt_list: ["Project Name (Context: notes...)", ...]
+      - id_map: {"Project Name": "page-id"}
     """
-    db_id = get_db_id("tasks")
-    if not notion or not db_id:
-        return [], {}
-
-    try:
-        # Use raw request to ensure it works regardless of SDK version
-        response = notion.request(
-            path=f"databases/{db_id}/query",
-            method="POST",
-            body={
-                "filter": {
-                    "and": [
-                        {"property": "Tags", "multi_select": {"contains": "Project"}},
-                        {
-                            "property": "Status",
-                            "status": {"does_not_equal": "Completed"},
-                        },
-                    ]
+    # Specific query: Filter for active Projects (Tags contains 'Project', Status != 'Completed')
+    query_body = {
+        "filter": {
+            "and": [
+                {"property": "Tags", "multi_select": {"contains": "Project"}},
+                {
+                    "property": "Status",
+                    "status": {"does_not_equal": "Completed"},
                 },
-                "page_size": 100,
-            },
-        )
+            ]
+        },
+        "page_size": 100,
+    }
 
-        prompt_list = []
-        id_map = {}
+    results = query_notion_db("tasks", query_body)
 
-        for p in response.get("results", []):
+    prompt_list = []
+    id_map = {}
+
+    for p in results:
+        try:
             props = p["properties"]
             page_id = p["id"]
 
-            # Dynamic Name Lookup
+            # Dynamic Name Lookup: Find the property of type 'title'
             name = "Unknown"
-            for prop_name, prop_data in props.items():
+            for prop_data in props.values():
                 if prop_data["type"] == "title" and prop_data.get("title"):
                     name = prop_data["title"][0]["plain_text"]
                     break
@@ -209,10 +207,12 @@ def fetch_active_projects():
             # Store ID for later
             id_map[name] = page_id
 
-            # Context Building
+            # Context Building (Notes)
             notes_obj = props.get("Notes", {}).get("rich_text", [])
             notes_text = "".join([t["plain_text"] for t in notes_obj])
             clean_notes = notes_text.replace("\n", " ").strip()
+
+            # Truncate long notes
             if len(clean_notes) > 150:
                 clean_notes = clean_notes[:150] + "..."
 
@@ -221,11 +221,11 @@ def fetch_active_projects():
 
             print(f"   👉 Loaded Project: '{name}' (ID: {page_id})")
 
-        print(f"✅ Total Projects Loaded: {len(prompt_list)}")
-        return prompt_list, id_map
-    except Exception as e:
-        print(f"❌ Project Fetch Error: {e}")
-        return [], {}
+        except Exception:
+            continue
+
+    print(f"✅ Total Projects Loaded: {len(prompt_list)}")
+    return prompt_list, id_map
 
 
 def apply_business_logic(category, data, related_project=None):
@@ -270,257 +270,30 @@ def apply_business_logic(category, data, related_project=None):
 # 7. MAIN HANDLERS & EXECUTORS
 # ==========================================
 
+LOGIC_HANDLERS = {
+    "places": handle_places_logic,
+    "groceries": handle_groceries_fun_logic,
+    "fun-activities": handle_groceries_fun_logic,
+    "youtube-videos": handle_youtube_logic,
+    "movies": handle_movies_tv_logic,
+    "tv-shows": handle_movies_tv_logic,
+    "bookmarks": handle_bookmarks_logic,
+    "people": handle_people_logic,
+    "bucket-list": handle_bucket_list_logic,
+}
+
 
 def execute_logic(category, data, inventory_map=None, trips_id_map=None):
     print(f"⚙️ Executing Logic for: {category}")
 
+    # Special case for places (requires extra arg)
     if category == "places":
-        print("   🏗️ Handling 'Places' logic...")
+        return handle_places_logic(category, data, trips_id_map)
 
-        # 1. Resolve Trip ID (We do this early so we can use it for Update OR Create)
-        trip_name = data.get("Linked Trip")
-        trip_id = None
-        if trip_name and trips_id_map:
-            trip_id = trips_id_map.get(trip_name)
-            if not trip_id:
-                print(f"      🔸 Trip Name '{trip_name}' NOT found in loaded map.")
-
-        # Clean up data payload
-        if "Linked Trip" in data:
-            del data["Linked Trip"]
-
-        # 2. Check for Duplicates (Google Maps URL)
-        target_url = data.get("Google Maps URL")
-        existing_id = None
-
-        if target_url:
-            db_id = get_db_id("places")
-            try:
-                resp = notion.request(
-                    path=f"databases/{db_id}/query",
-                    method="POST",
-                    body={
-                        "filter": {
-                            "property": "Google Maps URL",
-                            "url": {"equals": target_url},
-                        }
-                    },
-                )
-                if resp.get("results"):
-                    existing_id = resp["results"][0]["id"]
-                    print(f"      ✅ Found existing place: {existing_id}")
-            except Exception as e:
-                print(f"      ⚠️ Duplicate check failed: {e}")
-
-        # 3. PATH A: UPDATE EXISTING
-        if existing_id:
-            print("      🔄 Updating existing Place...")
-
-            # Construct a mini-payload of just the fields we want to update
-            update_data = {}
-            if "Status" in data:
-                update_data["Status"] = data["Status"]
-            if "Notes" in data:
-                update_data["Notes"] = data["Notes"]
-
-            # Use the helper to format them correctly for Notion
-            update_props = build_notion_properties(category, update_data)
-
-            # Manually add the Relation (since we removed it from 'data' earlier)
-            if trip_id:
-                update_props["Linked Trip"] = {"relation": [{"id": trip_id}]}
-
-            if update_props:
-                try:
-                    notion.pages.update(page_id=existing_id, properties=update_props)
-                    print("      ✅ Place updated.")
-                except Exception as e:
-                    print(f"      ❌ Failed to update place: {e}")
-
-            return f"https://www.notion.so/{existing_id.replace('-','')}"
-
-        # 4. PATH B: CREATE NEW
-        print("      - Creating new Place page...")
-        resp = create_page(category, build_notion_properties(category, data))
-        created_url = resp.get("url")
-        new_page_id = resp.get("id")
-        print(f"      ✅ Page Created: {created_url}")
-
-        # Link Trip (Post-Creation)
-        if trip_id and new_page_id:
-            print(f"      - Linking trip: '{trip_name}'")
-            try:
-                notion.pages.update(
-                    page_id=new_page_id,
-                    properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
-                )
-                print("      ✅ Trip linked successfully.")
-            except Exception as e:
-                print(f"      ❌ Failed to link trip via API: {e}")
-
-        return created_url
-
-    # --- 1. GROCERIES / FUN ACTIVITIES (Deduplication Logic) ---
+    # Special case for groceries (requires extra arg)
     if category in ["groceries", "fun-activities"]:
-        # Map 'Name' vs 'Title' depending on DB
-        search_key = "Name" if category == "groceries" else "Title"
-        search_val = data.get(search_key)
+        return handle_groceries_fun_logic(category, data, inventory_map)
 
-        if category == "groceries" and inventory_map and search_val in inventory_map:
-            page_id = inventory_map[search_val]
-            print(
-                f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating..."
-            )
-            return update_status(page_id, data.get("Status")).get("url")
-
-        # For Fun Activities, perform a smart search
-        if category == "fun-activities":
-            # Check for duplicates first
-            existing_id = fetch_existing_page(category, search_val, key="Title")
-            if existing_id:
-                print(
-                    f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status..."
-                )
-                return update_status(existing_id, data.get("Status")).get("url")
-
-            # Create new
-            print(f"   ✨ Creating new {category} page.")
-            resp = create_page(category, build_notion_properties(category, data))
-            created_url = resp.get("url")
-
-            # Check for Location Ambiguity (After creation, so we have a link)
-            if not data.get("Location"):
-                print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
-                create_cleanup_task(
-                    f"Classify Location for: {search_val}", link_url=created_url
-                )
-
-            return created_url
-
-        print(f"   ✨ Creating new {category} page.")
-        return create_page(category, build_notion_properties(category, data)).get("url")
-
-    # --- 2. YOUTUBE VIDEO LOGIC ---
-    elif category == "youtube-videos":
-        props = build_notion_properties(category, data)
-        target_url = data.get("Video URL")
-
-        # A. DEDUPLICATION CHECK (Exact URL Match)
-        if target_url:
-            db_id = get_db_id("youtube-videos")
-            try:
-                # Query specifically for the "Video URL" property
-                resp = notion.request(
-                    path=f"databases/{db_id}/query",
-                    method="POST",
-                    body={
-                        "filter": {
-                            "property": "Video URL",
-                            "url": {"equals": target_url},
-                        }
-                    },
-                )
-
-                # If found, update status instead of creating new
-                if resp.get("results"):
-                    existing_page = resp["results"][0]
-                    eid = existing_page["id"]
-                    print(f"   ✅ Video already exists: {target_url} (ID: {eid})")
-
-                    # Update status if the user implies a change (e.g. "Watched")
-                    # Default is "Watched", so we generally want to ensure it's marked as such if re-submitted
-                    return update_status(eid, data.get("Status", "Watched")).get("url")
-
-            except Exception as e:
-                print(f"   ⚠️ YouTube duplicate check failed: {e}")
-
-        # B. CHANNEL LINKING (Only if new)
-        channel_name = data.get("channel_handle", "").replace("@", "")
-
-        # Search for Channel in Relation DB
-        cid = fetch_existing_page("youtube-channels", channel_name, "Name")
-        if cid:
-            print(f"   -> Linked Channel ID: {cid}")
-            props["Channel"] = {"relation": [{"id": cid}]}
-
-        # Create Page
-        resp = create_page(category, props)
-        created_url = resp.get("url")
-
-        # Cleanup Task if Channel Missing
-        if not cid:
-            print(f"   -> Channel {channel_name} not found.")
-            create_cleanup_task(f"Add YT Channel: {channel_name}", link_url=created_url)
-
-        return created_url
-
-    # --- 3. MOVIES / TV ---
-    elif category in ["movies", "tv-shows"]:
-        status = data.get("Status")
-        eid = fetch_existing_page(category, data["Title"], "Title")
-
-        if eid:
-            print(f"   -> Found existing {category} {eid}...")
-            significant_statuses = [
-                "Priority",
-                "Finished",
-                "In Progress",
-                "Watched Parts",
-                "Gave Up",
-            ]
-            if status in significant_statuses:
-                print(f"   -> Updating status to {status}")
-                return update_status(eid, status).get("url")
-            return f"https://www.notion.so/{eid.replace('-','')}"
-
-        return create_page(category, build_notion_properties(category, data)).get("url")
-
-    # --- 4. BOOKMARKS (With URL Deduplication) ---
-    elif category == "bookmarks":
-        target_url = data.get("URL")
-
-        # A. Check for Duplicates (Exact URL Match)
-        if target_url:
-            db_id = get_db_id("bookmarks")
-            try:
-                # Specific query for URL property type
-                resp = notion.request(
-                    path=f"databases/{db_id}/query",
-                    method="POST",
-                    body={"filter": {"property": "URL", "url": {"equals": target_url}}},
-                )
-                if resp.get("results"):
-                    print(f"   ✅ Bookmark already exists: {target_url}")
-                    return f"https://www.notion.so/{resp['results'][0]['id'].replace('-','')}"
-            except Exception as e:
-                print(f"   ⚠️ Bookmark duplicate check failed: {e}")
-
-        # B. Apply Logic (GitHub Tags)
-        if "github.com" in target_url:
-            tags = data.get("Tags", [])
-            if isinstance(tags, list) and "Github" not in tags:
-                tags.append("Github")
-                data["Tags"] = tags
-
-        return create_page(category, build_notion_properties(category, data)).get("url")
-
-    # --- 5. PEOPLE ---
-    elif category == "people":
-        return create_page(category, build_notion_properties(category, data)).get("url")
-
-    # --- 6. BUCKET LIST ---
-    elif category == "bucket-list":
-        return create_page(category, build_notion_properties(category, data)).get("url")
-
-    # --- DEFAULT (Tasks, Quotes) ---
-    else:
-        resp = create_page(category, build_notion_properties(category, data))
-        created_url = resp.get("url")
-        if category == "quotes":
-            if not data.get("Context"):
-                quote_preview = data.get("Quote") or data.get("Name") or "Unknown Quote"
-                create_cleanup_task(
-                    f"Link person to quote: {quote_preview[:30]}...",
-                    link_url=created_url,
-                )
-        return created_url
+    # Generic lookup
+    handler = LOGIC_HANDLERS.get(category, handle_default_logic)
+    return handler(category, data)

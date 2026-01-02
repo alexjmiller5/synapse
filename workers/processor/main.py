@@ -16,8 +16,9 @@ from ai_engine import (
     generate_classification_prompt,
     generate_extraction_prompt,
     get_gemini_schema,
-    CATEGORY_SCHEMA_CLASSIFY,
 )
+from schemas import CATEGORY_SCHEMA_CLASSIFY
+
 from external_data import enrich_context
 from business_logic import (
     hydrate_dynamic_options,
@@ -131,9 +132,6 @@ def run_pipeline(
 
         extracted = json.loads(raw_ai_text) or {}
 
-        # --- KEY FIX: IGNORE AI NAME FOR TASKS ---
-        # If it's a task, we force the Name to be the raw input.
-        # This prevents the AI from mangling smart quotes or newlines.
         if category == "tasks":
             extracted["Name"] = raw_text
 
