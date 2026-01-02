@@ -16,4 +16,5 @@ dependencies = [
   "spotipy~=2.25.1",
   "googlemaps>=4.10.0",
   "google-api-python-client>=2.187.0",
+  "tenacity>=9.1.2",
 ]

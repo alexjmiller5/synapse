@@ -1,96 +1,81 @@
 import json
 from datetime import date
 from google.genai import types
+from google.genai.errors import ServerError
 from config import DATABASES, PROMPTS
 from clients import gemini_client
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
-# ==========================================
-# 2. INTELLIGENT PARSING (New Step 1)
-# ==========================================
+from schemas import PARSER_SCHEMA
 
-PARSER_INSTRUCTION = """
-You are an intelligent text parser. The user is dictating one or more items.
-Your goal is to parse the input into a structured list of items.
 
---- DELIMITER RULES ---
-1. Item Separator (@): The user uses '@' to separate distinct tasks or ideas.
-    - Example: "Buy milk @ Call John" -> [Item 1: Buy milk, Item 2: Call John]
+def safe_json_load(text):
+    """Helper to parse JSON and raise specific error if it fails."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise ValueError("Malformed JSON from AI")
 
-2. Context Separator ($): The user uses '$' to separate the 'Core Content' from 'Metadata/Context'.
-    - Example: "Finish report $ urgent due friday" -> Core: "Finish report", Context: "urgent due friday"
-    - Example: "Eli quote $ this guy dresses like he wants to get wegied" -> Core: "this guy dresses like he wants to get wegied", Context: "Eli quote"
-    - EXCEPTION: Ignore '$' if it is part of a price ($50) or a variable name.
-    - The context would be on either side of the '$' depending on user intent.
-    - The context would be on either side of the '$'.
 
---- STRICT FORMATTING RULES ---
-- Do NOT split text on dashes (- or —). Treat them as literal text.
-- Do NOT convert dashes to newlines.
-- Keep the user's capitalization and punctuation exactly as is.
+@retry(
+    # Retry on 500s (Server Errors) OR ValueError (Bad JSON)
+    retry=retry_if_exception_type((ServerError, ValueError)),
+    # Wait 2s, 4s, 8s... up to 60s
+    wait=wait_exponential(multiplier=1, min=2, max=60),
+    # Stop after 4 attempts (approx 30s total wait)
+    stop=stop_after_attempt(4),
+)
+def generate_with_retry(model, contents, config):
+    """
+    Robust wrapper for Gemini API calls.
+    Catches 503s and Bad JSON, retrying automatically.
+    """
+    response = gemini_client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
+    )
 
---- OUTPUT FORMAT ---
-Return a JSON list of objects. Each object must have:
-- "core_text": The main content of the item.
-- "context_notes": Any context separated by '$'. If no '$' was used, leave empty.
-"""
+    # We validate JSON immediately to force a retry if it's bad
+    # This works because we are using structured outputs (response_mime_type="application/json")
+    if config.response_mime_type == "application/json":
+        # Check if response.text is valid JSON. If not, raise ValueError to trigger retry.
+        safe_json_load(response.text)
 
-PARSER_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "core_text": {"type": "string"},
-            "context_notes": {"type": "string"},
-        },
-        "required": ["core_text"],
-    },
-}
-
-# --- ADDED: Missing Schema Definition ---
-CATEGORY_SCHEMA_CLASSIFY = {
-    "type": "object",
-    "properties": {
-        "category": {
-            "type": "string",
-            "enum": list(DATABASES.get("databases", {}).keys()),
-        },
-        "related_project": {"type": "string"},
-    },
-    "required": ["category"],
-}
+    return response
 
 
 def parse_raw_input(raw_text):
     """
-    Uses Gemini to intelligently split valid delimiters while ignoring false positives (emails, prices).
+    Uses Gemini to intelligently split valid delimiters.
     """
     print(f"🧠 Parsing raw input for delimiters...")
+
+    system_instruction = PROMPTS.get("parser_instruction")
+
     try:
-        response = gemini_client.models.generate_content(
+        response = generate_with_retry(
             model="gemini-2.5-flash-preview-09-2025",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
-                system_instruction=PARSER_INSTRUCTION,
+                system_instruction=system_instruction,
                 response_mime_type="application/json",
                 response_json_schema=PARSER_SCHEMA,
             ),
         )
 
-        # LOGGING ADDED: Check raw response text
         print(f"🔍 RAW PARSER RESPONSE: {repr(response.text)}")
-
         parsed = json.loads(response.text)
         print(f"   ✅ Parsed {len(parsed)} item(s).")
         return parsed
     except Exception as e:
-        print(f"   ⚠️ Parsing failed: {e}. Fallback to raw text.")
-        # Only log the raw text if available to avoid cluttering logs on other errors
-        if "response" in locals() and hasattr(response, "text"):
-            print(f"   ⚠️ Failed Response Text: {response.text}")
+        print(f"   ⚠️ Parsing failed after retries: {e}. Fallback to raw text.")
         return [{"core_text": raw_text, "context_notes": ""}]
-
-
-# --- PROMPT BUILDERS ---
 
 
 def generate_classification_prompt(active_projects_str):

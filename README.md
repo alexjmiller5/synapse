@@ -160,7 +160,7 @@ syn-local "Your test input text here"
 - **Send local batch requests (fill the `local-requests.txt` file with your requests separated by newlines):**
 
 ```bash
-uv run --with requests send_local_requests.py local_requests.txt
+just recept-local-batch
 ```
 
 - **Test infrastructure changes with Terraform:**

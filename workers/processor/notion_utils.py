@@ -195,7 +195,9 @@ def create_cleanup_task(desc, link_url=None):
 
 def create_high_priority_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
-    classification_message="Classify the following thought (it failed due to pipeline errors): "
+    classification_message = (
+        "Classify the following thought (it failed due to pipeline errors): "
+    )
     task_text = f"{classification_message}{desc}"
     props = {
         "Name": _notion_title(task_text),

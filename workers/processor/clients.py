@@ -1,4 +1,5 @@
 import google.genai as genai
+from google.genai import types
 from notion_client import Client
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
