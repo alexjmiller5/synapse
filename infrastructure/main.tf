@@ -19,7 +19,8 @@ resource "google_project_service" "services" {
     "servicemanagement.googleapis.com",
     "servicecontrol.googleapis.com",
     "places-backend.googleapis.com",
-    "apikeys.googleapis.com"
+    "apikeys.googleapis.com",
+    "youtube.googleapis.com"
   ])
 
   service            = each.value
@@ -61,6 +62,21 @@ resource "google_apikeys_key" "places_key" {
   depends_on = [google_project_service.services]
 }
 
+resource "google_apikeys_key" "youtube_api_key" {
+  provider     = google-beta
+  name         = "synapse-youtube-api-key"
+  display_name = "Synapse YouTube API Key"
+  project      = local.config.gcp_project_id
+
+  restrictions {
+    api_targets {
+      service = "youtube.googleapis.com"
+    }
+  }
+
+  depends_on = [google_project_service.services]
+}
+
 # --- Secrets ---
 
 resource "google_secret_manager_secret" "secrets" {
@@ -87,6 +103,19 @@ resource "google_secret_manager_secret" "places_api_key_secret" {
 resource "google_secret_manager_secret_version" "places_api_key_version" {
   secret      = google_secret_manager_secret.places_api_key_secret.id
   secret_data = google_apikeys_key.places_key.key_string
+}
+
+resource "google_secret_manager_secret" "youtube_api_key_secret" {
+  secret_id = "google-youtube-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "youtube_api_key_version" {
+  secret      = google_secret_manager_secret.youtube_api_key_secret.id
+  secret_data = google_apikeys_key.youtube_api_key.key_string
 }
 
 # --- Eventarc Trigger for Reporter Service ---
