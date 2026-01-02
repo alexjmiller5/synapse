@@ -5,31 +5,30 @@ CONFIG = {}
 DATABASES = {}
 PROMPTS = {}
 
-try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "databases.yaml"), "r") as f:
-        DATABASES = yaml.safe_load(f)
-except Exception as e:
-    print(f"❌ Critical Config Error: {e}")
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
-try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "prompts.yaml"), "r") as f:
-        PROMPTS = yaml.safe_load(f)
-except Exception:
-    pass
+# Helper to load yaml safely
+def load_yaml(filename, paths):
+    for path in paths:
+        full_path = os.path.abspath(path)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, "r") as f:
+                    return yaml.safe_load(f) or {} # Return empty dict if file is empty
+            except Exception as e:
+                print(f"⚠️ Error loading {filename} at {full_path}: {e}")
+    return {}
 
-## try two directories up for config.yaml in addition to current directory
-try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(
-        os.path.join(script_dir, "..", "..", "config.yaml"), "r"
-    ) as f:
-        CONFIG = yaml.safe_load(f)
-except Exception as e:
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        with open(os.path.join(script_dir, "config.yaml"), "r") as f:
-            CONFIG = yaml.safe_load(f)
-    except Exception as e2:
-        print(f"❌ Critical Config Error: {e} | {e2}")
+# Load Databases & Prompts (Local only)
+DATABASES = load_yaml("databases.yaml", [os.path.join(script_dir, "databases.yaml")])
+PROMPTS = load_yaml("prompts.yaml", [os.path.join(script_dir, "prompts.yaml")])
+
+# Load Config (Check multiple locations)
+config_paths = [
+    os.path.join(script_dir, "..", "..", "config.yaml"), # 2 dirs up
+    os.path.join(script_dir, "config.yaml")              # Current dir
+]
+CONFIG = load_yaml("config.yaml", config_paths)
+
+if not CONFIG:
+    print("❌ Critical: config.yaml not found.")

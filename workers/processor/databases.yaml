@@ -13,7 +13,21 @@ databases:
       Tags:
         type: "multi_select"
         required: true
-        allowlist: ["Gifts", "Shopping", "Work", "Social Planning", "Finances", "Career", "Westport", "Capital One", "Chore", "Errand", "Decision", "Learning"]
+        allowlist:
+          [
+            "Gifts",
+            "Shopping",
+            "Work",
+            "Social Planning",
+            "Finances",
+            "Career",
+            "Westport",
+            "Capital One",
+            "Chore",
+            "Errand",
+            "Decision",
+            "Learning",
+          ]
         instruction: |
           Select the most specific tag using the user's definitions. ONLY SELECT ONE. EVEN IF THOUGH THIS IS A MULTISELECT PROPERTY, I ONLY WANT YOU TO TREAT IT AS A SELECT AND SELECT ONE OF THE TAGS. FOLLOW THIS PRIORITY to avoid misclassification:
           1. "Chore": (DEFAULT) As the user says, "Most tasks are chores to be honest." If it's something quick to do on the computer, in the room, updating a playlist (e.g. Karaoke), editing a profile (Hinge), or fixing a technical sync issue, IT IS A CHORE.
@@ -118,7 +132,15 @@ databases:
       Status:
         type: "status"
         required: true
-        allowlist: ["Priority", "Not Started", "Watched Parts", "In Progress", "Finished", "Gave Up"]
+        allowlist:
+          [
+            "Priority",
+            "Not Started",
+            "Watched Parts",
+            "In Progress",
+            "Finished",
+            "Gave Up",
+          ]
         instruction: |
           Determine the status based on the user's specific phrasing. FOLLOW THIS ORDER:
           1. "Priority": If the user says "need to watch", "must watch", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [movie]" - THAT IS "Not Started".
@@ -142,7 +164,7 @@ databases:
         type: "multi_select"
         required: true
         instruction: "Select relevant genres."
-      Director: 
+      Director:
         type: "select"
         instruction: "The director's name (if known)."
       Famous Cast Members:
@@ -359,10 +381,12 @@ databases:
 
   # Helpers
   youtube-channels:
-    description: "Internal use."
+    description: "YouTube Channels"
     properties:
       Name:
         type: "title"
+      Channel URL:
+        type: "url"
 
   logs:
     description: "Internal use."

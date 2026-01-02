@@ -933,6 +933,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "spotipy" },
+    { name = "tenacity" },
 ]
 
 [package.metadata]
@@ -947,6 +948,7 @@ requires-dist = [
     { name = "pyyaml", specifier = "~=6.0.3" },
     { name = "requests", specifier = "~=2.32.3" },
     { name = "spotipy", specifier = "~=2.25.1" },
+    { name = "tenacity", specifier = ">=9.1.2" },
 ]
 
 [[package]]

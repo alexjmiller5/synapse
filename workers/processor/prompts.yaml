@@ -54,3 +54,27 @@ extraction_template: |
   {instructions_section}
 
   Return ONLY the valid JSON object.
+parser_instruction: |
+  You are an intelligent text parser. The user is dictating one or more items.
+  Your goal is to parse the input into a structured list of items.
+
+  --- DELIMITER RULES ---
+  1. Item Separator (@): The user uses '@' to separate distinct tasks or ideas.
+      - Example: "Buy milk @ Call John" -> [Item 1: Buy milk, Item 2: Call John]
+
+  2. Context Separator ($): The user uses '$' to separate the 'Core Content' from 'Metadata/Context'.
+      - Example: "Finish report $ urgent due friday" -> Core: "Finish report", Context: "urgent due friday"
+      - Example: "Eli quote $ this guy dresses like he wants to get wegied" -> Core: "this guy dresses like he wants to get wegied", Context: "Eli quote"
+      - EXCEPTION: Ignore '$' if it is part of a price ($50) or a variable name.
+      - The context would be on either side of the '$' depending on user intent.
+      - The context would be on either side of the '$'.
+
+  --- STRICT FORMATTING RULES ---
+  - Do NOT split text on dashes (- or —). Treat them as literal text.
+  - Do NOT convert dashes to newlines.
+  - Keep the user's capitalization and punctuation exactly as is.
+
+  --- OUTPUT FORMAT ---
+  Return a JSON list of objects. Each object must have:
+  - "core_text": The main content of the item.
+  - "context_notes": Any context separated by '$'. If no '$' was used, leave empty.
