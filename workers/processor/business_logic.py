@@ -15,9 +15,6 @@ from handlers import (
 )
 
 
-# ==========================================
-# 3. DYNAMIC HYDRATION
-# ==========================================
 def query_notion_db(category_key, query_body=None):
     """Generic helper to safely query a Notion database."""
     db_id = get_db_id(category_key)
@@ -65,15 +62,7 @@ def fetch_property_options(db_id, prop_name):
     if not notion:
         return []
     try:
-        # LOGGING ADDED: verifying the ID being passed to the SDK
-        # print(f"🔍 Retrieving DB: {repr(db_id)}")
         db = notion.databases.retrieve(db_id)
-
-        if "properties" not in db:
-            print(f"   ❌ CRITICAL: Response missing 'properties' key.")
-            print(f"   ❌ Object Type: {db.get('object')}")
-            print(f"   ❌ RAW RESPONSE: {json.dumps(db, default=str)}")
-            return []
 
         prop = db["properties"].get(prop_name)
         if not prop:
@@ -151,7 +140,7 @@ def fetch_trips_inventory():
             date_prop = page["properties"].get("Dates", {}).get("date", {})
             date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
 
-            # 1. Map uses STRICT Name (Matches Groceries logic)
+            # 1. Map uses STRICT Name
             id_map[name] = page["id"]
 
             # 2. Prompt gets Name + Date (So AI can distinguish old vs new)
@@ -264,11 +253,6 @@ def apply_business_logic(category, data, related_project=None):
                 data["Tags"] = tags
 
     return data
-
-
-# ==========================================
-# 7. MAIN HANDLERS & EXECUTORS
-# ==========================================
 
 LOGIC_HANDLERS = {
     "places": handle_places_logic,

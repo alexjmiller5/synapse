@@ -14,7 +14,6 @@ gmaps = None
 
 GEMINI_API_KEY = get_secret("gemini-api-key")
 NOTION_API_KEY = get_secret("notion-integration-token")
-FALLBACK_NOTION_BLOCK_ID = get_secret("notion-quick-notes-last-block-id")
 SPOTIFY_CLIENT_ID = get_secret("spotify-client-id")
 SPOTIFY_CLIENT_SECRET = get_secret("spotify-client-secret")
 GOOGLE_PLACES_KEY = get_secret("google-places-api-key")

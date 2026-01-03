@@ -298,6 +298,12 @@ gcloud api-gateway gateways describe processor-gateway \
 uv add --package <workspace-member-name> <package-name>
 ```
 
+- Delete a secret from `gcloud`
+
+```bash
+gcloud secrets delete <secret-name> --project=<project-id>
+```
+
 ---
 
 ## Useful Links
