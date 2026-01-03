@@ -156,17 +156,20 @@ def fetch_trips_inventory():
 def fetch_active_projects():
     """
     Returns:
-      - prompt_list: ["Project Name (Context: notes...)", ...]
-      - id_map: {"Project Name": "page-id"}
+    - prompt_list: ["Project Name (Context: notes...)", ...]
+    - id_map: {"Project Name": "page-id"}
     """
-    # Specific query: Filter for active Projects (Tags contains 'Project', Status != 'Completed')
+    print(f"📂 Fetching candidate projects (Status: To Do / In Progress)...")
+
     query_body = {
         "filter": {
             "and": [
                 {"property": "Tags", "multi_select": {"contains": "Project"}},
                 {
-                    "property": "Status",
-                    "status": {"does_not_equal": "Completed"},
+                    "or": [
+                        {"property": "Status", "status": {"equals": "To Do"}},
+                        {"property": "Status", "status": {"equals": "In progress"}},
+                    ]
                 },
             ]
         },
@@ -186,7 +189,11 @@ def fetch_active_projects():
             # Dynamic Name Lookup: Find the property of type 'title'
             name = "Unknown"
             for prop_data in props.values():
-                if prop_data["type"] == "title" and prop_data.get("title"):
+                if (
+                    isinstance(prop_data, dict)
+                    and prop_data.get("type") == "title"
+                    and prop_data.get("title")
+                ):
                     name = prop_data["title"][0]["plain_text"]
                     break
 
@@ -210,10 +217,11 @@ def fetch_active_projects():
 
             print(f"   👉 Loaded Project: '{name}' (ID: {page_id})")
 
-        except Exception:
+        except Exception as e:
+            print(f"   ⚠️ Skipping a project due to error: {e}")
             continue
 
-    print(f"✅ Total Projects Loaded: {len(prompt_list)}")
+    print(f"✅ Total Active Projects Loaded: {len(prompt_list)}")
     return prompt_list, id_map
 
 
@@ -253,6 +261,7 @@ def apply_business_logic(category, data, related_project=None):
                 data["Tags"] = tags
 
     return data
+
 
 LOGIC_HANDLERS = {
     "places": handle_places_logic,
