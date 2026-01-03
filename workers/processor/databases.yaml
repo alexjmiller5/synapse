@@ -54,13 +54,13 @@ databases:
           2. CHECK TEXT: If no date is in the Context, look for date mentions in the text itself.
           3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
           *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
-          *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025).*
+          *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025). IF IT'S CURRENTLY DEC 2025 AND THE USER CONTEXT SAYS 'Nov 14' THE USER MEANS Nov 14, 2026.*
       Status:
         type: "status"
         virtual: true
 
   groceries:
-    description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping)."
+    description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping). Sometimes if a food is included, but the prompt is very specific, it will be a task. For example 'Buy a 10 pound bag of rice if the 2 pound is too small`` is a task because of the specific instructions. But 'Buy rice' is groceries."
     properties:
       Name:
         type: "title"
@@ -77,7 +77,7 @@ databases:
         instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
 
   ideas:
-    description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that."
+    description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that. Usually this has the word idea in it, but sometimes it does. For example, if the user input is 'Idea for a name: call it quick test (Context: mcat availability project)', the context is clearly specifying that this is an idea for a name a related project, not a standalone idea. Standalone ideas for this categorization won't usually have any context unless it's specifying the status of the idea or that it's an idea. The context might just be 'new idea' or 'great idea' or something like that but wouldn't specify a specific project - if it did specify a project it would be a task related to that project, not an idea."
     properties:
       Description:
         type: "title"
@@ -90,8 +90,8 @@ databases:
       Status:
         type: "status"
         required: true
-        allowlist: ["Not started", "In progress", "Bad Idea", "Already Exists"]
-        instruction: "Determine status based on confidence/progress."
+        allowlist: ["Ideated", "Good Idea"]
+        instruction: "Determine status based on confidence/progress - but generally default to Ideated. If the user specifies good idea specifically or something along the lines of how great they think it is, use Good Idea"
 
   quotes:
     description: "A memorable quote or saying (often attributed to a person)."
@@ -109,7 +109,7 @@ databases:
         virtual: true
 
   movies:
-    description: "A movie title, genre, or film description to watch or rate."
+    description: "A movie title, genre, or film description to watch or rate. If the user says 'Need to watch p diddy documentary produced by 50 cent', that is a movie so this should be categorized as a movie, not a task. The line here is very thin because more detail than that might be a task, like 'watch p diddy documentary with mom' is more of a task because of the specific instructions, but even though produced by 50 cent was another detail, this should still be categorized as a movie not a task."
     properties:
       Title:
         type: "title"

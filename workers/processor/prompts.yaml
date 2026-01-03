@@ -29,7 +29,7 @@ categorize_template: |
   The user is currently working on these projects:
   {active_projects_list}
 
-  **STRICT PROJECT RULE:** You must ONLY identify a `related_project` if the user's Context mentions it (e.g., "Fix bug [Context: Synapse]"). 
+  **STRICT PROJECT RULE:** You must ONLY identify a `related_project` if the user's Context mentions it (e.g., "Fix bug [Context: Synapse]").
   If the Context is empty or unrelated, DO NOT assign a project, even if the task sounds similar. Just categorize it as a normal "task".
 
   --- CATEGORIES ---
