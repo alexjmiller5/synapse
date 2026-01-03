@@ -196,6 +196,8 @@ def get_gemini_schema(category):
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
             # IF allow_new is True, we remove 'enum' so AI can write anything
             # Note: Notion 'status' properties usually require specific IDs, but 'select' allows creation.
+            allow_new = rules.get("create_new", False)
+            
             if opts and not allow_new:
                 field_def = {"type": "string", "enum": opts}
             else:

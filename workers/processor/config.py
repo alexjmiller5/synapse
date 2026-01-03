@@ -7,7 +7,6 @@ PROMPTS = {}
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Helper to load yaml safely
 def load_yaml(filename, paths):
     for path in paths:
         full_path = os.path.abspath(path)
@@ -19,14 +18,12 @@ def load_yaml(filename, paths):
                 print(f"⚠️ Error loading {filename} at {full_path}: {e}")
     return {}
 
-# Load Databases & Prompts (Local only)
 DATABASES = load_yaml("databases.yaml", [os.path.join(script_dir, "databases.yaml")])
 PROMPTS = load_yaml("prompts.yaml", [os.path.join(script_dir, "prompts.yaml")])
 
-# Load Config (Check multiple locations)
 config_paths = [
-    os.path.join(script_dir, "..", "..", "config.yaml"), # 2 dirs up
-    os.path.join(script_dir, "config.yaml")              # Current dir
+    os.path.join(script_dir, "..", "..", "config.yaml"),
+    os.path.join(script_dir, "config.yaml")
 ]
 CONFIG = load_yaml("config.yaml", config_paths)
 

@@ -2,12 +2,9 @@ import json
 from datetime import date
 from config import DATABASES
 from gcp_secrets import get_db_id
-from clients import notion, FALLBACK_NOTION_BLOCK_ID
+from clients import notion
 
 
-# ==========================================
-# 4. FORMATTING HELPERS
-# ==========================================
 def _notion_title(val):
     return {"title": [{"text": {"content": val}}]}
 
