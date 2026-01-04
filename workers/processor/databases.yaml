@@ -267,7 +267,7 @@ databases:
         instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
 
   bookmarks:
-    description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify, 'thisamericanlife.org', or Google Maps URL)."
+    description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify, 'thisamericanlife.org', or Google Maps URL). If there is more context than just the url, this should NOT be categorized as a bookmarks - bookmarks are ONLY urls. For example, if the user input is 'Check out this website: www.test.com for more info', that is a task (chore) to check out the website, not a bookmark. Bookmarks are ONLY when the user input is JUST a url or something very close to just a url with minimal extra text."
     properties:
       Description:
         type: "title"
