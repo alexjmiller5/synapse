@@ -1,4 +1,3 @@
-import json
 from datetime import date
 from config import DATABASES
 from gcp_secrets import get_db_id
@@ -21,7 +20,6 @@ def query_notion_db(category_key, query_body=None):
     if not notion or not db_id:
         return []
 
-    # Default body if none provided
     if query_body is None:
         query_body = {"page_size": 100}
 
@@ -46,7 +44,6 @@ def fetch_inventory_map(category):
     inventory = {}
     for page in results:
         try:
-            # Safe title extraction
             title_prop = page["properties"].get("Name", {}).get("title", [])
             if title_prop:
                 name = title_prop[0]["plain_text"]
@@ -253,7 +250,6 @@ def apply_business_logic(category, data, related_project=None):
             data["Date Watched"] = today_str
 
     elif category == "bookmarks":
-        # Check URL for github.com
         if "github.com" in data.get("URL", ""):
             tags = data.get("Tags", [])
             if isinstance(tags, list) and "Github" not in tags:
@@ -279,14 +275,11 @@ LOGIC_HANDLERS = {
 def execute_logic(category, data, inventory_map=None, trips_id_map=None):
     print(f"⚙️ Executing Logic for: {category}")
 
-    # Special case for places (requires extra arg)
     if category == "places":
         return handle_places_logic(category, data, trips_id_map)
 
-    # Special case for groceries (requires extra arg)
     if category in ["groceries", "fun-activities"]:
         return handle_groceries_fun_logic(category, data, inventory_map)
 
-    # Generic lookup
     handler = LOGIC_HANDLERS.get(category, handle_default_logic)
     return handler(category, data)
