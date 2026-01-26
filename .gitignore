@@ -18,3 +18,6 @@ __pycache__/
 
 # Local requests to the processor worker
 scripts/local_requests.txt
+
+# vscode settings
+.vscode/

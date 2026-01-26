@@ -1,8 +1,0 @@
-{
-  "powerClipper.alwaysExclude": [
-    "**/uv.lock",
-    "**/.venv",
-    "**/.terraform"
-  ],
-  "python-envs.pythonProjects": []
-}
