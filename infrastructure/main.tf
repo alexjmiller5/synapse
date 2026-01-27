@@ -423,7 +423,7 @@ module "intaker_service" {
   gcp_project_id        = local.config.gcp_project_id
   service_account_email = google_service_account.function_sa.email
   max_instance_count    = 1
-  min_instance_count    = 1
+  min_instance_count    = 0
   available_memory      = "512Mi"
   available_cpu         = "1000m"
   timeout_seconds       = 30
