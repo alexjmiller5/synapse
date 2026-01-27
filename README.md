@@ -377,6 +377,10 @@ gcloud secrets delete <secret-name> --project=<project-id>
 - [ ] Fetch the notes of the project in addition to the titles to make sure the ai will be able to have the right when determining if a raw text belongs with a project
 - [ ] Refactor this readme to be a clear guide on how to setup synapse from the ground up if nothing was created because rn there's a lot of stuff that's not actually useful or specific to my implementation of the project. Then there can be a section about how this project is designed and a section about how to use it well
 - [ ] Rewrite the database getting to use pagination for dbs over 100 pages
+- [ ] don't rewrite all the shortcuts inside my ios app's intent. Just write the action to take the test and the shortcuts themselves will handle the rest. All that this app is replacing inside the shortcuts is the part where it sends the payload to the processor function
+- [ ] For the ios app, make the queued status actually active - things always default to sending even when we're completely offline lmao
+- [ ] Rename app to be Receptor instead of Synapse since Synapse is the overall project name
+- [ ] Rename the appintent actions to be more thoughtful and consistent with the overall naming scheme
 
 ## Synapse Prompting Guide
 
