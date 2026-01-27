@@ -21,3 +21,6 @@ scripts/local_requests.txt
 
 # vscode settings
 .vscode/
+
+# Claude folder
+.claude/receptor/Receptor.xcodeproj/project.xcworkspace/xcuserdata/
