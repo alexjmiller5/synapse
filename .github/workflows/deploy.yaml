@@ -101,8 +101,10 @@ jobs:
           workload_identity_provider: "projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
           service_account: "deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
 
-      - name: Copy root config.yaml to service directory
-        run: cp config.yaml "${{ matrix.service.path }}/config.yaml"
+      - name: Copy root config files to service directory
+        run: |
+          cp config.yaml "${{ matrix.service.path }}/config.yaml"
+          cp .python-version "${{ matrix.service.path }}/.python-version"
 
       - name: Deploy ${{ matrix.service.name }}
         uses: google-github-actions/deploy-cloudrun@v2
