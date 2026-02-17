@@ -61,7 +61,7 @@ def run_pipeline(
         )
 
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
+            model="gemini-3-flash-preview",
             contents=[
                 types.Content(parts=[types.Part(text=classify_input)], role="user")
             ],
@@ -118,7 +118,7 @@ def run_pipeline(
 
         # DEBUG: Capture Raw AI Response before JSON Load
         ai_response_obj = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-09-2025",
+            model="gemini-3-flash-preview",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
                 system_instruction=extract_prompt,

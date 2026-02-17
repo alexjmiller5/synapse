@@ -27,3 +27,6 @@ scripts/local_requests.txt
 
 # XCode user data
 xcuserdata/
+
+# Logs
+logs

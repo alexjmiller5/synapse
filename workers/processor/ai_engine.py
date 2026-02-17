@@ -60,7 +60,7 @@ def parse_raw_input(raw_text):
 
     try:
         response = generate_with_retry(
-            model="gemini-2.5-flash-preview-09-2025",
+            model="gemini-3-flash-preview",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
