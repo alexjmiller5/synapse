@@ -80,6 +80,17 @@ Property field meanings:
 - `gcp_secrets.py` - Secret Manager access with caching
 - `clients.py` - Singleton client initialization (Gemini, Notion, Spotify, etc.)
 
+## Notion API Access
+
+To query Notion databases locally, use the 1Password CLI to retrieve the API token:
+
+```bash
+op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal
+```
+
+**Key database IDs:**
+- Logs (execution tracking): `2b103953a8af803280cec633c91c46c3`
+
 ## Infrastructure
 
 - **Terraform** in `infrastructure/` manages GCP resources
@@ -101,122 +112,4 @@ Push to `main` triggers GitHub Actions which:
 
 ## Receptor - iOS & macOS Companion App
 
-The `receptor/` folder contains a multi-platform SwiftUI app called **Receptor** with offline-first "Fire & Forget" architecture. Thoughts are queued locally in SwiftData and synced reliably via a cancel-and-restart flush model.
-
-### Naming Conventions
-
-- **Synapse** - The overall system/backend (this repo)
-- **Receptor** - The iOS/macOS companion app that receives and forwards thoughts
-- **Thought** - The data model representing captured text
-- **Recept** - The verb for capturing and sending a thought to the processor (e.g., `receptThought()`)
-
-The mental model: Receptor is a middleware app that "recepts" thoughts - it receives them from the user and sends them to the Synapse processor.
-
-### Platform Support
-- **iOS**: Full-featured app with background sync via BGTaskScheduler
-- **macOS**: Menu bar app that stays running at login, syncs immediately when network changes
-
-### Architecture
-- SwiftUI + SwiftData for persistence in shared App Group container
-- App Group (`group.com.alexmiller.receptor`) enables data sharing between main app and Shortcuts extensions
-- `SyncManager` singleton handles network monitoring and queue processing
-- `NWPathMonitor` triggers immediate sync when network is restored (works on both platforms)
-- Strict FIFO ordering - sync stops on first failure to preserve order
-
-### Sync Model: Cancel-and-Restart
-Every trigger (shortcut, button press, network restore, app foreground) calls `requestFlush()`, which:
-1. Cancels any in-progress flush task
-2. Starts a new flush from the top of the queue (oldest first, FIFO)
-3. Returns a `Task<Int, Never>` so callers can optionally `await .value` for the count
-
-This ensures the most recent trigger always processes the most up-to-date queue. Between each thought upload, the flush checks `Task.isCancelled` to yield to newer flushes.
-
-- `queueThought()` saves to DB then fires `requestFlush()` non-blocking (fire-and-forget)
-- `receptThought()` is a blocking `URLSession.shared.data(for:)` call per thought
-- Failed thoughts are retried on next flush (up to 25 retries before permanent abandonment)
-- Thoughts are always persisted to SwiftData first, so they survive process death and sync on next trigger
-
-### macOS-specific
-- Menu bar app with quick capture popover (click brain icon)
-- `LSUIElement = YES` hides dock icon when main window is closed
-- Login item support via `SMAppService` - toggle in Settings
-- No background task scheduler needed - app stays running and `NWPathMonitor` fires immediately
-
-### App Intents (iOS/macOS Shortcuts integration)
-- **Recept** (`CaptureThoughtIntent`) - Fire-and-forget, returns "Queued" instantly without blocking
-- **Flush Thought Queue** (`FlushQueueIntent`) - Blocking intent that waits for sync completion, returns count of synced thoughts
-
-### Sync Triggers
-Thoughts track what triggered their sync via `sentVia` field:
-- `captureIntent` - From Recept shortcut
-- `flushIntent` - From Flush Thought Queue shortcut
-- `appBecameActive` - App opened/foregrounded
-- `networkRestored` - Connectivity restored after offline
-- `backgroundTask` - iOS background processing
-- `manualRetry` - User swiped to retry failed thought
-
-### Notifications
-- Only sent when sync is NOT triggered by `captureIntent` (to avoid double feedback)
-
-### UI Structure
-- Two tabs: Thoughts and Settings
-- Thoughts tab: List with status badges, swipe-right to retry failed
-- Settings tab: API configuration, queue statistics, debug sync log (+ Start at Login on macOS)
-- Timestamps include seconds for debugging
-- Online/Offline indicator in toolbar
-
-### Code Organization (receptor/Receptor/)
-- `Models/Thought.swift` - SwiftData model with ThoughtStatus enum
-- `Services/SyncManager.swift` - Singleton: network monitoring, Background URLSession, queue processing (uses `receptThought()` to send)
-- `Services/Configuration.swift` - App Group URLs, API key/URL storage
-- `Services/AppDelegate.swift` - iOS-only: handles background URLSession events
-- `Views/` - ThoughtsTab, SettingsTab, ThoughtListView, ComposeView, ContentView
-- `Intents/` - CaptureThoughtIntent (Recept), FlushQueueIntent (Flush Thought Queue)
-- `macOS/` - MenuBarView, LoginItemManager (macOS-specific)
-
-### macOS Build & Run Commands
-
-```bash
-# Build for macOS
-xcodebuild -project receptor/Receptor.xcodeproj -scheme Receptor \
-  -destination "platform=macOS" -allowProvisioningUpdates build
-
-# Run the built app
-open ~/Library/Developer/Xcode/DerivedData/Receptor-*/Build/Products/Debug/Receptor.app
-
-# Build and run in one command
-xcodebuild -project receptor/Receptor.xcodeproj -scheme Receptor \
-  -destination "platform=macOS" -allowProvisioningUpdates build && \
-  open ~/Library/Developer/Xcode/DerivedData/Receptor-*/Build/Products/Debug/Receptor.app
-```
-
-### iOS Build & Run Commands
-
-```bash
-# List connected devices (find device ID)
-xcrun xctrace list devices 2>&1 | grep -i iphone
-
-# Build for physical device (replace device ID as needed)
-xcodebuild -project receptor/Receptor.xcodeproj -scheme Receptor \
-  -destination "id=00008140-000839E42111801C" \
-  -allowProvisioningUpdates build
-
-# Install to device (after building)
-xcrun devicectl device install app --device 00008140-000839E42111801C \
-  ~/Library/Developer/Xcode/DerivedData/Receptor-*/Build/Products/Debug-iphoneos/Receptor.app
-
-# Build for simulator
-xcodebuild -project receptor/Receptor.xcodeproj -scheme Receptor \
-  -destination "platform=iOS Simulator,name=iPhone 16 Pro" build
-
-# Run in simulator (after building)
-xcrun simctl boot "iPhone 16 Pro"
-xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Receptor-*/Build/Products/Debug-iphonesimulator/Receptor.app
-xcrun simctl launch booted com.alexmiller.receptor
-```
-
-### First-time device setup
-1. Enable Developer Mode: Settings → Privacy & Security → Developer Mode
-2. After first install, trust the developer certificate: Settings → General → VPN & Device Management → Developer App → Trust
-
-**Bundle identifier:** `com.alexmiller.receptor`
+The `receptor/` folder contains a multi-platform SwiftUI app that captures thoughts and syncs them to the Synapse backend. See `receptor/CLAUDE.md` for detailed documentation.
