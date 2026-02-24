@@ -8,8 +8,9 @@ from clients import gemini_client, GEMINI_API_KEY
 from notion_utils import (
     log_job_outcome,
     create_high_priority_task,
-    append_note,
     create_cleanup_task,
+    create_project_task,
+    create_project_note,
 )
 from ai_engine import (
     parse_raw_input,
@@ -96,9 +97,10 @@ def run_pipeline(
 
         category = classified.get("category", "tasks")
         project = classified.get("related_project")
+        project_action = classified.get("project_action", "task")
         print(f"🤖 Classification: {category}")
         if project:
-            print(f"   🔍 AI identified project: '{project}'")
+            print(f"   🔍 AI identified project: '{project}' (action: {project_action})")
             if project in project_id_map:
                 print(f"   ✅ Exact match found: {project_id_map[project]}")
             else:
@@ -145,16 +147,18 @@ def run_pipeline(
 
         url = None
         if project and category == "tasks":
-            eid = project_id_map.get(project)
-            if eid:
-                print(f"   -> Appending to Project: {project}")
-                note_content = extracted.get("Name", raw_text)
-                # Don't append user context - that's just for categorization
-                # if user_context:
-                # note_content += f" ({user_context})"
-                append_note(eid, note_content)
-                url = f"https://www.notion.so/{eid.replace('-','')}"
-                log_payload["Extractor_Data"]["Action"] = "Appended"
+            project_id = project_id_map.get(project)
+            if project_id:
+                if project_action == "note":
+                    print(f"   -> Creating project note for: {project}")
+                    url = create_project_note(
+                        project_id, extracted.get("Name", raw_text)
+                    )
+                    log_payload["Extractor_Data"]["Action"] = "Created Project Note"
+                else:
+                    print(f"   -> Creating project task for: {project}")
+                    url = create_project_task(project_id, extracted)
+                    log_payload["Extractor_Data"]["Action"] = "Created Project Task"
             else:
                 url = execute_logic(category, extracted)
         else:

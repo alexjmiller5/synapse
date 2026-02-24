@@ -37,6 +37,8 @@ for cat in list(DATABASES.get("databases", {}).keys()) + [
     "logs",
     "youtube-channels",
     "trips",
+    "projects",
+    "notes",
 ]:
     val = get_secret(f"notion-{cat}-db-id")
     if val:
