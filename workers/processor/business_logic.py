@@ -162,7 +162,7 @@ def fetch_active_projects():
     query_body = {
         "filter": {
             "or": [
-                {"property": "Status", "status": {"equals": "Haven't Started"}},
+                {"property": "Status", "status": {"equals": "To Do"}},
                 {"property": "Status", "status": {"equals": "In progress"}},
             ]
         },
