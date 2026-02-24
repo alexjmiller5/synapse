@@ -34,3 +34,5 @@ secrets:
   - notion-quotes-db-id
   - notion-bookmarks-db-id
   - notion-logs-db-id
+  - notion-projects-db-id
+  - notion-notes-db-id
