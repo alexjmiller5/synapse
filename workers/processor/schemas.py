@@ -20,6 +20,10 @@ CATEGORY_SCHEMA_CLASSIFY = {
             "enum": list(DATABASES.get("databases", {}).keys()),
         },
         "related_project": {"type": "string"},
+        "project_action": {
+            "type": "string",
+            "enum": ["task", "note"],
+        },
     },
     "required": ["category"],
 }
