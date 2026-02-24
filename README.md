@@ -21,7 +21,8 @@ Synapse is a serverless application designed to eliminate the friction of manual
 
 ## Architecture Diagram
 
-See project documentation in Notion.
+<!-- TODO: Create an architecture diagram of the flow of my services -->
+<!-- ![Architecture Diagram](docs/synapse_architecture_diagram.png) -->
 
 ---
 
