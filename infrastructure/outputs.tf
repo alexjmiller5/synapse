@@ -1,1 +1,1 @@
-# TODO: Add some outputs here
+# Synapse Terraform outputs
