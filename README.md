@@ -20,7 +20,6 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **API Gateway**: Secures and manages access to the `intaker` function.
 
 ## Architecture Diagram
-
 <!-- TODO: Create an architecture diagram of the flow of my services -->
 <!-- ![Architecture Diagram](docs/synapse_architecture_diagram.png) -->
 
