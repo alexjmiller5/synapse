@@ -169,6 +169,51 @@ def append_note(page_id, text):
         print(f"   ❌ Append Note Failed: {e}")
 
 
+def create_project_task(project_id, extracted_data):
+    """
+    Creates a Task in the Tasks DB and links it to a Project via relation.
+    """
+    print(f"📋 Creating project task linked to project {project_id}...")
+    props = build_notion_properties("tasks", extracted_data)
+
+    # Link to project via relation
+    props["Related Project"] = {"relation": [{"id": project_id}]}
+
+    try:
+        resp = create_page("tasks", props)
+        url = resp.get("url")
+        print(f"   ✅ Project task created: {url}")
+        return url
+    except Exception as e:
+        print(f"   ❌ Project task creation failed: {e}")
+        return None
+
+
+def create_project_note(project_id, note_text):
+    """
+    Creates a Note in the Notes DB and links it to a Project via relation.
+    """
+    print(f"📝 Creating project note linked to project {project_id}...")
+
+    props = {
+        "Title": _notion_title(note_text),
+        "Related Project New": {"relation": [{"id": project_id}]},
+        "Status": _notion_status("Reference"),
+    }
+
+    try:
+        db_id = get_db_id("notes")
+        resp = notion.pages.create(
+            parent={"database_id": db_id}, properties=props
+        )
+        url = resp.get("url")
+        print(f"   ✅ Project note created: {url}")
+        return url
+    except Exception as e:
+        print(f"   ❌ Project note creation failed: {e}")
+        return None
+
+
 def create_cleanup_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
     props = {
