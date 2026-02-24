@@ -21,8 +21,6 @@ databases:
             "Social Planning",
             "Finances",
             "Career",
-            "Westport",
-            "Capital One",
             "Chore",
             "Errand",
             "Decision",
@@ -32,10 +30,10 @@ databases:
           Select the most specific tag using the user's definitions. ONLY SELECT ONE. EVEN IF THOUGH THIS IS A MULTISELECT PROPERTY, I ONLY WANT YOU TO TREAT IT AS A SELECT AND SELECT ONE OF THE TAGS. FOLLOW THIS PRIORITY to avoid misclassification:
           1. "Chore": (DEFAULT) As the user says, "Most tasks are chores to be honest." If it's something quick to do on the computer, in the room, updating a playlist (e.g. Karaoke), editing a profile (Hinge), or fixing a technical sync issue, IT IS A CHORE.
           2. "Errand": Whatever involves going out of the house to do it (e.g. picking up dry cleaning, dropping something off at Goodwill).
-          3. "Capital One": The user works at Capital One. Use this if related to work or PTO.
+          3. "Work": Use this if related to the user's current job or PTO.
           4. "Shopping": Anything related to buying (Amazon, etc). Use "Gifts" if it's a gift idea or buying for someone else.
           5. "Learning": "Something to explore"—like looking through a website, looking into a tool, or figuring out how something works (e.g. "how the python tool uv works").
-          6. "Career": General career stuff (not specific to the current Capital One job).
+          6. "Career": General career stuff (job search, interviews, resume, networking — not day-to-day work tasks).
           7. "Social Planning": ONLY if actually scheduling a specific event with other people. Even if it involves interaction with others that doesn't necesarily mean it has this tag -- for this tag it MUST be specifically for me to plan some kind of social event with others. If I have to ask someone something or talk to them about something that's not social planning. Updating a bucket list or profile solo is a CHORE.
       Priority:
         type: "select"

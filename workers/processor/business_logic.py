@@ -152,28 +152,24 @@ def fetch_trips_inventory():
 
 def fetch_active_projects():
     """
+    Fetches active projects from the dedicated Projects database.
     Returns:
-    - prompt_list: ["Project Name (Context: notes...)", ...]
+    - prompt_list: ["Project Name", ...]
     - id_map: {"Project Name": "page-id"}
     """
-    print(f"📂 Fetching candidate projects (Status: To Do / In Progress)...")
+    print(f"📂 Fetching active projects from Projects DB...")
 
     query_body = {
         "filter": {
-            "and": [
-                {"property": "Tags", "multi_select": {"contains": "Project"}},
-                {
-                    "or": [
-                        {"property": "Status", "status": {"equals": "To Do"}},
-                        {"property": "Status", "status": {"equals": "In progress"}},
-                    ]
-                },
+            "or": [
+                {"property": "Status", "status": {"equals": "To Do"}},
+                {"property": "Status", "status": {"equals": "In progress"}},
             ]
         },
         "page_size": 100,
     }
 
-    results = query_notion_db("tasks", query_body)
+    results = query_notion_db("projects", query_body)
 
     prompt_list = []
     id_map = {}
@@ -183,34 +179,15 @@ def fetch_active_projects():
             props = p["properties"]
             page_id = p["id"]
 
-            # Dynamic Name Lookup: Find the property of type 'title'
-            name = "Unknown"
-            for prop_data in props.values():
-                if (
-                    isinstance(prop_data, dict)
-                    and prop_data.get("type") == "title"
-                    and prop_data.get("title")
-                ):
-                    name = prop_data["title"][0]["plain_text"]
-                    break
+            # Extract project title
+            title_prop = props.get("Title", {}).get("title", [])
+            name = title_prop[0]["plain_text"] if title_prop else "Unknown"
 
             if name == "Unknown":
                 continue
 
-            # Store ID for later
             id_map[name] = page_id
-
-            # Context Building (Notes)
-            notes_obj = props.get("Notes", {}).get("rich_text", [])
-            notes_text = "".join([t["plain_text"] for t in notes_obj])
-            clean_notes = notes_text.replace("\n", " ").strip()
-
-            # Truncate long notes
-            if len(clean_notes) > 150:
-                clean_notes = clean_notes[:150] + "..."
-
-            entry = f"{name} (Context: {clean_notes})" if clean_notes else name
-            prompt_list.append(entry)
+            prompt_list.append(name)
 
             print(f"   👉 Loaded Project: '{name}' (ID: {page_id})")
 
