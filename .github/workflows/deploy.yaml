@@ -20,8 +20,6 @@ jobs:
         service:
           - name: intaker
             path: services/intaker
-          - name: reporter
-            path: services/reporter
           - name: processor
             path: workers/processor
     defaults:
@@ -65,9 +63,6 @@ jobs:
             path: services/intaker
             entry_point: intaker
             trigger_http: true
-          - name: synapse-reporter
-            path: services/reporter
-            entry_point: report
           - name: synapse-processor
             path: workers/processor
             entry_point: processor

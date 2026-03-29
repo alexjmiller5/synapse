@@ -12,7 +12,6 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "services/intaker",
-    "services/reporter",
     "workers/processor"
 ]
 
