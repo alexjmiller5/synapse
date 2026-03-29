@@ -205,7 +205,10 @@ final class SyncManager: ObservableObject {
                 continue
             }
 
-            let payload = ["raw_text": thought.text]
+            let payload: [String: String] = [
+                "raw_text": thought.text,
+                "thought_id": thought.id.uuidString,
+            ]
             guard let jsonData = try? JSONEncoder().encode(payload) else {
                 os_log("[UPLOAD] SKIP id=%{public}@ — JSON encode failed", log: uploadLog, type: .error, thoughtIdShort)
                 continue
@@ -541,7 +544,10 @@ final class SyncManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
-        let payload = ["raw_text": thought.text]
+        let payload: [String: String] = [
+            "raw_text": thought.text,
+            "thought_id": thought.id.uuidString,
+        ]
         request.httpBody = try? JSONEncoder().encode(payload)
 
         thought.status = .sending

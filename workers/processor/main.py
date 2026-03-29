@@ -1,6 +1,8 @@
 import functions_framework
 import json
 import base64
+import time
+from collections import OrderedDict
 from google.genai import types
 
 from config import PROMPTS
@@ -29,6 +31,38 @@ from business_logic import (
     apply_business_logic,
     execute_logic,
 )
+
+# --- Dedup Cache (resets on cold start by design) ---
+SEEN_MESSAGES = OrderedDict()
+DEDUP_WINDOW_SECONDS = 600  # 10 minutes
+DEDUP_MAX_SIZE = 50
+
+
+def _evict_expired():
+    """Remove entries older than DEDUP_WINDOW_SECONDS from the front."""
+    now = time.time()
+    while SEEN_MESSAGES:
+        oldest_key, oldest_time = next(iter(SEEN_MESSAGES.items()))
+        if now - oldest_time > DEDUP_WINDOW_SECONDS:
+            SEEN_MESSAGES.pop(oldest_key)
+        else:
+            break
+
+
+def _is_duplicate_message(key):
+    """Check if we've already processed a message with this key."""
+    now = time.time()
+    _evict_expired()
+
+    if key in SEEN_MESSAGES:
+        return True
+
+    SEEN_MESSAGES[key] = now
+
+    while len(SEEN_MESSAGES) > DEDUP_MAX_SIZE:
+        SEEN_MESSAGES.popitem(last=False)
+
+    return False
 
 
 def run_pipeline(
@@ -195,14 +229,25 @@ def processor(cloud_event):
         print("❌ Critical: Missing API Key or Prompts")
         return
 
-    hydrate_dynamic_options()
-    project_prompts, project_id_map = fetch_active_projects()
-    inventory_map = fetch_inventory_map("groceries")
-    inventory_list = list(inventory_map.keys())
+    # --- Dedup: check Pub/Sub message_id and thought_id attribute ---
+    message_id = cloud_event.data.get("message", {}).get("message_id")
+    if message_id and _is_duplicate_message(f"mid:{message_id}"):
+        print(f"⏭️ Duplicate message_id {message_id}, skipping")
+        return
 
-    trips_list, trips_id_map = fetch_trips_inventory()
+    thought_id = cloud_event.data.get("message", {}).get("attributes", {}).get("thought_id")
+    if thought_id and _is_duplicate_message(f"tid:{thought_id}"):
+        print(f"⏭️ Duplicate thought_id {thought_id}, skipping")
+        return
 
     try:
+        hydrate_dynamic_options()
+        project_prompts, project_id_map = fetch_active_projects()
+        inventory_map = fetch_inventory_map("groceries")
+        inventory_list = list(inventory_map.keys())
+
+        trips_list, trips_id_map = fetch_trips_inventory()
+
         # DECODE
         full_text = str(
             base64.b64decode(cloud_event.data["message"]["data"]).decode("utf-8")

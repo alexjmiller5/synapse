@@ -1,7 +1,10 @@
 import functions_framework
+import hashlib
 import json
 import os
+import time
 import yaml
+from collections import OrderedDict
 from google.cloud import pubsub_v1
 
 # --- Global Config ---
@@ -25,6 +28,61 @@ except Exception as e:
 
 PROJECT_ID = CONFIG.get("gcp_project_id")
 TOPIC_ID = CONFIG.get("processor_topic_name")
+
+# --- Dedup Cache (resets on cold start by design) ---
+DEDUP_CACHE = OrderedDict()
+DEDUP_WINDOW_SECONDS = 300  # 5 minutes
+DEDUP_MAX_SIZE = 100
+
+
+def _make_text_key(raw_text):
+    """Create a normalized hash key from raw text for dedup."""
+    normalized = raw_text.strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _evict_expired(cache, window_seconds):
+    """Remove entries older than window_seconds from the front of the cache."""
+    now = time.time()
+    while cache:
+        oldest_key, oldest_time = next(iter(cache.items()))
+        if now - oldest_time > window_seconds:
+            cache.pop(oldest_key)
+        else:
+            break
+
+
+def _is_duplicate(thought_id, raw_text):
+    """
+    Check if this request is a duplicate.
+    Primary: thought_id (if present) — catches iOS/macOS retries of the same thought.
+    Fallback: text hash — catches non-Receptor clients or missing thought_id.
+    Returns True if duplicate.
+    """
+    now = time.time()
+    _evict_expired(DEDUP_CACHE, DEDUP_WINDOW_SECONDS)
+
+    # Primary: check thought_id if provided
+    if thought_id:
+        key = f"tid:{thought_id}"
+        if key in DEDUP_CACHE:
+            print(f"⏭️ Duplicate thought_id: {thought_id}")
+            return True
+        DEDUP_CACHE[key] = now
+    else:
+        # Fallback: check text hash
+        key = f"txt:{_make_text_key(raw_text)}"
+        if key in DEDUP_CACHE:
+            print(f"⏭️ Duplicate text detected: {repr(raw_text[:50])}")
+            return True
+        DEDUP_CACHE[key] = now
+
+    # Evict oldest if over max size
+    while len(DEDUP_CACHE) > DEDUP_MAX_SIZE:
+        DEDUP_CACHE.popitem(last=False)
+
+    return False
+
 
 # Initialize client on first request (cold start)
 try:
@@ -60,7 +118,12 @@ def intaker(request):
             print(error_msg)
             return error_msg, 400
 
-        print(f"Received raw_text: {raw_text}")
+        thought_id = request_json.get("thought_id")
+
+        print(f"Received raw_text: {raw_text}" + (f" thought_id: {thought_id}" if thought_id else ""))
+
+        if _is_duplicate(thought_id, raw_text):
+            return "Duplicate suppressed", 200
 
     except Exception as e:
         error_msg = f"Error parsing request JSON: {e}"
@@ -71,7 +134,11 @@ def intaker(request):
         # Publish the raw_text to Pub/Sub
         # Data must be bytestring
         data = raw_text.encode("utf-8")
-        future = publisher.publish(topic_path, data)
+        # Pass thought_id as attribute for downstream traceability
+        attrs = {}
+        if thought_id:
+            attrs["thought_id"] = thought_id
+        future = publisher.publish(topic_path, data, **attrs)
         message_id = future.result()  # Wait for publish to complete
 
         print(f"Published message {message_id} to {topic_path}")
