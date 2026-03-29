@@ -106,8 +106,8 @@ class TestCreatePageBookmarkIcon:
 
     @patch("notion_utils.notion")
     @patch("notion_utils.get_db_id", return_value="fake-db-id")
-    def test_bookmark_with_url_gets_favicon_icon(self, mock_db_id, mock_notion):
-        """When creating a bookmark with a URL, the icon should be set to the favicon."""
+    def test_bookmark_with_github_url_gets_custom_emoji(self, mock_db_id, mock_notion):
+        """When creating a bookmark with a GitHub URL, the icon should be the github-light custom emoji."""
         mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from notion_utils import create_page
@@ -121,9 +121,31 @@ class TestCreatePageBookmarkIcon:
 
         call_kwargs = mock_notion.pages.create.call_args[1]
         assert "icon" in call_kwargs
+        assert call_kwargs["icon"]["type"] == "custom_emoji"
+        assert call_kwargs["icon"]["custom_emoji"]["id"] == "2d103953-a8af-8072-b828-007aa3901d27"
+
+    @patch("notion_utils.notion")
+    @patch("notion_utils.get_db_id", return_value="fake-db-id")
+    def test_bookmark_with_non_github_url_gets_favicon(self, mock_db_id, mock_notion):
+        """When creating a bookmark with a non-GitHub URL, the icon should be the site's favicon."""
+        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+
+        from notion_utils import create_page
+
+        props = {
+            "Description": {"title": [{"text": {"content": "Test Bookmark"}}]},
+            "URL": {"url": "https://docs.determinate.systems/guide"},
+        }
+
+        create_page("bookmarks", props)
+
+        call_kwargs = mock_notion.pages.create.call_args[1]
+        assert "icon" in call_kwargs
         assert call_kwargs["icon"]["type"] == "external"
-        assert "github.com" in call_kwargs["icon"]["external"]["url"]
+        assert "docs.determinate.systems" in call_kwargs["icon"]["external"]["url"]
         assert "faviconV2" in call_kwargs["icon"]["external"]["url"]
+        # Verify we use https:// in the URL param
+        assert "url=https://" in call_kwargs["icon"]["external"]["url"]
 
     @patch("notion_utils.notion")
     @patch("notion_utils.get_db_id", return_value="fake-db-id")
