@@ -29,7 +29,8 @@ import requests
 BOOKMARKS_DATA_SOURCE_ID = "2a803953-a8af-80bf-a145-000b8cf4f5e0"
 NOTION_VERSION = "2026-03-11"
 NOTION_BASE_URL = "https://api.notion.com/v1"
-FAVICON_TEMPLATE = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://{domain}&size=128"
+FAVICON_TEMPLATE = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{domain}&size=128"
+GITHUB_CUSTOM_EMOJI_ID = "2d103953-a8af-8072-b828-007aa3901d27"  # "github-light" custom emoji
 
 # Notion rate limit: 3 requests/sec average
 REQUEST_DELAY = 0.35  # seconds between PATCH requests
@@ -91,17 +92,30 @@ def build_favicon_url(domain: str) -> str:
     return FAVICON_TEMPLATE.format(domain=domain)
 
 
-def set_page_icon(headers: dict, page_id: str, favicon_url: str) -> bool:
-    """Set the icon on a Notion page to an external URL."""
+def build_icon_payload(domain: str) -> dict:
+    """Build the Notion icon payload — custom emoji for GitHub, favicon for everything else."""
+    if "github.com" in domain:
+        return {
+            "icon": {
+                "type": "custom_emoji",
+                "custom_emoji": {"id": GITHUB_CUSTOM_EMOJI_ID},
+            }
+        }
+    return {
+        "icon": {
+            "type": "external",
+            "external": {"url": build_favicon_url(domain)},
+        }
+    }
+
+
+def set_page_icon(headers: dict, page_id: str, domain: str) -> bool:
+    """Set the icon on a Notion page based on domain."""
+    payload = build_icon_payload(domain)
     resp = requests.patch(
         f"{NOTION_BASE_URL}/pages/{page_id}",
         headers=headers,
-        json={
-            "icon": {
-                "type": "external",
-                "external": {"url": favicon_url},
-            }
-        },
+        json=payload,
     )
     if resp.status_code == 429:
         # Rate limited — wait and retry once
@@ -111,12 +125,7 @@ def set_page_icon(headers: dict, page_id: str, favicon_url: str) -> bool:
         resp = requests.patch(
             f"{NOTION_BASE_URL}/pages/{page_id}",
             headers=headers,
-            json={
-                "icon": {
-                    "type": "external",
-                    "external": {"url": favicon_url},
-                }
-            },
+            json=payload,
         )
     return resp.status_code == 200
 
@@ -197,12 +206,12 @@ def main():
     failed = 0
 
     for i, item in enumerate(to_process, 1):
-        favicon_url = build_favicon_url(item["domain"])
-        ok = set_page_icon(headers, item["id"], favicon_url)
+        ok = set_page_icon(headers, item["id"], item["domain"])
+        icon_type = "🐙 github-light" if "github.com" in item["domain"] else "🌐 favicon"
 
         if ok:
             success += 1
-            print(f"  ✅ [{i}/{len(to_process)}] {item['title'][:50]} → {item['domain']}")
+            print(f"  ✅ [{i}/{len(to_process)}] {item['title'][:50]} → {item['domain']} ({icon_type})")
         else:
             failed += 1
             print(f"  ❌ [{i}/{len(to_process)}] FAILED: {item['title'][:50]} — {item['url']}")
