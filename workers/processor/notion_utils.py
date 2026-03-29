@@ -96,11 +96,19 @@ def create_page(category, props):
         if bookmark_url:
             parsed = urlparse(bookmark_url)
             domain = parsed.netloc or bookmark_url
-            if domain:
+            if domain and "github.com" in domain:
+                # Use custom "github-light" emoji for GitHub URLs
+                body_params["icon"] = {
+                    "type": "custom_emoji",
+                    "custom_emoji": {
+                        "id": "2d103953-a8af-8072-b828-007aa3901d27"
+                    },
+                }
+            elif domain:
                 body_params["icon"] = {
                     "type": "external",
                     "external": {
-                        "url": f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://{domain}&size=128"
+                        "url": f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{domain}&size=128"
                     },
                 }
 
