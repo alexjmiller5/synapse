@@ -15,3 +15,6 @@ recept-local-batch:
 
 recept +args:
     uv run --with requests scripts/recept.py {{quote(args)}}
+
+reveal-synapse-notion-secret:
+  op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal
