@@ -143,6 +143,9 @@ def main():
     parser.add_argument(
         "--token", type=str, default=None, help="Notion API token (or set NOTION_API_KEY env var)"
     )
+    parser.add_argument(
+        "--force", action="store_true", help="Rewrite icons even if already set"
+    )
     args = parser.parse_args()
 
     token = args.token or os.environ.get("NOTION_API_KEY")
@@ -157,12 +160,13 @@ def main():
     print(f"✅ Found {len(bookmarks)} total bookmarks.\n")
 
     # Filter to those needing favicons
+    force_rewrite = args.force
     to_process = []
     for bm in bookmarks:
         icon = bm.get("icon")
         url = bm.get("properties", {}).get("URL", {}).get("url")
 
-        if icon is not None:
+        if icon is not None and not force_rewrite:
             continue  # Already has an icon
         if not url:
             continue  # No URL to derive favicon from
