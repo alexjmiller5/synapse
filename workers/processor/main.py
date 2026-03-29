@@ -4,7 +4,7 @@ import base64
 from google.genai import types
 
 from config import PROMPTS
-from clients import gemini_client, GEMINI_API_KEY
+from clients import GEMINI_API_KEY
 from notion_utils import (
     log_job_outcome,
     create_high_priority_task,
@@ -17,6 +17,7 @@ from ai_engine import (
     generate_classification_prompt,
     generate_extraction_prompt,
     get_gemini_schema,
+    generate_with_retry,
 )
 from schemas import CATEGORY_SCHEMA_CLASSIFY
 
@@ -61,7 +62,7 @@ def run_pipeline(
             f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
         )
 
-        response = gemini_client.models.generate_content(
+        response = generate_with_retry(
             model="gemini-3-flash-preview",
             contents=[
                 types.Content(parts=[types.Part(text=classify_input)], role="user")
@@ -92,7 +93,22 @@ def run_pipeline(
             print("🔍 DEBUG: No candidates returned in response.")
         # --- VERBOSE DEBUGGING END ---
 
-        # Check if text is None (Safety Filter Trigger)
+        # Guard against null response (safety filter or empty)
+        if response.text is None:
+            print(f"   ⚠️ Gemini returned null response for classification")
+            if response.candidates and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                print(f"   ⚠️ Finish reason: {candidate.finish_reason}")
+                if hasattr(candidate, "safety_ratings"):
+                    print(f"   ⚠️ Safety ratings: {candidate.safety_ratings}")
+            log_job_outcome(
+                full_str_for_log, "Unknown", "Error(s)",
+                details="Gemini returned null response during classification",
+                ai_data=log_payload,
+            )
+            create_high_priority_task(full_str_for_log)
+            return
+
         classified = json.loads(response.text)
 
         category = classified.get("category", "tasks")
@@ -119,7 +135,7 @@ def run_pipeline(
         )
 
         # DEBUG: Capture Raw AI Response before JSON Load
-        ai_response_obj = gemini_client.models.generate_content(
+        ai_response_obj = generate_with_retry(
             model="gemini-3-flash-preview",
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
@@ -131,6 +147,22 @@ def run_pipeline(
 
         raw_ai_text = ai_response_obj.text
         print(f"🔍 DEBUG AI EXTRACT REPR: {repr(raw_ai_text)}")
+
+        # Guard against null extraction response
+        if raw_ai_text is None:
+            print(f"   ⚠️ Gemini returned null response for extraction")
+            if ai_response_obj.candidates and len(ai_response_obj.candidates) > 0:
+                candidate = ai_response_obj.candidates[0]
+                print(f"   ⚠️ Finish reason: {candidate.finish_reason}")
+                if hasattr(candidate, "safety_ratings"):
+                    print(f"   ⚠️ Safety ratings: {candidate.safety_ratings}")
+            log_job_outcome(
+                full_str_for_log, category, "Error(s)",
+                details="Gemini returned null response during extraction",
+                ai_data=log_payload,
+            )
+            create_high_priority_task(full_str_for_log)
+            return
 
         extracted = json.loads(raw_ai_text) or {}
 

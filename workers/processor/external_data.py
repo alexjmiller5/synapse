@@ -1,10 +1,40 @@
 import re
 import json
 import requests
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from inscriptis import get_text
 from clients import spotify, youtube, gmaps
 from notion_utils import create_cleanup_task
+
+
+def sanitize_google_maps_url(url):
+    """
+    Strips tracking/noise parameters from Google Maps URLs to prevent
+    extremely long URLs from corrupting Gemini JSON output.
+    Keeps only essential params (q, ftid, place_id, cid, pb).
+    """
+    parsed = urlparse(url)
+    if not any(
+        domain in (parsed.hostname or "")
+        for domain in ["google.com", "google.co", "goo.gl", "maps.app.goo.gl"]
+    ):
+        return url
+
+    qs = parse_qs(parsed.query, keep_blank_values=False)
+    essential_keys = {"q", "ftid", "place_id", "cid", "pb", "query", "ll", "z", "sll"}
+    filtered = {k: v for k, v in qs.items() if k in essential_keys}
+    clean_query = urlencode(filtered, doseq=True)
+    cleaned = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        clean_query,
+        "",
+    ))
+    if cleaned != url:
+        print(f"   🧹 Sanitized Google Maps URL (removed tracking params)")
+    return cleaned
 
 
 def extract_url(text):
@@ -232,6 +262,7 @@ def get_place_details(query):
     # NEW: Resolve URL if it looks like a link
     if query.startswith("http"):
         query = resolve_final_url(query)
+        query = sanitize_google_maps_url(query)
 
     print(f"🗺️ Fetching Google Place Details for Query: '{query}'")
     try:
@@ -299,7 +330,7 @@ def enrich_context(category, raw_text):
     # 1. Google Places (Prioritize URL, fallback to raw text if needed)
     if category == "places":
         print(f"   🔗 Enriched Context Triggered for Places")
-        query = url if url else raw_text
+        query = sanitize_google_maps_url(url) if url else raw_text
         print(f"      - Using Query: {query}")
 
         details = get_place_details(query)

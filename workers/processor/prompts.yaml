@@ -23,7 +23,11 @@ categorize_template: |
   - **places**: STRICTLY require a Google Maps URL. If the user says "Go to Central Park" but provides NO link, classify as "tasks" (or "fun-activities" if context implies).
   - **people**: Only use if the input follows a "[Name] [Job/Context]" pattern (e.g. "Will Caleb's friend"). If it is an action (e.g. "Call Will"), it is a "task".
   - **youtube-videos**: Only use if there is a LINK. If text says "watch youtube video" but has no link, it is a "task" (chore).
-  - **fun-activities**: Must imply a location or "fun thing to do".
+  - **fun-activities**: Must imply a location or "fun thing to do". If context says "Fun things NYC", "NYC fun thing", or similar, classify as "fun-activities", NOT "tasks".
+  - **movies**: If context says "movie", "priority movie", "watched movie", or the input is a movie title with context hinting at a film, classify as "movies", NOT "tasks". Example: "Ben Hur [Context: priority movie]" -> "movies".
+  - **tv-shows**: If context says "tv show", "show", "series", or "Kim Kardashian tv show", classify as "tv-shows", NOT "quotes" or other categories. Example: "All is fair [Context: Kim kardashian tv show]" -> "tv-shows".
+  - **bucket-list**: If context says "bucket list", "bucket list item", or "things to do before I die", classify as "bucket-list", NOT "tasks" or "fun-activities".
+  - **trips**: If context says "trips db", "add to trips", or "trip", classify as "trips".
 
   --- CONTEXT: ACTIVE PROJECTS ---
   The user is currently working on these projects:

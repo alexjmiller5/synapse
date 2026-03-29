@@ -1,18 +1,22 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from config import DATABASES
 from gcp_secrets import get_db_id
 from clients import notion
 
 
 def _notion_title(val):
-    return {"title": [{"text": {"content": val}}]}
+    # Notion API rejects titles > 2000 chars
+    truncated = val[:2000] if val else val
+    return {"title": [{"text": {"content": truncated}}]}
 
 
 def _notion_rich_text(val):
-    return (
-        {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
-    )
+    if not val:
+        return {"rich_text": []}
+    # Notion API rejects rich_text content > 2000 chars
+    truncated = str(val)[:2000]
+    return {"rich_text": [{"text": {"content": truncated}}]}
 
 
 def _notion_multi_select(val):
@@ -20,6 +24,13 @@ def _notion_multi_select(val):
 
 
 def _notion_date(val):
+    # Validate that val is a real ISO date (catches AI hallucinations like 2026-02-29)
+    if val:
+        try:
+            datetime.strptime(val[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            print(f"   ⚠️ Invalid date '{val}', falling back to today")
+            val = date.today().isoformat()
     return {"date": {"start": val}}
 
 
