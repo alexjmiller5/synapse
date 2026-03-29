@@ -395,8 +395,6 @@ databases:
         type: "status"
       Category:
         type: "select"
-      Reported:
-        type: "checkbox"
       Error Details:
         type: "rich_text"
       AI Summary:

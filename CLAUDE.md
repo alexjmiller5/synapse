@@ -15,7 +15,6 @@ HTTP Request → intaker (Cloud Function) → Pub/Sub → processor (Cloud Funct
 
 **Three services in a uv monorepo:**
 - `services/intaker/` - HTTP endpoint that validates and publishes to Pub/Sub
-- `services/reporter/` - Cron-triggered email summary generator
 - `workers/processor/` - Main AI processing worker (handles parsing, classification, extraction, Notion writes)
 
 **The processor pipeline:**

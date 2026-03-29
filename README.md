@@ -12,11 +12,9 @@ Synapse is a serverless application designed to eliminate the friction of manual
 - **CI/CD:** **GitHub Actions** deploys on push to `main` using **GCP Workload Identity Federation** for keyless authentication.
 - **Google Cloud Functions**:
 - **`intaker`**: HTTP-triggered API endpoint for categorizing data and sending it to Notion.
-- **`reporter`**: Cron-triggered (Cloud Scheduler) for twice-daily email summaries.
 - **Gemini 2.5 Flash**: Low-latency intent classification and entity extraction.
 - **Gemini 2.5 Pro**: Complex data structuring and schema-based decisions.
-- **Google Secret Manager** stores all keys (Notion token, Gmail password), accessed via IAM.
-- **Gmail**: Email reports sent by `reporter-function` via `smtplib` and a **Gmail App Password**.
+- **Google Secret Manager** stores all keys (Notion token, etc.), accessed via IAM.
 - **API Gateway**: Secures and manages access to the `intaker` function.
 
 ## Architecture Diagram
@@ -213,8 +211,6 @@ Use the scripts/manage_secrets.sh script to create and update secrets in Google 
 
 ### Config variables in config.yaml
 
-- `gmail_sender_email`: Gmail address for sending reports
-- `gmail_recipient_email`: Email to receive reports
 - `gcp_project_id`: GCP project ID
 - `github_repo`: GitHub repository URL
 - `region`: GCP region for cloud resources
