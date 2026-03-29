@@ -11,7 +11,6 @@ members = [
     "synapse",
     "synapse-intaker",
     "synapse-processor",
-    "synapse-reporter",
 ]
 
 [[package]]
@@ -949,21 +948,6 @@ requires-dist = [
     { name = "requests", specifier = "~=2.32.3" },
     { name = "spotipy", specifier = "~=2.25.1" },
     { name = "tenacity", specifier = ">=9.1.2" },
-]
-
-[[package]]
-name = "synapse-reporter"
-version = "1.0.0"
-source = { virtual = "services/reporter" }
-dependencies = [
-    { name = "functions-framework" },
-    { name = "requests" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "functions-framework", specifier = "~=3.9.2" },
-    { name = "requests", specifier = "~=2.32.0" },
 ]
 
 [[package]]

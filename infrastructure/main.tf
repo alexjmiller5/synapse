@@ -118,34 +118,6 @@ resource "google_secret_manager_secret_version" "youtube_api_key_version" {
   secret_data = google_apikeys_key.youtube_api_key.key_string
 }
 
-# --- Eventarc Trigger for Reporter Service ---
-
-resource "google_eventarc_trigger" "reporter_trigger" {
-  name     = "reporter-trigger"
-  location = local.config.region
-  project  = local.config.gcp_project_id
-
-  matching_criteria {
-    attribute = "type"
-    value     = "google.cloud.pubsub.topic.v1.messagePublished"
-  }
-
-  transport {
-    pubsub {
-      topic = google_pubsub_topic.reporter_topic.id
-    }
-  }
-
-  destination {
-    cloud_run_service {
-      service = module.reporter_service.service_name
-      region  = local.config.region
-    }
-  }
-
-  service_account = google_service_account.function_sa.email
-}
-
 resource "google_cloud_run_service_iam_member" "processor_worker_invoker" {
   service  = module.processor_worker.service_name
   location = local.config.region
@@ -181,29 +153,8 @@ resource "google_pubsub_subscription" "processor_subscription" {
   depends_on = [module.processor_worker]
 }
 
-resource "google_pubsub_topic" "reporter_topic" {
-  name       = "synapse-reporter"
-  depends_on = [google_project_service.services]
-}
-
 resource "google_pubsub_topic" "processor_topic" {
   name       = local.config.processor_topic_name
-  depends_on = [google_project_service.services]
-}
-
-resource "google_cloud_scheduler_job" "reporter_job" {
-  name             = "synapse-daily-report"
-  description      = "Trigger daily Synapse reporter"
-  schedule         = "0 8,20 * * *" # 8 AM and 8 PM daily
-  time_zone        = "UTC"
-  region           = local.config.region
-  attempt_deadline = "180s"
-
-  pubsub_target {
-    topic_name = google_pubsub_topic.reporter_topic.id
-    data       = base64encode(jsonencode({}))
-  }
-
   depends_on = [google_project_service.services]
 }
 
@@ -258,14 +209,6 @@ resource "google_service_account_iam_member" "deploy_sa_wif_user" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${local.config.github_repo}"
   depends_on         = [google_iam_workload_identity_pool_provider.github_provider]
-}
-
-resource "google_cloud_run_service_iam_member" "reporter_invoker" {
-  service  = module.reporter_service.service_name
-  location = local.config.region
-  project  = local.config.gcp_project_id
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
 resource "google_service_account" "function_sa" {
@@ -427,21 +370,6 @@ module "intaker_service" {
   available_memory      = "512Mi"
   available_cpu         = "1000m"
   timeout_seconds       = 30
-
-  depends_on = [google_project_service.services]
-}
-
-module "reporter_service" {
-  source = "./modules/cloud-service"
-
-  name                  = "synapse-reporter"
-  location              = local.config.region
-  gcp_project_id        = local.config.gcp_project_id
-  service_account_email = google_service_account.function_sa.email
-  max_instance_count    = 1
-  available_memory      = "256Mi"
-  available_cpu         = "1000m"
-  timeout_seconds       = 300
 
   depends_on = [google_project_service.services]
 }
