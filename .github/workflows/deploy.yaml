@@ -40,15 +40,16 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install service + test dependencies
-        run: |
-          echo "TODO: When implement tests, install test dependencies here!"
-        # uv sync --frozen --all-extras
+        run: uv sync --all-extras
+        working-directory: .
 
       - name: Run tests
         run: |
-          echo "TODO: Implement tests!"
-        # TODO: Implement tests
-        # uv run pytest tests/ -v --cov=src --cov-report=term-missing
+          if [ -d "tests" ]; then
+            uv run --extra test pytest tests/ -v --cov --cov-report=term-missing
+          else
+            echo "No tests directory found for ${{ matrix.service.name }}, skipping."
+          fi
 
   deploy:
     if: github.ref == 'refs/heads/main'
