@@ -271,7 +271,6 @@ def log_job_outcome(
         "Raw Input": _notion_title(raw_text[:2000]),
         "Code Execution": _notion_status(status),
         "Category": _notion_select(category),
-        "Reported": {"checkbox": False},
         "Error Details": _notion_rich_text(str(details)[:2000]),
         "AI Summary": _notion_rich_text(ai_summary_text),
     }
