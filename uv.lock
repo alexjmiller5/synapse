@@ -11,7 +11,6 @@ members = [
     "synapse",
     "synapse-intaker",
     "synapse-processor",
-    "synapse-reporter",
 ]
 
 [[package]]
@@ -1103,8 +1102,8 @@ dependencies = [
     { name = "tenacity" },
 ]
 
-[package.optional-dependencies]
-test = [
+[package.dev-dependencies]
+dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
@@ -1120,30 +1119,18 @@ requires-dist = [
     { name = "googlemaps", specifier = ">=4.10.0" },
     { name = "inscriptis", specifier = "~=2.7.0" },
     { name = "notion-client", specifier = "~=2.7.0" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
-    { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.14" },
     { name = "pyyaml", specifier = "~=6.0.3" },
     { name = "requests", specifier = "~=2.32.3" },
-    { name = "responses", marker = "extra == 'test'", specifier = ">=0.25" },
     { name = "spotipy", specifier = "~=2.25.1" },
     { name = "tenacity", specifier = ">=9.1.2" },
 ]
-provides-extras = ["test"]
 
-[[package]]
-name = "synapse-reporter"
-version = "1.0.0"
-source = { virtual = "services/reporter" }
-dependencies = [
-    { name = "functions-framework" },
-    { name = "requests" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "functions-framework", specifier = "~=3.9.2" },
-    { name = "requests", specifier = "~=2.32.0" },
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "pytest-mock", specifier = ">=3.14" },
+    { name = "responses", specifier = ">=0.25" },
 ]
 
 [[package]]

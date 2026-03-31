@@ -17,7 +17,10 @@ recept +args:
     uv run --with requests scripts/recept.py {{quote(args)}}
 
 test: sync
-    cd workers/processor && uv run --extra test pytest tests/ -v
+    cd workers/processor && uv run --group dev pytest tests/ -v
 
 test-cov: sync
-    cd workers/processor && uv run --extra test pytest tests/ -v --cov --cov-report=term-missing
+    cd workers/processor && uv run --group dev pytest tests/ -v --cov --cov-report=term-missing
+
+reveal-synapse-notion-secret:
+  op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal

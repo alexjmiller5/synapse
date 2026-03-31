@@ -20,8 +20,6 @@ jobs:
         service:
           - name: intaker
             path: services/intaker
-          - name: reporter
-            path: services/reporter
           - name: processor
             path: workers/processor
     defaults:
@@ -40,13 +38,13 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install service + test dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-groups
         working-directory: .
 
       - name: Run tests
         run: |
           if [ -d "tests" ]; then
-            uv run --extra test pytest tests/ -v --cov --cov-report=term-missing
+            uv run --group dev pytest tests/ -v --cov --cov-report=term-missing
           else
             echo "No tests directory found for ${{ matrix.service.name }}, skipping."
           fi
@@ -66,9 +64,6 @@ jobs:
             path: services/intaker
             entry_point: intaker
             trigger_http: true
-          - name: synapse-reporter
-            path: services/reporter
-            entry_point: report
           - name: synapse-processor
             path: workers/processor
             entry_point: processor
