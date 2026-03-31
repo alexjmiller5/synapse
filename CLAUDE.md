@@ -111,4 +111,4 @@ Push to `main` triggers GitHub Actions which:
 
 ## Receptor - iOS & macOS Companion App
 
-The `receptor/` folder contains a multi-platform SwiftUI app that captures thoughts and syncs them to the Synapse backend. See `receptor/CLAUDE.md` for detailed documentation.
+The Receptor app has been extracted to its own repo: https://github.com/alexjmiller5/receptor
