@@ -25,4 +25,10 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-mock>=3.14",
     "responses>=0.25",
+    "pytest-timeout>=2.3",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that call real external APIs (Gemini, YouTube, etc.)",
 ]

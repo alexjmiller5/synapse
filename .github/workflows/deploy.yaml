@@ -2,7 +2,7 @@ name: Deploy Synapse Application
 
 on:
   push:
-    branches: [main]
+    branches: [main, luther/write-e2e-testing]  # TODO: remove branch after merge
     paths:
       - "services/**"
       - "workers/**"
@@ -41,12 +41,23 @@ jobs:
         run: uv sync --all-groups
         working-directory: .
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
           if [ -d "tests" ]; then
-            uv run --group dev pytest tests/ -v --cov --cov-report=term-missing
+            uv run --group dev pytest tests/ -v --cov --cov-report=term-missing --ignore=tests/test_integration.py
           else
             echo "No tests directory found for ${{ matrix.service.name }}, skipping."
+          fi
+
+      - name: Run integration tests
+        if: matrix.service.name == 'processor'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ] && [ -f "tests/test_integration.py" ]; then
+            uv run --group dev pytest tests/test_integration.py -v --timeout=120
+          else
+            echo "Skipping integration tests (no API key or test file)."
           fi
 
   deploy:
