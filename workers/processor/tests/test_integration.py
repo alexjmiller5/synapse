@@ -562,6 +562,26 @@ class TestFailedExtractionRegression:
         cat, _, _ = full_pipeline("https://maps.app.goo.gl/KkxRGMgTDstVggj8A")
         assert cat == "places"
 
+    def test_swapped_context_core_text_regression(self):
+        """Regression: AI swapped core_text and context for parenthetical input.
+        Input: 'notion fixing and filling db high priority task (Context: standardize
+        the name of all relations so that the name is just the name of the
+        related db, it shouldn't be anything else)'
+        Expected: The specific instruction is the real task, not the generic prefix.
+        """
+        cat, data, _ = full_pipeline(
+            "notion fixing and filling db high priority task (Context: standardize "
+            "the name of all relations so that the name is just the name of the "
+            "related db, it shouldn't be anything else)"
+        )
+        assert cat == "tasks"
+        name = data.get("Name", "").lower()
+        # The task name should reference the specific instruction, not the generic prefix
+        assert "standardize" in name or "relation" in name, (
+            f"Task name should reference the specific instruction about standardizing "
+            f"relation names, got: {data.get('Name')}"
+        )
+
     def test_invalid_date_produces_valid_iso(self):
         cat, data, _ = full_pipeline(
             "Have dinner with my parents plus Emily plus Derek",
