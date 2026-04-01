@@ -67,7 +67,7 @@ jobs:
       - name: Run integration tests
         if: matrix.service.name == 'processor'
         run: |
-          GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=gemini-api-key --project=${{ env.gcp_project_id }})
+          GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=gemini-api-key --project=${{ env.gcp_project_id }} 2>/dev/null) || true
           export GEMINI_API_KEY
           if [ -n "$GEMINI_API_KEY" ] && [ -f "tests/test_integration.py" ]; then
             uv run --group dev pytest tests/test_integration.py -v --timeout=120
