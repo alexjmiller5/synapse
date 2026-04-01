@@ -66,18 +66,23 @@ def _fake_get_secret(secret_id, version="latest"):
 # ---------------------------------------------------------------------------
 # Patch gcp_secrets BEFORE importing any processor modules
 # ---------------------------------------------------------------------------
-# We must patch at the module level before imports trigger side effects.
-_gcp_patch = patch("gcp_secrets.get_secret", side_effect=_fake_get_secret)
-_gcp_patch.start()
+# The SecretManagerServiceClient() constructor hangs when there are no
+# GCP credentials (tries to reach metadata server). We must mock the
+# entire google.cloud.secretmanager module BEFORE gcp_secrets is imported.
+_mock_sm_module = MagicMock()
+sys.modules["google.cloud.secretmanager"] = _mock_sm_module
+sys.modules["google.cloud"] = sys.modules.get("google.cloud", MagicMock())
 
-# Also prevent SecretManagerServiceClient from connecting
-_sm_patch = patch("gcp_secrets.sm_client", new=MagicMock())
-_sm_patch.start()
-
-# Now import processor modules (they will use our patched secrets)
+# Now import gcp_secrets — it will get our mock secretmanager
 import gcp_secrets
+
+# Override everything in gcp_secrets to use our fakes
 gcp_secrets.get_secret = _fake_get_secret
+gcp_secrets.sm_client = MagicMock()
 gcp_secrets.SECRETS = dict(FAKE_SECRETS)
+gcp_secrets.DATABASE_IDS = {k.replace("notion-", "").replace("-db-id", ""): v
+                            for k, v in FAKE_SECRETS.items()
+                            if k.startswith("notion-") and k.endswith("-db-id")}
 
 # Patch external client constructors BEFORE clients.py is imported
 # googlemaps.Client validates key format at __init__, so we must intercept it
