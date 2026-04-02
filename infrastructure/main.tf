@@ -320,6 +320,11 @@ resource "google_project_iam_member" "function_artifact_reader" {
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
+resource "google_project_iam_member" "deploy_sa_secrets" {
+  project = local.config.gcp_project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = google_service_account.deploy_sa.member
+}
 resource "google_project_iam_member" "deploy_sa_storage_admin" {
   project = local.config.gcp_project_id
   role    = "roles/storage.admin"
