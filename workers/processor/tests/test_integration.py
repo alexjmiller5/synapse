@@ -5,7 +5,7 @@ classification, and extraction pipeline, then verify the final Notion
 payloads are correct (right database, right properties, right values).
 
 Notion writes are mocked — no real pages are created/modified/deleted.
-Uses Gemini REST API directly to bypass conftest SDK mocks.
+Uses the same google.genai SDK and model as production.
 
 Test fixtures are drawn from real Synapse Executions DB entries.
 
@@ -23,7 +23,8 @@ from unittest.mock import patch
 import time
 
 import pytest
-import requests as _requests
+import google.genai as genai
+from google.genai import types
 
 # ---------------------------------------------------------------------------
 # Resolve Gemini API key
@@ -64,40 +65,39 @@ from business_logic import apply_business_logic
 from schemas import CATEGORY_SCHEMA_CLASSIFY
 
 # ---------------------------------------------------------------------------
-# Direct Gemini REST API (bypasses any SDK mocks from conftest)
+# Real Gemini client (same SDK + model as production)
 # ---------------------------------------------------------------------------
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+MODEL = "gemini-3-flash-preview"
+_gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 
 def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5):
-    """Call Gemini REST API directly with retry on rate limit."""
-    body = {
-        "system_instruction": {"parts": [{"text": system_instruction}]},
-        "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-        },
-    }
+    """Call Gemini via google.genai SDK with retry on rate limit."""
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+    )
     if response_schema:
-        body["generationConfig"]["responseSchema"] = response_schema
+        config.response_json_schema = response_schema
 
     for attempt in range(_retries):
-        resp = _requests.post(
-            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
-            json=body,
-            timeout=30,
-        )
-        if resp.status_code == 429:
-            wait = min(2 ** attempt * 2, 30)
-            print(f"  ⏳ Rate limited, waiting {wait}s (attempt {attempt + 1}/{_retries})")
-            time.sleep(wait)
-            continue
-        resp.raise_for_status()
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+        try:
+            response = _gemini_client.models.generate_content(
+                model=MODEL,
+                contents=user_text,
+                config=config,
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                wait = min(2 ** attempt * 2, 30)
+                print(f"  ⏳ Rate limited, waiting {wait}s (attempt {attempt + 1}/{_retries})")
+                time.sleep(wait)
+                continue
+            raise
 
-    resp.raise_for_status()  # Will raise on last 429
+    raise RuntimeError(f"Gemini rate limited after {_retries} retries")
 
 
 # ---------------------------------------------------------------------------
