@@ -9,11 +9,11 @@ Synapse is a serverless middleware that captures natural-language text and route
 ## Architecture
 
 ```
-HTTP Request → intaker (Cloud Function) → Pub/Sub → processor (Cloud Function) → Notion API
-                                                                              ↳ External APIs (Spotify, YouTube, TMDB, Google Maps)
+HTTP Request → intaker (Cloud Run) → Pub/Sub → processor (Cloud Run) → Notion API
+                                                                     ↳ External APIs (Spotify, YouTube, TMDB, Google Maps)
 ```
 
-**Three services in a uv monorepo:**
+**Two services in a uv workspace monorepo:**
 - `services/intaker/` - HTTP endpoint that validates and publishes to Pub/Sub
 - `workers/processor/` - Main AI processing worker (handles parsing, classification, extraction, Notion writes)
 
@@ -35,17 +35,21 @@ just run-processor-debug
 # Run processor locally (production mode)
 just run-processor
 
+# Run tests (from worker directory)
+cd workers/processor && uv run pytest tests/ -v
+
 # Send batch requests from local_requests.txt
 just recept-local-batch
 
 # Send single request to deployed API
 just recept "your text here"
 
-# Add package to specific service
-uv add --package processor <package-name>
+# Add package to specific service (use workspace member name, not directory)
+uv add --package synapse-processor <package-name>
+uv add --package synapse-intaker <package-name>
 ```
 
-**Local testing:** Add the `syn-local` shell function from README.md to send Cloud Event-formatted requests to `localhost:8080`.
+**Local testing:** Add the `syn-local` shell function from README.md to send Cloud Event-formatted requests to `localhost:8080`. Tests mock all GCP/external services via `conftest.py` module-level mocks.
 
 ## Key Configuration Files
 
@@ -70,7 +74,9 @@ Property field meanings:
 
 ## Code Organization (processor/)
 
-- `main.py` - Entry point, orchestrates the pipeline
+- `main.py` - Entry point, orchestrates the pipeline (`run_pipeline` processes each item)
+- `config.py` - Loads all YAML configs (`CONFIG`, `DATABASES`, `PROMPTS` globals)
+- `schemas.py` - JSON schemas for Gemini structured output (parser, classifier, extractor)
 - `ai_engine.py` - Gemini interactions, prompt generation, schema building
 - `business_logic.py` - Notion queries, inventory hydration, handler dispatch
 - `handlers.py` - Category-specific logic (places, youtube, movies, bookmarks, etc.)
@@ -104,10 +110,13 @@ op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --r
 
 ## Deployment
 
-Push to `main` triggers GitHub Actions which:
-1. Generates `requirements.txt` from `uv.lock` per service
-2. Copies `config.yaml` to service directories
-3. Deploys to Cloud Run via `google-github-actions/deploy-cloudrun`
+Push to `main` triggers GitHub Actions (only when `services/`, `workers/`, `pyproject.toml`, `uv.lock`, `config.yaml`, or the deploy workflow change):
+1. Runs test job per service (currently placeholder — tests are TODO in CI)
+2. Generates `requirements.txt` from `uv.lock` per service via `uv export --package <name>`
+3. Copies `config.yaml` and `.python-version` to service directories
+4. Deploys to Cloud Run via `google-github-actions/deploy-cloudrun` using Workload Identity Federation
+
+Infrastructure changes deploy separately via `terraform.yaml` workflow.
 
 ## Receptor - iOS & macOS Companion App
 

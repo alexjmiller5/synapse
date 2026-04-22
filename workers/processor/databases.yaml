@@ -39,7 +39,7 @@ databases:
         type: "select"
         allowlist: ["Low", "Medium", "High"]
         instruction: |
-          Unless there is sepcifically a context section where the user mentions High, Low or Medium priority, DO NOT fill in this category. Leave it empty. If the user does mention priority specifically, use that to fill in this field based on the three available options.
+          The default for this cateogry if the user doesn't specify a priority is High. If the user mentions Low or Medium priority, then make the task as such. Oftentimes the user will just say "low" or "medium", they won't necesarily say "low priority". You should interespret just the mention of low or medium as meaning the corresponding priority, and the same for high priority. And again, if the user doesn't specify high priority, then you should default to High.
       Links:
         type: "rich_text_list"
         instruction: "Extract all valid URLs (e.g., http, https). Don't need this property if there aren't any urls."
