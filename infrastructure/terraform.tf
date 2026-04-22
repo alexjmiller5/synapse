@@ -25,11 +25,15 @@ terraform {
 }
 
 provider "google" {
-  project = local.config.gcp_project_id
-  region  = local.config.region
+  project               = local.config.gcp_project_id
+  region                = local.config.region
+  user_project_override = true
+  billing_project       = local.config.gcp_project_id
 }
 
 provider "google-beta" {
-  project = local.config.gcp_project_id
-  region  = local.config.region
+  project               = local.config.gcp_project_id
+  region                = local.config.region
+  user_project_override = true
+  billing_project       = local.config.gcp_project_id
 }
