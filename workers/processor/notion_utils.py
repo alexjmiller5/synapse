@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import urlparse
 from config import DATABASES
 from gcp_secrets import get_db_id
@@ -20,7 +20,23 @@ def _notion_multi_select(val):
     return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
 
 
+def _validate_iso_date(val):
+    """Notion's date.start only accepts ISO 8601. Raise loudly on anything else so the
+    failure is tracked in the Logs DB rather than producing a cryptic Notion 400."""
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(
+            f"Date property requires a non-empty ISO 8601 date string, got {val!r}"
+        )
+    try:
+        datetime.fromisoformat(val)
+    except ValueError as e:
+        raise ValueError(
+            f"Date property must be an ISO 8601 date (YYYY-MM-DD), got {val!r}"
+        ) from e
+
+
 def _notion_date(val):
+    _validate_iso_date(val)
     return {"date": {"start": val}}
 
 

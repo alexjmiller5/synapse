@@ -15,6 +15,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         service:
@@ -29,6 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load config
+        run: |
+          yq e 'to_entries | .[] | select(.value | kind == "scalar") | .key + "=" + .value' config.yaml >> $GITHUB_ENV
+        working-directory: .
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -38,15 +46,34 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install service + test dependencies
-        run: |
-          echo "TODO: When implement tests, install test dependencies here!"
-        # uv sync --frozen --all-extras
+        run: uv sync --all-groups
+        working-directory: .
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
-          echo "TODO: Implement tests!"
-        # TODO: Implement tests
-        # uv run pytest tests/ -v --cov=src --cov-report=term-missing
+          if [ -d "tests" ]; then
+            uv run --group dev pytest tests/ -v --cov --cov-report=term-missing --ignore=tests/test_integration.py
+          else
+            echo "No tests directory found for ${{ matrix.service.name }}, skipping."
+          fi
+
+      - name: Authenticate to GCP
+        if: matrix.service.name == 'processor'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: "projects/${{ env.gcp_project_number }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          service_account: "deploy-sa@${{ env.gcp_project_id }}.iam.gserviceaccount.com"
+
+      - name: Run integration tests
+        if: matrix.service.name == 'processor'
+        run: |
+          GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=gemini-api-key --project=${{ env.gcp_project_id }} 2>/dev/null) || true
+          export GEMINI_API_KEY
+          if [ -n "$GEMINI_API_KEY" ] && [ -f "tests/test_integration.py" ]; then
+            uv run --group dev pytest tests/test_integration.py -v --timeout=120
+          else
+            echo "Skipping integration tests (no API key or test file)."
+          fi
 
   deploy:
     if: github.ref == 'refs/heads/main'
