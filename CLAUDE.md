@@ -64,10 +64,11 @@ The processor is entirely YAML-driven. To add a new Notion database category:
 1. Add secret `notion-<category>-db-id` to GCP Secret Manager
 2. Add category definition to `databases.yaml` with:
    - `description` - Used by AI for classification decisions
+   - `helper: true` (optional) - Marks a "helper" DB (e.g. `trips`, `logs`, `youtube-channels`). Helper DBs are NOT classification or extraction targets; they exist only to be *related to* by other categories (e.g. a `places` page linked to a trip). Both the classifier prompt (`ai_engine.generate_classification_prompt`) and option hydration (`business_logic.hydrate_dynamic_options`) skip them via this flag.
    - `properties` - Field mappings with `type`, `required`, `instruction`, `allowlist`, `virtual`, `create_new`
 
 Property field meanings:
-- `instruction` - Extraction prompt (supports `{current_date}`, `{raw_text}` placeholders)
+- `instruction` - Extraction prompt (supports `{current_date}`, `{raw_text}` placeholders). For `date` fields the instruction MUST require ISO 8601 (`YYYY-MM-DD`) output, since `notion_utils._notion_date` validates the value and raises on empty/non-ISO input (logged as a Bug rather than silently dropped).
 - `virtual: true` - Hidden from AI, populated by Python code only
 - `allowlist` - Strict enum values for select/multi_select/status
 - `create_new: true` - Allows AI to create new values beyond allowlist
