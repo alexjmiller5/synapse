@@ -17,7 +17,13 @@ CATEGORY_SCHEMA_CLASSIFY = {
     "properties": {
         "category": {
             "type": "string",
-            "enum": list(DATABASES.get("databases", {}).keys()),
+            # Exclude helper DBs (trips/logs/youtube-channels) so the model cannot
+            # even structurally classify into them — they exist only to be related to.
+            "enum": [
+                cat
+                for cat, details in DATABASES.get("databases", {}).items()
+                if not details.get("helper")
+            ],
         },
         "related_project": {"type": "string"},
         "project_action": {

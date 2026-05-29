@@ -30,11 +30,18 @@ class TestCategorySchemaClassify:
         assert "enum" in cat_prop
         assert len(cat_prop["enum"]) > 0
 
-    def test_all_database_categories_present(self):
-        db_keys = list(DATABASES.get("databases", {}).keys())
+    def test_non_helper_categories_present_helpers_excluded(self):
+        dbs = DATABASES.get("databases", {})
         enum_values = CATEGORY_SCHEMA_CLASSIFY["properties"]["category"]["enum"]
-        for key in db_keys:
-            assert key in enum_values, f"Missing category: {key}"
+        for cat, details in dbs.items():
+            if details.get("helper"):
+                assert cat not in enum_values, f"Helper DB leaked into classifier enum: {cat}"
+            else:
+                assert cat in enum_values, f"Missing category: {cat}"
+        # The helper DBs behind the trips date bug must be unselectable.
+        assert "trips" not in enum_values
+        assert "logs" not in enum_values
+        assert "youtube-channels" not in enum_values
 
     def test_category_required(self):
         assert "category" in CATEGORY_SCHEMA_CLASSIFY["required"]
