@@ -72,6 +72,11 @@ def _fake_get_secret(secret_id, version="latest"):
 _mock_sm_module = MagicMock()
 sys.modules["google.cloud.secretmanager"] = _mock_sm_module
 sys.modules["google.cloud"] = sys.modules.get("google.cloud", MagicMock())
+# functions_framework (imported by main.py, used in test_pipeline_e2e / test_integration)
+# does `from google.cloud.functions.context import Context`. Register these submodules
+# explicitly so the import resolves deterministically even when google.cloud is a MagicMock.
+sys.modules["google.cloud.functions"] = MagicMock()
+sys.modules["google.cloud.functions.context"] = MagicMock()
 
 # Now import gcp_secrets — it will get our mock secretmanager
 import gcp_secrets
