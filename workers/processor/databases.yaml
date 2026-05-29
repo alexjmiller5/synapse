@@ -380,6 +380,7 @@ databases:
   # Helpers
   youtube-channels:
     description: "YouTube Channels"
+    helper: true
     properties:
       Name:
         type: "title"
@@ -388,6 +389,7 @@ databases:
 
   logs:
     description: "Internal use."
+    helper: true
     properties:
       Raw Input:
         type: "title"
@@ -403,8 +405,15 @@ databases:
         type: "url"
   trips:
     description: "Internal inventory of trips."
+    helper: true
     properties:
       Name:
         type: "title"
       Dates:
         type: "date"
+        instruction: |
+          Extract the trip date as an ISO 8601 date string in YYYY-MM-DD format (e.g. "2026-09-01").
+          1. CHECK CONTEXT: If the user provided a date in the Context/Metadata block (e.g. "jan 1 2027"), USE THAT DATE.
+          2. CHECK TEXT: Otherwise, look for a date mentioned in the text itself.
+          3. If a month/day is given with no year, assume the next future occurrence relative to {current_date}.
+          4. If NO concrete date can be determined, OMIT this field entirely. Never output an empty string, a guess, or vague text like "after graduation".

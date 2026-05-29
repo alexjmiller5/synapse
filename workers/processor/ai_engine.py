@@ -82,7 +82,9 @@ def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
     category_lines = []
     for cat, details in DATABASES.get("databases", {}).items():
-        if cat in ["youtube-channels", "logs"]:
+        # Helper DBs (trips, logs, youtube-channels) are not classification targets;
+        # they exist only to be related to by other categories.
+        if details.get("helper"):
             continue
         desc = details.get("description", "No description.")
         category_lines.append(f'- "{cat}": {desc}')

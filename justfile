@@ -16,5 +16,14 @@ recept-local-batch:
 recept +args:
     uv run --with requests scripts/recept.py {{quote(args)}}
 
+test: sync
+    cd workers/processor && uv run --group dev pytest tests/ -v --ignore=tests/test_integration.py
+
+test-cov: sync
+    cd workers/processor && uv run --group dev pytest tests/ -v --cov --cov-report=term-missing -m "not integration"
+
+test-integration: sync
+    cd workers/processor && uv run --group dev pytest tests/test_integration.py -v --timeout=120
+
 reveal-synapse-notion-secret:
   op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal

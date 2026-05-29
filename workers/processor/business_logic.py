@@ -81,7 +81,7 @@ def fetch_property_options(db_id, prop_name):
 def hydrate_dynamic_options():
     print("🔄 Hydrating Options...")
     for category, details in DATABASES.get("databases", {}).items():
-        if category in ["logs", "youtube-channels"]:
+        if details.get("helper"):
             continue
         db_id = get_db_id(category)
         if not db_id:
