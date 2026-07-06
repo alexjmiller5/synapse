@@ -1,5 +1,6 @@
 """Tests for notion_utils.py — property builders, CRUD operations, logging."""
 
+import json
 from unittest.mock import patch
 import pytest
 
@@ -292,6 +293,22 @@ class TestCreateProjectNote:
         assert call_kwargs["properties"]["Title"]["title"][0]["text"]["content"] == "Design decision notes"
         assert call_kwargs["properties"]["Project"] == {"relation": [{"id": "project-id-456"}]}
         assert call_kwargs["properties"]["Status"]["status"]["name"] == "Reference"
+
+    def test_note_body_contains_source_text(self, mock_notion):
+        """The note page must not be empty — the captured text lands in the page body."""
+        create_project_note("project-id-456", "Decided to use Redis for caching")
+        call_kwargs = mock_notion.pages.create.call_args.kwargs
+        children = call_kwargs["children"]
+        assert "Decided to use Redis for caching" in json.dumps(children)
+
+    def test_note_body_contains_context(self, mock_notion):
+        """User-provided context ($ notes) lands in the page body too."""
+        create_project_note(
+            "project-id-456", "Decided to use Redis", context="from architecture discussion"
+        )
+        children = json.dumps(mock_notion.pages.create.call_args.kwargs["children"])
+        assert "Decided to use Redis" in children
+        assert "from architecture discussion" in children
 
 
 # ======================================================================

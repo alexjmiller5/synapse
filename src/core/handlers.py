@@ -7,7 +7,7 @@ from core.notion_utils import (
     fetch_existing_page,
     build_notion_properties,
 )
-from core.external_data import get_video_channel_details
+from core.external_data import get_video_channel_details, sanitize_youtube_url
 
 
 def handle_places_logic(category, data, trips_id_map):
@@ -134,6 +134,11 @@ def handle_groceries_fun_logic(category, data, inventory_map):
 
 
 def handle_youtube_logic(category, data):
+    # Strip timestamp/tracking params BEFORE dedupe + storage so the same video
+    # shared with different ?t=/?si= values maps to one page.
+    if data.get("Video URL"):
+        data["Video URL"] = sanitize_youtube_url(data["Video URL"])
+
     props = build_notion_properties(category, data)
     target_url = data.get("Video URL")
     video_url = target_url
@@ -245,6 +250,11 @@ def handle_movies_tv_logic(category, data):
 
 def handle_bookmarks_logic(category, data):
     target_url = data.get("URL")
+
+    # House style: bookmark descriptions never end with a period (the prompt
+    # says so too, but never trust the AI to comply).
+    if isinstance(data.get("Description"), str):
+        data["Description"] = data["Description"].rstrip(".")
 
     # A. Check for Duplicates (Exact URL Match)
     if target_url:

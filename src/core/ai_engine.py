@@ -1,9 +1,8 @@
 import json
-from datetime import date
+import os
+
 from google.genai import types
-from google.genai.errors import ServerError
-from core.config import DATABASES, PROMPTS
-from core.clients import gemini_client
+from google.genai.errors import ClientError, ServerError
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -11,7 +10,14 @@ from tenacity import (
     retry_if_exception_type,
 )
 
+from core.config import DATABASES, PROMPTS
+from core.clients import gemini_client
 from core.schemas import PARSER_SCHEMA
+from core.timeutils import today_eastern
+
+# The ONE place the model names live — overridable via env.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-latest")
 
 
 def safe_json_load(text):
@@ -30,11 +36,7 @@ def safe_json_load(text):
     # Stop after 4 attempts (approx 30s total wait)
     stop=stop_after_attempt(4),
 )
-def generate_with_retry(model, contents, config):
-    """
-    Robust wrapper for Gemini API calls.
-    Catches 503s and Bad JSON, retrying automatically.
-    """
+def _generate(model, contents, config):
     response = gemini_client.models.generate_content(
         model=model,
         contents=contents,
@@ -50,6 +52,21 @@ def generate_with_retry(model, contents, config):
     return response
 
 
+def generate_with_retry(model, contents, config):
+    """
+    Robust wrapper for Gemini API calls.
+    Catches 503s and Bad JSON, retrying automatically.
+    On a 404 (model retired/not found), retries ONCE with GEMINI_FALLBACK_MODEL.
+    """
+    try:
+        return _generate(model, contents, config)
+    except ClientError as e:
+        if getattr(e, "code", None) == 404 and model != GEMINI_FALLBACK_MODEL:
+            print(f"   ⚠️ Model '{model}' not found. Retrying with '{GEMINI_FALLBACK_MODEL}'.")
+            return _generate(GEMINI_FALLBACK_MODEL, contents, config)
+        raise
+
+
 def parse_raw_input(raw_text):
     """
     Uses Gemini to intelligently split valid delimiters.
@@ -60,7 +77,7 @@ def parse_raw_input(raw_text):
 
     try:
         response = generate_with_retry(
-            model="gemini-3-flash-preview",
+            model=GEMINI_MODEL,
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -150,7 +167,7 @@ def generate_extraction_prompt(
         instr = rules.get("instruction")
         is_virtual = rules.get("virtual")
         if instr and not is_virtual:
-            formatted_instr = instr.replace("{current_date}", date.today().isoformat())
+            formatted_instr = instr.replace("{current_date}", today_eastern().isoformat())
             formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
             instr_lines.append(f"- `{prop_name}`: {formatted_instr}")
 
