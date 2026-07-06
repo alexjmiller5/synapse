@@ -1,124 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Synapse: AI middleware that captures natural-language text and routes it to Notion.
+Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
-## Project Overview
+## Architecture rule (the one that matters)
 
-Synapse is a serverless middleware that captures natural-language text and routes it to Notion databases. It uses AI (Gemini 2.5 Flash) to parse, classify, and extract structured data from unstructured input.
+**Business logic lives in `src/core/` as plain Python with NO Modal imports.**
+Only `app.py` imports `modal` — it is the deployment shim (image, secrets,
+endpoints). This keeps the logic portable: the same `core` package runs in
+tests or on any future platform.
 
-## Architecture
+- Webhook → worker handoff is `process.spawn(payload)` — Modal's spawn IS the
+  queue. Do not add Pub/Sub/Redis/celery.
+- `process` runs with `max_containers=1`: Notion dedupe is query-then-create,
+  not atomic, so runs must be serialized. Don't raise it.
+- Endpoints use `requires_proxy_auth=True` — callers send `Modal-Key` +
+  `Modal-Secret` headers (mint tokens in the Modal dashboard → Settings →
+  Proxy Auth Tokens). Never expose an unauthenticated endpoint.
 
-```
-HTTP Request → intaker (Cloud Run) → Pub/Sub → processor (Cloud Run) → Notion API
-                                                                     ↳ External APIs (Spotify, YouTube, TMDB, Google Maps)
-```
+## The pipeline (`core/pipeline.py: run`)
 
-**Two services in a uv workspace monorepo:**
-- `services/intaker/` - HTTP endpoint that validates and publishes to Pub/Sub
-- `workers/processor/` - Main AI processing worker (handles parsing, classification, extraction, Notion writes)
+1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context
+2. Classify → category (+ optional `related_project` / `project_action`)
+3. Extract structured fields per `databases.yaml` schema
+4. `apply_business_logic` + category handler → Notion writes; every outcome
+   logged to the Notion Logs DB; failures create a High-priority task
 
-**The processor pipeline:**
-1. Parse raw input (split by `@` delimiter, extract `$` context)
-2. Classify intent using Gemini with dynamic project context
-3. Extract structured fields based on database schema
-4. Execute business logic and write to Notion
+Everything is YAML-driven: `src/core/databases.yaml` (schemas, allowlists,
+per-field extraction instructions) and `src/core/prompts.yaml` (system prompts).
+Both files are `add_local_file`d into the image at `/root/core/`.
 
-## Build & Development Commands
+## Conventions
 
-```bash
-# Install dependencies
-just sync
+- Secrets are env vars ONLY (Modal secret `synapse` in the cloud, `op run`
+  locally). `core/secrets.py` maps legacy kebab-case ids to env names:
+  `get_secret("gemini-api-key")` → `GEMINI_API_KEY`. `.env.tpl` is the
+  canonical manifest (op:// refs, committed) — the 6 credentials only.
+- Notion DB ids are committed config, NOT secrets: each category stanza in
+  `databases.yaml` has a `db_id` (non-category ids in the top-level `db_ids`
+  mapping). `get_db_id` lets a `NOTION_<X>_DB_ID` env var override. Adding a
+  DB = one `databases.yaml` edit. (Where ids live may change — e.g. native
+  pydantic config — but `get_db_id` stays the single lookup point.)
+- All "today"/date creation goes through `core/timeutils.py`
+  (`today_eastern()` / `now_eastern()`) — never `date.today()` /
+  `datetime.now()` (server is UTC; late-night captures would date-shift).
+- Gemini calls go through `core.ai_engine.generate_with_retry` (tenacity on
+  5xx/bad JSON, one-shot fallback to `GEMINI_FALLBACK_MODEL` on 404). The
+  model name lives in ONE place: `core.ai_engine.GEMINI_MODEL`
+  (env-overridable).
 
-# Run processor locally with debug logging
-just run-processor-debug
+## Commands
 
-# Run processor locally (production mode)
-just run-processor
+The justfile is the interface, not a script catalog; one-offs go in
+`scripts/` and run directly.
 
-# Run tests (from worker directory)
-cd workers/processor && uv run pytest tests/ -v
+| Command | Purpose |
+|---|---|
+| `just dev` | Live-reload dev against real Modal infra (`modal serve`) |
+| `just test` / `just check` / `just fmt` | pytest (unit) / ruff read-only / ruff fix |
+| `just test-integration` | Real-Gemini suite (key via 1Password) |
+| `just eval-classifier` | Classifier-prompt eval vs `scripts/eval_cases.yaml` (real Gemini) |
+| `just logs` | Stream deployed-app logs |
+| `just sync-secrets` | Push `.env.tpl` → Modal secret store |
+| `just deploy` | test + sync-secrets + `modal deploy` |
+| `just recept "text"` | POST one thought to the deployed webhook |
 
-# Send batch requests from local_requests.txt
-just recept-local-batch
+## TDD
 
-# Send single request to deployed API
-just recept "your text here"
+Write the test in `tests/` first, then the `src/core/` code. `app.py` shim
+functions stay thin enough to not need tests (webhook validation is the pure
+`core.pipeline.payload_error`, tested in `tests/test_webhook.py`).
+`tests/conftest.py` seeds fake secrets as env vars and swaps all external
+clients (`core.clients` globals) for MagicMocks — no test touches the network.
 
-# Add package to specific service (use workspace member name, not directory)
-uv add --package synapse-processor <package-name>
-uv add --package synapse-intaker <package-name>
-```
+## Receptor
 
-**Local testing:** Add the `syn-local` shell function from README.md to send Cloud Event-formatted requests to `localhost:8080`. Tests mock all GCP/external services via `conftest.py` module-level mocks.
-
-## Key Configuration Files
-
-- `config.yaml` - GCP project settings, secret names, email addresses
-- `workers/processor/databases.yaml` - All 25+ Notion database schemas with AI extraction rules
-- `workers/processor/prompts.yaml` - Gemini system prompts for parsing/classification/extraction
-
-## Configuration-Driven AI Behavior
-
-The processor is entirely YAML-driven. To add a new Notion database category:
-
-1. Add secret `notion-<category>-db-id` to GCP Secret Manager
-2. Add category definition to `databases.yaml` with:
-   - `description` - Used by AI for classification decisions
-   - `helper: true` (optional) - Marks a "helper" DB (e.g. `trips`, `logs`, `youtube-channels`). Helper DBs are NOT classification or extraction targets; they exist only to be *related to* by other categories (e.g. a `places` page linked to a trip). Both the classifier prompt (`ai_engine.generate_classification_prompt`) and option hydration (`business_logic.hydrate_dynamic_options`) skip them via this flag.
-   - `properties` - Field mappings with `type`, `required`, `instruction`, `allowlist`, `virtual`, `create_new`
-
-Property field meanings:
-- `instruction` - Extraction prompt (supports `{current_date}`, `{raw_text}` placeholders). For `date` fields the instruction MUST require ISO 8601 (`YYYY-MM-DD`) output, since `notion_utils._notion_date` validates the value and raises on empty/non-ISO input (logged as a Bug rather than silently dropped).
-- `virtual: true` - Hidden from AI, populated by Python code only
-- `allowlist` - Strict enum values for select/multi_select/status
-- `create_new: true` - Allows AI to create new values beyond allowlist
-
-## Code Organization (processor/)
-
-- `main.py` - Entry point, orchestrates the pipeline (`run_pipeline` processes each item)
-- `config.py` - Loads all YAML configs (`CONFIG`, `DATABASES`, `PROMPTS` globals)
-- `schemas.py` - JSON schemas for Gemini structured output (parser, classifier, extractor)
-- `ai_engine.py` - Gemini interactions, prompt generation, schema building
-- `business_logic.py` - Notion queries, inventory hydration, handler dispatch
-- `handlers.py` - Category-specific logic (places, youtube, movies, bookmarks, etc.)
-- `notion_utils.py` - Property builders and Notion API operations
-- `external_data.py` - URL extraction, web scraping, external API enrichment
-- `gcp_secrets.py` - Secret Manager access with caching
-- `clients.py` - Singleton client initialization (Gemini, Notion, Spotify, etc.)
-
-## Notion API Access
-
-To query Notion databases locally, use the 1Password CLI to retrieve the API token:
-
-```bash
-op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal
-```
-
-**Key database IDs:**
-- Logs (execution tracking): `2b103953a8af803280cec633c91c46c3`
-
-## Infrastructure
-
-- **Terraform** in `infrastructure/` manages GCP resources
-- **GitHub Actions** deploys on push to `main` via Workload Identity Federation
-- All secrets stored in GCP Secret Manager (27 total, see `config.yaml` for names)
-
-## User Input Syntax
-
-- `@` splits multiple items in one message
-- `$` provides context (project name, date, status, category hint)
-- Example: `Buy eggs $ groceries @ Update resume $ Career @ https://youtube.com/...`
-
-## Deployment
-
-Push to `main` triggers GitHub Actions (only when `services/`, `workers/`, `pyproject.toml`, `uv.lock`, `config.yaml`, or the deploy workflow change):
-1. Runs test job per service (currently placeholder — tests are TODO in CI)
-2. Generates `requirements.txt` from `uv.lock` per service via `uv export --package <name>`
-3. Copies `config.yaml` and `.python-version` to service directories
-4. Deploys to Cloud Run via `google-github-actions/deploy-cloudrun` using Workload Identity Federation
-
-Infrastructure changes deploy separately via `terraform.yaml` workflow.
-
-## Receptor - iOS & macOS Companion App
-
-The Receptor app has been extracted to its own repo: https://github.com/alexjmiller5/receptor
+The iOS/macOS companion app lives at https://github.com/alexjmiller5/receptor.
+It POSTs `{"raw_text": ...}` with Modal proxy-auth headers and expects 200.
