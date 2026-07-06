@@ -54,6 +54,7 @@ The justfile is the interface, not a script catalog; one-offs go in
 | `just dev` | Live-reload dev against real Modal infra (`modal serve`) |
 | `just test` / `just check` / `just fmt` | pytest (unit) / ruff read-only / ruff fix |
 | `just test-integration` | Real-Gemini suite (key via 1Password) |
+| `just eval-classifier` | Classifier-prompt eval vs `scripts/eval_cases.yaml` (real Gemini) |
 | `just logs` | Stream deployed-app logs |
 | `just sync-secrets` | Push `.env.tpl` → Modal secret store |
 | `just deploy` | test + sync-secrets + `modal deploy` |
