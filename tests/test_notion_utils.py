@@ -241,6 +241,16 @@ class TestLogJobOutcome:
         ai_text = props["AI Summary"]["rich_text"][0]["text"]["content"]
         assert "Parser_Data" in ai_text
 
+    def test_project_append_adds_tag(self, mock_notion):
+        log_job_outcome("test", "tasks", "Success", project_append=True)
+        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        assert props["Tags"]["multi_select"] == [{"name": "project-append"}]
+
+    def test_no_project_append_omits_tag(self, mock_notion):
+        log_job_outcome("test", "tasks", "Success")
+        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        assert "Tags" not in props
+
 
 # ======================================================================
 # create_cleanup_task

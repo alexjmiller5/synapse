@@ -52,6 +52,7 @@ Everything else is code; these are one-time console/dashboard actions:
 4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the `Personal` vault.
 5. **Push secrets to Modal:** `just sync-secrets` (reads `.env.tpl`, injects via `op`, creates/updates the `synapse` Modal secret).
 6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI — e.g. `Lakeport` on Fun Activities → Location). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value.
+7. **Executions DB `Tags` property:** the Synapse Executions (logs) DB needs a `Tags` **multi_select** property — the pipeline tags executions that append a task/note to a project with a `project-append` tag. Notion auto-creates the *option* on first write, but the *property* itself must be added once (Notion UI, or a data_sources PATCH); until it exists, project-append log writes fail.
 
 ## Receptor client changes (v2 migration)
 
