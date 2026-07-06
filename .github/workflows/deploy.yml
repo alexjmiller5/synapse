@@ -18,7 +18,7 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           MODAL_TOKEN_ID: op://Personal/Modal Synapse/token-id
           MODAL_TOKEN_SECRET: op://Personal/Modal Synapse/token-secret
-      - run: uv run pytest -k "not integration"
+      - run: uv run pytest -m "not integration"
       - run: uv run modal deploy app.py
         # Modal secrets are pushed from the laptop via `just sync-secrets`;
         # CI only tests and deploys code.

@@ -229,6 +229,34 @@ class TestHydrateDynamicOptions:
         # Verify it ran without error (detailed check would require inspecting DATABASES)
         assert True
 
+    def test_warns_when_allowlist_option_missing_from_live_select(self, mock_notion, capsys):
+        """An allowlist entry absent from the live Notion select is filtered out
+        of the AI enum — hydration must warn loudly instead of silently no-oping."""
+        from core.config import DATABASES
+
+        # Live fun-activities Location select without the 'Lakeport' option
+        mock_notion.databases.retrieve.return_value = {
+            "properties": {
+                "Location": {
+                    "type": "select",
+                    "select": {
+                        "options": [{"name": "Boston"}, {"name": "Dallas"}, {"name": "NYC"}]
+                    },
+                }
+            }
+        }
+        try:
+            hydrate_dynamic_options()
+            out = capsys.readouterr().out
+            assert "Lakeport" in out and "missing" in out
+            location = DATABASES["databases"]["fun-activities"]["properties"]["Location"]
+            assert "Lakeport" not in location["_runtime_options"]
+        finally:
+            # Undo the in-place DATABASES mutation so schema tests keep seeing allowlists
+            for details in DATABASES["databases"].values():
+                for rules in details.get("properties", {}).values():
+                    rules.pop("_runtime_options", None)
+
 
 # ======================================================================
 # fetch_property_options

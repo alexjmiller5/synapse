@@ -102,6 +102,16 @@ def hydrate_dynamic_options():
                 else real_options
             )
 
+            # Allowlist entries missing from the live Notion select get filtered
+            # out above and become silently unpickable by the AI — warn loudly.
+            if allowlist:
+                missing = [opt for opt in allowlist if opt not in real_options]
+                if missing:
+                    print(
+                        f"   ⚠️ {category} [{prop_name}]: allowlist options missing "
+                        f"from Notion select (AI can never pick them): {missing}"
+                    )
+
             # Store back into CONFIG memory for Schema Generation
             rules["_runtime_options"] = final_options
             print(

@@ -8,7 +8,7 @@ dev:
     uv run modal serve app.py
 
 test:
-    uv run pytest -k "not integration"
+    uv run pytest -m "not integration"
 
 # All static analysis (read-only, CI-safe)
 check:
@@ -21,9 +21,10 @@ fmt:
 logs:
     uv run modal app logs synapse
 
-# Push .env.tpl secrets into the Modal secret store (no plaintext touches disk)
+# Push .env.tpl secrets into the Modal secret store (no plaintext touches disk;
+# `modal secret create --from-dotenv` rejects FIFOs, so a stdin script does the create)
 sync-secrets:
-    uv run modal secret create synapse --from-dotenv <(op inject -i .env.tpl) --force
+    op inject -i .env.tpl | uv run scripts/sync_secrets.py synapse
 
 deploy: test sync-secrets
     uv run modal deploy app.py
