@@ -55,6 +55,15 @@ DEFAULT_CTX = {
 }
 
 
+def _log_props(mock_notion):
+    """Return the properties of the execution-log page create (has Raw Input)."""
+    for call in mock_notion.pages.create.call_args_list:
+        props = call.kwargs["properties"]
+        if "Raw Input" in props:
+            return props
+    raise AssertionError("No execution log page was created")
+
+
 def _run(item_data, **overrides):
     ctx = {**DEFAULT_CTX, **overrides}
     run_pipeline(
@@ -83,6 +92,8 @@ class TestTaskPipeline:
         _run(_item("Update dating profile"))
         # Should create a task page + log outcome = 2 creates
         assert mock_notion.pages.create.call_count >= 1
+        # Ordinary execution — log must NOT carry the project-append tag
+        assert "Tags" not in _log_props(mock_notion)
 
     def test_task_with_context(self, mock_gemini, mock_notion):
         _setup_classify_extract_mobile(mock_gemini, "tasks", {
@@ -149,6 +160,9 @@ class TestProjectPipeline:
         task_create = create_calls[0]
         props = task_create.kwargs["properties"]
         assert "Project" in props
+        # Execution log must be tagged as a project-append execution
+        log_props = _log_props(mock_notion)
+        assert log_props["Tags"]["multi_select"] == [{"name": "project-append"}]
 
     def test_project_note(self, mock_gemini, mock_notion):
         """Note action creates a note in Notes DB linked to project."""
@@ -173,6 +187,9 @@ class TestProjectPipeline:
         note_call = mock_notion.pages.create.call_args_list[0]
         children = note_call.kwargs.get("children") or []
         assert "Decided to use Redis for caching" in json.dumps(children)
+        # Execution log must be tagged as a project-append execution
+        log_props = _log_props(mock_notion)
+        assert log_props["Tags"]["multi_select"] == [{"name": "project-append"}]
 
     def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
         """If project name doesn't match, falls back to normal task creation."""
@@ -194,6 +211,8 @@ class TestProjectPipeline:
         _run(_item("Some task", "NonExistentProject"))
         # Should still create via execute_logic fallback
         assert mock_notion.pages.create.called
+        # Not a project-append execution — log must NOT carry the tag
+        assert "Tags" not in _log_props(mock_notion)
 
 
 # ======================================================================

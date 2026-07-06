@@ -300,7 +300,13 @@ def create_high_priority_task(desc, link_url=None):
 
 
 def log_job_outcome(
-    raw_text, category, status, details="", created_url=None, ai_data=None
+    raw_text,
+    category,
+    status,
+    details="",
+    created_url=None,
+    ai_data=None,
+    project_append=False,
 ):
     print(f"--- Logging: {status} ---")
     log_id = get_db_id("logs")
@@ -323,6 +329,9 @@ def log_job_outcome(
     }
     if created_url:
         props["Created Item"] = {"url": created_url}
+    if project_append:
+        # Marks executions that appended a task/note to a project (filterable)
+        props["Tags"] = _notion_multi_select(["project-append"])
     try:
         notion.pages.create(parent={"database_id": log_id}, properties=props)
     except Exception as e:
