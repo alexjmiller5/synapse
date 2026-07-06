@@ -51,6 +51,7 @@ Everything else is code; these are one-time console/dashboard actions:
 3. **Google API keys:** the old GCP project is gone, so re-mint a **Places API key** and a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the `Synapse Env` 1Password item.
 4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the `Personal` vault.
 5. **Push secrets to Modal:** `just sync-secrets` (reads `.env.tpl`, injects via `op`, creates/updates the `synapse` Modal secret).
+6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI — e.g. `Lakeport` on Fun Activities → Location). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value.
 
 ## Receptor client changes (v2 migration)
 
@@ -81,7 +82,7 @@ The whole pipeline is YAML-driven. To add a new Notion database category:
 - **`required`**: `true` forces the AI to produce a value.
 - **`instruction`**: the extraction prompt for this field. Placeholders: `{current_date}` (Eastern time), `{raw_text}`. For `date` fields the instruction MUST demand ISO 8601 — `notion_utils._notion_date` raises on anything else.
 - **`virtual`**: `true` hides the field from the AI; Python fills it.
-- **`allowlist`**: strict enum for select/multi_select/status (intersected with live Notion options at runtime).
+- **`allowlist`**: strict enum for select/multi_select/status (intersected with live Notion options at runtime — see manual setup step 6: the options must also exist in Notion).
 - **`create_new`**: `true` lets the AI invent new values beyond the allowlist.
 
 ## Synapse Prompting Guide
@@ -114,4 +115,4 @@ scripts/          # one-off clients for the deployed webhook
 
 ## Deployment
 
-Push to `main` → GitHub Actions runs `pytest -k "not integration"` and `modal deploy app.py` (Modal tokens loaded from 1Password). Manual: `just deploy`.
+Push to `main` → GitHub Actions runs `pytest -m "not integration"` and `modal deploy app.py` (Modal tokens loaded from 1Password). Manual: `just deploy`.

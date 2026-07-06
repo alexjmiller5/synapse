@@ -28,6 +28,9 @@ import requests as _requests
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("SYNAPSE_GEMINI_API_KEY")
 
+if GEMINI_API_KEY and GEMINI_API_KEY.startswith("fake-"):
+    GEMINI_API_KEY = None  # conftest sentinel, not a real key — fall through to op
+
 if not GEMINI_API_KEY:
     try:
         result = subprocess.run(
@@ -39,10 +42,13 @@ if not GEMINI_API_KEY:
     except Exception:
         pass
 
-pytestmark = pytest.mark.skipif(
-    not GEMINI_API_KEY,
-    reason="GEMINI_API_KEY not available — skipping integration tests",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not GEMINI_API_KEY,
+        reason="GEMINI_API_KEY not available — skipping integration tests",
+    ),
+]
 
 # ---------------------------------------------------------------------------
 # Import core modules (conftest handles mock setup)
