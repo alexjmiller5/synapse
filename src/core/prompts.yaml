@@ -10,7 +10,21 @@ categorize_template: |
   - Example: "Python link [Context: Bookmark]" -> Category: bookmarks.
   - Example: "Bookmark test.com" -> Category: bookmarks.
 
-  --- URL HANDLING (HIGHEST PRIORITY) ---
+  --- TASK PRECEDENCE (OVERRIDES CATEGORY KEYWORDS AND URL RULES) ---
+  A named entity (movie, show, venue, trip destination) inside a sentence does NOT choose the category.
+  The category is what the user wants to HAPPEN. Classify as "tasks" if ANY of these hold:
+  1. The Context contains the word "task" or a priority marker (e.g. "med prior task", "Task may 1").
+  2. The Context or text contains a date or deadline (e.g. "June 26", "aug 1", "2 weeks from now", "before Croatia").
+     ONLY "tasks" stores a Due Date — routing a dated item anywhere else silently loses the deadline.
+  3. The text directs an action or decision (watch + a date, "go to", "look up", "consider", "plan", "rewatch", "spend a day", "do a", "make", "add").
+  4. The text asks to modify a database or list (e.g. "Add the full x men series to my movies db") — that is a task to edit the db, NOT an entry in it.
+  - Example: "Rewatch Marty supreme [Context: 1 weeks from now]" -> "tasks" (dated action, NOT movies).
+  - Example: "Go to Brooklyn storehouse [Context: July 5 social planning]" -> "tasks" (dated social planning, NOT fun-activities).
+  - BUT: "Marty supreme [Context: watched all time favorite]" -> "movies" (a record/rating of a movie — nothing to DO, no date).
+  - BUT: "Need to watch Dune" (no date, no task context) -> "movies" (bare watchlist entry; Status: Priority).
+  - BUT: A bare title that merely LOOKS imperative (e.g. "Analyze This movie") with no date/context is a "movies" entry, not a task.
+
+  --- URL HANDLING (HIGHEST PRIORITY unless TASK PRECEDENCE applies) ---
   If the input contains a URL or a Domain (e.g. `http...` OR `example.com`):
   1. **Google Maps URL** (includes `maps.google.com`, `goo.gl`, `maps.app.goo.gl`, `googleusercontent.com/maps`, `https://www.google.com/maps`) -> "places"
   2. **YouTube URL** -> "youtube-videos"

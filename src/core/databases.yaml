@@ -1,6 +1,6 @@
 databases:
   tasks:
-    description: "A general to-do item, reminder, or action."
+    description: "A general to-do item, reminder, or action — anything the user must DO, decide, or schedule, even when it names a movie, show, venue, or trip. This is the ONLY category that stores a Due Date, so anything with a date/deadline belongs here."
     properties:
       Name:
         type: "title"
@@ -92,7 +92,7 @@ databases:
         instruction: "Determine status based on confidence/progress - but generally default to Ideated. If the user specifies good idea specifically or something along the lines of how great they think it is, use Good Idea"
 
   quotes:
-    description: "A memorable quote or saying (often attributed to a person)."
+    description: "A memorable quote or saying (often attributed to a person). The input must contain the quote's ACTUAL WORDS. 'Add X's quote to the db' without the quote text is a task, not a quote."
     properties:
       Quote:
         type: "title"
@@ -107,7 +107,7 @@ databases:
         virtual: true
 
   movies:
-    description: "A movie title, genre, or film description to watch or rate. If the user says 'Need to watch p diddy documentary produced by 50 cent', that is a movie so this should be categorized as a movie, not a task. The line here is very thin because more detail than that might be a task, like 'watch p diddy documentary with mom' is more of a task because of the specific instructions, but even though produced by 50 cent was another detail, this should still be categorized as a movie not a task."
+    description: "A movie title, genre, or film description to watch or rate. A bare 'need to watch X' with NO date is a movie (Status: Priority). But if there is a date/deadline, a 'task' context, or a request to edit the movies db (e.g. 'add X to my movies db'), it is a task, not a movie."
     properties:
       Title:
         type: "title"
@@ -227,7 +227,7 @@ databases:
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
 
   fun-activities:
-    description: "A fun activity, event, or place to visit. User usually specifies a location or implies 'fun thing to do'."
+    description: "A fun activity, event, or place to visit — an UNDATED wishlist entry only. User usually specifies a location or implies 'fun thing to do'. If there is a date, a social-planning context, or the user is still deciding/planning (e.g. 'consider going to gov ball'), it is a task."
     properties:
       Title:
         type: "title"

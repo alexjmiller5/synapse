@@ -1,4 +1,5 @@
 import json
+import re
 
 from google.genai import types
 
@@ -55,50 +56,59 @@ def run_pipeline(
         )  # Debugging the input to the pipeline
 
         # 2. Classify
-        proj_str = ", ".join(project_prompts) if project_prompts else "None"
-        print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
-        cat_prompt = generate_classification_prompt(proj_str)
-        classify_input = (
-            f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
-        )
-
-        response = generate_with_retry(
-            model=GEMINI_MODEL,
-            contents=[
-                types.Content(parts=[types.Part(text=classify_input)], role="user")
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=cat_prompt,
-                response_mime_type="application/json",
-                response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
-            ),
-        )
-
-        # --- VERBOSE DEBUGGING START ---
-        print(f"🔍 DEBUG: Response Object ID: {id(response)}")
-
-        # 1. Check raw text value
-        print(f"🔍 DEBUG: response.text is type: {type(response.text)}")
-        print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
-
-        # 2. Check Finish Reason (The key indicator for blocks)
-        if response.candidates and len(response.candidates) > 0:
-            candidate = response.candidates[0]
-            print(f"🔍 DEBUG: Finish Reason: {candidate.finish_reason}")
-
-            # 3. Check Safety Ratings (if available)
-            if hasattr(candidate, "safety_ratings"):
-                print(f"🔍 DEBUG: Safety Ratings: {candidate.safety_ratings}")
+        # Deterministic pre-check: if the user's context says "task", it IS a task —
+        # skip the classifier entirely so a movie/venue name can't hijack the category.
+        # ponytail: word-match on 'task' only; widen if the prompt fix doesn't hold
+        if re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
+            print("⚡ Context mentions 'task' — deterministic classification: tasks")
+            category = "tasks"
+            project = None
+            project_action = "task"
         else:
-            print("🔍 DEBUG: No candidates returned in response.")
-        # --- VERBOSE DEBUGGING END ---
+            proj_str = ", ".join(project_prompts) if project_prompts else "None"
+            print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
+            cat_prompt = generate_classification_prompt(proj_str)
+            classify_input = (
+                f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+            )
 
-        # Check if text is None (Safety Filter Trigger)
-        classified = json.loads(response.text)
+            response = generate_with_retry(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Content(parts=[types.Part(text=classify_input)], role="user")
+                ],
+                config=types.GenerateContentConfig(
+                    system_instruction=cat_prompt,
+                    response_mime_type="application/json",
+                    response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
+                ),
+            )
 
-        category = classified.get("category", "tasks")
-        project = classified.get("related_project")
-        project_action = classified.get("project_action", "task")
+            # --- VERBOSE DEBUGGING START ---
+            print(f"🔍 DEBUG: Response Object ID: {id(response)}")
+
+            # 1. Check raw text value
+            print(f"🔍 DEBUG: response.text is type: {type(response.text)}")
+            print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
+
+            # 2. Check Finish Reason (The key indicator for blocks)
+            if response.candidates and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                print(f"🔍 DEBUG: Finish Reason: {candidate.finish_reason}")
+
+                # 3. Check Safety Ratings (if available)
+                if hasattr(candidate, "safety_ratings"):
+                    print(f"🔍 DEBUG: Safety Ratings: {candidate.safety_ratings}")
+            else:
+                print("🔍 DEBUG: No candidates returned in response.")
+            # --- VERBOSE DEBUGGING END ---
+
+            # Check if text is None (Safety Filter Trigger)
+            classified = json.loads(response.text)
+
+            category = classified.get("category", "tasks")
+            project = classified.get("related_project")
+            project_action = classified.get("project_action", "task")
         print(f"🤖 Classification: {category}")
         if project:
             print(f"   🔍 AI identified project: '{project}' (action: {project_action})")

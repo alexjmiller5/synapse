@@ -31,6 +31,10 @@ deploy: test sync-secrets
 
 # --- project-specific recipes below (one-offs live in scripts/, run directly) ---
 
+# Classifier prompt eval — real Gemini calls against scripts/eval_cases.yaml
+eval-classifier:
+    op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
+
 # Integration suite — real Gemini calls (key injected via op)
 test-integration:
     op run --env-file=.env.tpl -- uv run pytest tests/test_integration.py -v --timeout=120

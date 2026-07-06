@@ -8,6 +8,7 @@ import json
 from unittest.mock import patch
 
 from core.pipeline import run_pipeline, run
+from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 from helpers import make_gemini_response, make_notion_page
 
 
@@ -127,6 +128,47 @@ class TestTaskPipeline:
         }, mobile_compat=False)
 
         _run(_item("Fix production server"))
+        assert mock_notion.pages.create.called
+
+
+# ======================================================================
+# Deterministic task-context pre-check
+# ======================================================================
+class TestTaskContextPrecheck:
+    def test_task_context_skips_classifier(self, mock_gemini, mock_notion):
+        """Context containing the word 'task' classifies deterministically — no classify call."""
+        # Only the extraction response is queued: a classification call would
+        # consume it and break the sequence.
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({
+                "Name": "Add the full x men series to my movies db",
+                "AI Title": "Add X-Men series to movies DB",
+                "Tags": ["Chore"],
+                "Due Date": "2026-07-10",
+            }),
+        ]
+
+        _run(_item("Add the full x men series to my movies db", "med prior task"))
+
+        assert mock_gemini.models.generate_content.call_count == 1
+        first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
+        assert first_cfg.response_json_schema is not CATEGORY_SCHEMA_CLASSIFY
+        assert mock_notion.pages.create.called
+
+    def test_date_context_still_calls_classifier(self, mock_gemini, mock_notion):
+        """A plain date context does NOT trigger the pre-check — classifier runs."""
+        _setup_classify_extract_mobile(mock_gemini, "tasks", {
+            "Name": "watch Eric Andre's new movie, little brother",
+            "AI Title": "Watch Little Brother",
+            "Tags": ["Chore"],
+            "Due Date": "2026-06-26",
+        })
+
+        _run(_item("watch Eric Andre's new movie, little brother", "June 26"))
+
+        assert mock_gemini.models.generate_content.call_count == 2
+        first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
+        assert first_cfg.response_json_schema is CATEGORY_SCHEMA_CLASSIFY
         assert mock_notion.pages.create.called
 
 
