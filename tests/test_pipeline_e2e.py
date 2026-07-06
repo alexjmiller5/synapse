@@ -4,6 +4,7 @@ Each test sends realistic input through the full pipeline and verifies
 the correct Notion API calls are made with proper data.
 """
 
+import json
 from unittest.mock import patch
 
 from core.pipeline import run_pipeline, run
@@ -168,6 +169,10 @@ class TestProjectPipeline:
 
         _run(_item("Decided to use Redis for caching", "Synapse"))
         assert mock_notion.pages.create.called
+        # The note page body must contain the captured text (not an empty page)
+        note_call = mock_notion.pages.create.call_args_list[0]
+        children = note_call.kwargs.get("children") or []
+        assert "Decided to use Redis for caching" in json.dumps(children)
 
     def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
         """If project name doesn't match, falls back to normal task creation."""

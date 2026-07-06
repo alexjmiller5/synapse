@@ -3,7 +3,7 @@ import json
 from google.genai import types
 
 from core.config import PROMPTS
-from core.clients import gemini_client, GEMINI_API_KEY
+from core.clients import GEMINI_API_KEY
 from core.notion_utils import (
     log_job_outcome,
     create_high_priority_task,
@@ -12,6 +12,8 @@ from core.notion_utils import (
     create_project_note,
 )
 from core.ai_engine import (
+    GEMINI_MODEL,
+    generate_with_retry,
     parse_raw_input,
     generate_classification_prompt,
     generate_extraction_prompt,
@@ -60,8 +62,8 @@ def run_pipeline(
             f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
         )
 
-        response = gemini_client.models.generate_content(
-            model="gemini-3-flash-preview",
+        response = generate_with_retry(
+            model=GEMINI_MODEL,
             contents=[
                 types.Content(parts=[types.Part(text=classify_input)], role="user")
             ],
@@ -118,8 +120,8 @@ def run_pipeline(
         )
 
         # DEBUG: Capture Raw AI Response before JSON Load
-        ai_response_obj = gemini_client.models.generate_content(
-            model="gemini-3-flash-preview",
+        ai_response_obj = generate_with_retry(
+            model=GEMINI_MODEL,
             contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
             config=types.GenerateContentConfig(
                 system_instruction=extract_prompt,
@@ -151,7 +153,7 @@ def run_pipeline(
                 if project_action == "note":
                     print(f"   -> Creating project note for: {project}")
                     url = create_project_note(
-                        project_id, extracted.get("Name", raw_text)
+                        project_id, extracted.get("Name", raw_text), context=user_context
                     )
                     log_payload["Extractor_Data"]["Action"] = "Created Project Note"
                 else:
