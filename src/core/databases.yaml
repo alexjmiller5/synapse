@@ -1,5 +1,11 @@
+# Notion database ids for records not defined as categories below.
+db_ids:
+  projects: "30703953a8af80acaa34cde8f38980cf"
+  notes: "28a03953a8af80fa8dbfe65c4c3a09f5"
+
 databases:
   tasks:
+    db_id: "396848733b4e405982a4045545e49324"
     description: "A general to-do item, reminder, or action — anything the user must DO, decide, or schedule, even when it names a movie, show, venue, or trip. This is the ONLY category that stores a Due Date, so anything with a date/deadline belongs here."
     properties:
       Name:
@@ -58,6 +64,7 @@ databases:
         virtual: true
 
   groceries:
+    db_id: "24f03953a8af81c98537c5643996ec32"
     description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping). Sometimes if a food is included, but the prompt is very specific, it will be a task. For example 'Buy a 10 pound bag of rice if the 2 pound is too small`` is a task because of the specific instructions. But 'Buy rice' is groceries."
     properties:
       Name:
@@ -75,6 +82,7 @@ databases:
         instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
 
   ideas:
+    db_id: "f6b3969cd6674f88aaf2c0117aa9caa0"
     description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that. Usually this has the word idea in it, but sometimes it does. For example, if the user input is 'Idea for a name: call it quick test (Context: mcat availability project)', the context is clearly specifying that this is an idea for a name a related project, not a standalone idea. Standalone ideas for this categorization won't usually have any context unless it's specifying the status of the idea or that it's an idea. The context might just be 'new idea' or 'great idea' or something like that but wouldn't specify a specific project - if it did specify a project it would be a task related to that project, not an idea."
     properties:
       Description:
@@ -92,6 +100,7 @@ databases:
         instruction: "Determine status based on confidence/progress - but generally default to Ideated. If the user specifies good idea specifically or something along the lines of how great they think it is, use Good Idea"
 
   quotes:
+    db_id: "18f03953a8af80818514e90a57035436"
     description: "A memorable quote or saying (often attributed to a person). The input must contain the quote's ACTUAL WORDS. 'Add X's quote to the db' without the quote text is a task, not a quote."
     properties:
       Quote:
@@ -107,6 +116,7 @@ databases:
         virtual: true
 
   movies:
+    db_id: "d19641022be445f3977663c0ad388643"
     description: "A movie title, genre, or film description to watch or rate. A bare 'need to watch X' with NO date is a movie (Status: Priority). But if there is a date/deadline, a 'task' context, or a request to edit the movies db (e.g. 'add X to my movies db'), it is a task, not a movie."
     properties:
       Title:
@@ -147,6 +157,7 @@ databases:
           4. "Gave Up": If the user stopped watching or disliked it.
           5. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
   tv-shows:
+    db_id: "d9047a2b07e7411fa3f052e082a5baba"
     description: "A TV series title to start or track status of."
     properties:
       Title:
@@ -170,6 +181,7 @@ databases:
         instruction: "Famous actors in the show."
 
   podcasts:
+    db_id: "368344a44c9c40b3b9f9b35533e7f5cc"
     description: "A podcast episode or series (MUST contains a Spotify or 'thisamericanlife.org' link). If the user just describes a podcast without a link, classify as a TASK (Chore). Or if they say add these podcasts to my db for example, that is also a task."
     properties:
       Episode Title:
@@ -203,6 +215,7 @@ databases:
         virtual: true
 
   youtube-videos:
+    db_id: "45e59935dc574e15a86ab8c3a70a0e51"
     description: "A YouTube video. MUST contain a valid 'youtube.com' or 'youtu.be' or m.youtube.com link. If the user just describes a video without a link, classify as a TASK (Chore)."
     properties:
       Title:
@@ -227,6 +240,7 @@ databases:
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
 
   fun-activities:
+    db_id: "19d03953a8af80b8b4c0ec37be230e8e"
     description: "A fun activity, event, or place to visit — an UNDATED wishlist entry only. User usually specifies a location or implies 'fun thing to do'. If there is a date, a social-planning context, or the user is still deciding/planning (e.g. 'consider going to gov ball'), it is a task."
     properties:
       Title:
@@ -254,6 +268,7 @@ databases:
         instruction: "Default to 'To Do'. Use 'Done' if the user implies they already did it."
 
   people:
+    db_id: "1a803953a8af8067b5bedb83b6358c58"
     description: "A database for people/contacts. Use ONLY if the user provides a name with context/job info (e.g. 'Arun Vantage senior associate')."
     properties:
       Name:
@@ -266,6 +281,7 @@ databases:
         instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
 
   bookmarks:
+    db_id: "2a803953a8af8060b9c4e1d94bfab2e0"
     description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify, 'thisamericanlife.org', or Google Maps URL). If there is more context than just the url, this should NOT be categorized as a bookmarks - bookmarks are ONLY urls. For example, if the user input is 'Check out this website: www.test.com for more info', that is a task (chore) to check out the website, not a bookmark. Bookmarks are ONLY when the user input is JUST a url or something very close to just a url with minimal extra text."
     properties:
       Description:
@@ -289,6 +305,7 @@ databases:
         instruction: "Select 'Github' if the URL contains github.com. Otherwise select relevant tags based on content."
 
   bucket-list:
+    db_id: "bd075f6b39584d07929cbaeeafc15299"
     description: "Items to do before dying. Context usually contains 'bucket list'."
     properties:
       Item:
@@ -300,6 +317,7 @@ databases:
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
 
   places:
+    db_id: "2ca03953a8af80e7ae53d6642cb46715"
     description: "A Google Maps URL representing a place to visit or remember. The user context provides status/notes. STRICT RULE: The input MUST contain a valid Google Maps URL. If the user just describes a place in text without a link, do NOT use this category."
     properties:
       Name:
@@ -381,6 +399,7 @@ databases:
 
   # Helpers
   youtube-channels:
+    db_id: "cd8d57e29f7e44d2b2c7a25e08a7723f"
     description: "YouTube Channels"
     helper: true
     properties:
@@ -390,6 +409,7 @@ databases:
         type: "url"
 
   logs:
+    db_id: "2b103953a8af803280cec633c91c46c3"
     description: "Internal use."
     helper: true
     properties:
@@ -406,6 +426,7 @@ databases:
       Created Item:
         type: "url"
   trips:
+    db_id: "19603953a8af80c2818cd6135757f4c2"
     description: "Internal inventory of trips."
     helper: true
     properties:

@@ -3,7 +3,8 @@ Shared test fixtures for the Synapse test suite.
 
 Mocking strategy:
 - Fake secrets are seeded as env vars BEFORE core modules import
-  (core.secrets reads env vars only)
+  (core.secrets reads env vars; DB ids fall back to databases.yaml, so the
+  fake NOTION_*_DB_ID vars here act as overrides that keep tests off real ids)
 - core.clients module globals (notion, gemini_client, spotify, youtube, gmaps)
   are patched at the module level
 - All external API calls are intercepted before any real network I/O
