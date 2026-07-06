@@ -35,7 +35,12 @@ Both files are `add_local_file`d into the image at `/root/core/`.
 - Secrets are env vars ONLY (Modal secret `synapse` in the cloud, `op run`
   locally). `core/secrets.py` maps legacy kebab-case ids to env names:
   `get_secret("gemini-api-key")` → `GEMINI_API_KEY`. `.env.tpl` is the
-  canonical manifest (op:// refs, committed).
+  canonical manifest (op:// refs, committed) — the 6 credentials only.
+- Notion DB ids are committed config, NOT secrets: each category stanza in
+  `databases.yaml` has a `db_id` (non-category ids in the top-level `db_ids`
+  mapping). `get_db_id` lets a `NOTION_<X>_DB_ID` env var override. Adding a
+  DB = one `databases.yaml` edit. (Where ids live may change — e.g. native
+  pydantic config — but `get_db_id` stays the single lookup point.)
 - All "today"/date creation goes through `core/timeutils.py`
   (`today_eastern()` / `now_eastern()`) — never `date.today()` /
   `datetime.now()` (server is UTC; late-night captures would date-shift).

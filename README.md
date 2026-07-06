@@ -12,7 +12,7 @@ Synapse eliminates the friction of manual data entry in Notion. It accepts unstr
 - **`webhook`** — a proxy-authed `fastapi_endpoint`. Callers send `Modal-Key` + `Modal-Secret` headers; unauthorized requests are rejected at Modal's edge for free. It validates the payload and `spawn()`s the worker — **spawn IS the queue** (no Pub/Sub).
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1` to serialize runs since Notion dedupe is query-then-create, retries with backoff). Runs `core.pipeline.run`.
 - **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
-- **Secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed).
+- **Secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — just the 6 credentials. Notion DB ids are committed config in `databases.yaml`, not secrets (a `NOTION_<X>_DB_ID` env var still overrides).
 
 ```mermaid
 flowchart LR
@@ -66,8 +66,7 @@ The [Receptor](https://github.com/alexjmiller5/receptor) app must be updated for
 
 The whole pipeline is YAML-driven. To add a new Notion database category:
 
-1. Add `NOTION_<CATEGORY>_DB_ID` to the `Synapse Env` 1Password item and to `.env.tpl`, then `just sync-secrets`.
-2. Add the category definition to `databases.yaml`.
+1. Add the category definition to `databases.yaml`, including its `db_id` — that single edit is the whole onboarding. (Non-category ids live in the top-level `db_ids` mapping.) No 1Password or `.env.tpl` change needed; the 18 `NOTION_*_DB_ID` fields on the `Synapse Env` 1Password item are unused and can be deleted at leisure.
 
 ### Database level
 
