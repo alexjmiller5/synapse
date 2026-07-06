@@ -147,9 +147,11 @@ def run_pipeline(
         log_payload["Extractor_Data"] = extracted
 
         url = None
+        project_append = False
         if project and category == "tasks":
             project_id = project_id_map.get(project)
             if project_id:
+                project_append = True
                 if project_action == "note":
                     print(f"   -> Creating project note for: {project}")
                     url = create_project_note(
@@ -178,7 +180,12 @@ def run_pipeline(
                     create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
         log_job_outcome(
-            full_str_for_log, category, "Success", created_url=url, ai_data=log_payload
+            full_str_for_log,
+            category,
+            "Success",
+            created_url=url,
+            ai_data=log_payload,
+            project_append=project_append,
         )
 
     except Exception as e:
