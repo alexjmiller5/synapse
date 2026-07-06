@@ -30,6 +30,19 @@ class TestApplyBusinessLogic:
         assert result["Status"] == "To Do"
         assert result["Notes"] == "Project: Synapse"
 
+    def test_tasks_default_priority_high(self):
+        result = apply_business_logic("tasks", {"Name": "Do thing"})
+        assert result["Priority"] == "High"
+
+    def test_project_tasks_default_priority_high(self):
+        """Tasks routed to a project must default High like regular tasks."""
+        result = apply_business_logic("tasks", {"Name": "Fix bug"}, related_project="Synapse")
+        assert result["Priority"] == "High"
+
+    def test_tasks_explicit_priority_kept(self):
+        result = apply_business_logic("tasks", {"Name": "Do thing", "Priority": "Low"})
+        assert result["Priority"] == "Low"
+
     def test_quotes_formatting(self):
         data = {"Quote": '"I will be back"'}
         result = apply_business_logic("quotes", data)

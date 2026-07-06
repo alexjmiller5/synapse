@@ -1,7 +1,7 @@
-from datetime import date
 from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import notion
+from core.timeutils import today_eastern
 from core.handlers import (
     handle_groceries_fun_logic,
     handle_youtube_logic,
@@ -200,10 +200,13 @@ def fetch_active_projects():
 
 
 def apply_business_logic(category, data, related_project=None):
-    today_str = date.today().isoformat()
+    today_str = today_eastern().isoformat()
 
     if category == "tasks":
         data["Status"] = "To Do"
+        # Tasks default to High priority (project-routed tasks included) —
+        # the AI usually sets this, but never rely on it.
+        data.setdefault("Priority", "High")
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 

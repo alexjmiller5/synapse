@@ -14,7 +14,33 @@ from core.external_data import (
     enrich_context,
     resolve_final_url,
     get_tal_metadata,
+    sanitize_youtube_url,
 )
+
+
+# ======================================================================
+# sanitize_youtube_url
+# ======================================================================
+class TestSanitizeYoutubeUrl:
+    def test_strips_timestamp(self):
+        url = "https://www.youtube.com/watch?v=X&t=123s"
+        assert sanitize_youtube_url(url) == "https://www.youtube.com/watch?v=X"
+
+    def test_strips_si_and_t_from_short_link(self):
+        url = "https://youtu.be/X?si=abc123&t=1m2s"
+        assert sanitize_youtube_url(url) == "https://youtu.be/X"
+
+    def test_strips_feature(self):
+        url = "https://www.youtube.com/watch?v=X&feature=share"
+        assert sanitize_youtube_url(url) == "https://www.youtube.com/watch?v=X"
+
+    def test_clean_url_unchanged(self):
+        url = "https://www.youtube.com/watch?v=X"
+        assert sanitize_youtube_url(url) == url
+
+    def test_no_query_unchanged(self):
+        url = "https://youtu.be/X"
+        assert sanitize_youtube_url(url) == url
 
 
 # ======================================================================

@@ -1,15 +1,61 @@
 """Tests for ai_engine.py — parsing, classification, extraction, schema generation."""
 
 import pytest
+from google.genai import types
+from google.genai.errors import ClientError
 
+from core import ai_engine
 from core.ai_engine import (
     safe_json_load,
     parse_raw_input,
     generate_classification_prompt,
     generate_extraction_prompt,
+    generate_with_retry,
     get_gemini_schema,
 )
 from helpers import make_gemini_response
+
+
+# ======================================================================
+# GEMINI_MODEL constant + 404 fallback
+# ======================================================================
+class TestModelFallback:
+    def _config(self):
+        return types.GenerateContentConfig(response_mime_type="application/json")
+
+    def _not_found(self):
+        return ClientError(404, {"error": {"message": "model not found", "status": "NOT_FOUND"}})
+
+    def test_model_constant_exists(self):
+        assert ai_engine.GEMINI_MODEL
+        assert ai_engine.GEMINI_FALLBACK_MODEL
+
+    def test_404_falls_back_to_fallback_model(self, mock_gemini):
+        good = make_gemini_response({"ok": True})
+        mock_gemini.models.generate_content.side_effect = [self._not_found(), good]
+
+        resp = generate_with_retry(
+            model=ai_engine.GEMINI_MODEL, contents=[], config=self._config()
+        )
+
+        assert resp is good
+        assert mock_gemini.models.generate_content.call_count == 2
+        second_call = mock_gemini.models.generate_content.call_args_list[1]
+        assert second_call.kwargs["model"] == ai_engine.GEMINI_FALLBACK_MODEL
+
+    def test_404_on_fallback_model_raises(self, mock_gemini):
+        mock_gemini.models.generate_content.side_effect = [self._not_found(), self._not_found()]
+
+        with pytest.raises(ClientError):
+            generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
+
+    def test_non_404_client_error_raises(self, mock_gemini):
+        err = ClientError(400, {"error": {"message": "bad request", "status": "INVALID_ARGUMENT"}})
+        mock_gemini.models.generate_content.side_effect = err
+
+        with pytest.raises(ClientError):
+            generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
+        assert mock_gemini.models.generate_content.call_count == 1
 
 
 # ======================================================================

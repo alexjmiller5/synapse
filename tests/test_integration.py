@@ -49,6 +49,7 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 from core.config import PROMPTS  # noqa: E402
 from core.ai_engine import (  # noqa: E402
+    GEMINI_MODEL,
     generate_classification_prompt,
     generate_extraction_prompt,
     get_gemini_schema,
@@ -58,9 +59,8 @@ from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Direct Gemini REST API (bypasses conftest SDK mocks)
-# Uses same model as production (gemini-3-flash-preview)
+# Uses the same model constant as production (core.ai_engine.GEMINI_MODEL)
 # ---------------------------------------------------------------------------
-GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 

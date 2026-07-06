@@ -1,10 +1,26 @@
 import re
 import json
 import requests
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 from inscriptis import get_text
 from core.clients import spotify, youtube, gmaps
 from core.notion_utils import create_cleanup_task
+
+# Timestamp / tracking params to strip from YouTube URLs before storage
+YOUTUBE_JUNK_PARAMS = ("t", "si", "feature")
+
+
+def sanitize_youtube_url(url):
+    """Strips timestamp/tracking params (t, si, feature) from a YouTube URL."""
+    parsed = urlparse(url)
+    query = urlencode(
+        [
+            (k, v)
+            for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+            if k not in YOUTUBE_JUNK_PARAMS
+        ]
+    )
+    return urlunparse(parsed._replace(query=query))
 
 
 def extract_url(text):

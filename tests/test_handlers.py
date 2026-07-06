@@ -177,6 +177,24 @@ class TestHandleYoutube:
             # Should still create the video
             mock_notion.pages.create.assert_called()
 
+    def test_video_url_sanitized_before_storage(self, mock_notion):
+        """Timestamp/tracking params are stripped before dedupe + storage."""
+        mock_notion.request.return_value = {"results": []}
+
+        with patch("core.handlers.get_video_channel_details", return_value=None):
+            data = {
+                "Title": "Video",
+                "Video URL": "https://youtu.be/abc?si=XyZ123&t=1m2s",
+                "Status": "Watched",
+            }
+            handle_youtube_logic("youtube-videos", data)
+
+        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        assert props["Video URL"]["url"] == "https://youtu.be/abc"
+        # The dedupe query used the sanitized URL too
+        dedupe_body = mock_notion.request.call_args.kwargs["body"]
+        assert dedupe_body["filter"]["url"]["equals"] == "https://youtu.be/abc"
+
 
 # ======================================================================
 # handle_movies_tv_logic
@@ -248,6 +266,36 @@ class TestHandleBookmarks:
         # Tags should include Github (added by handler)
         # The tags come through build_notion_properties so check the raw data was modified
         assert "Github" in data["Tags"]
+
+    def test_description_trailing_period_stripped(self, mock_notion):
+        mock_notion.request.return_value = {"results": []}
+        data = {
+            "Description": "A tool for secure dependency management.",
+            "Title": "Example",
+            "URL": "https://example.com",
+            "Tags": [],
+        }
+
+        handle_bookmarks_logic("bookmarks", data)
+        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        desc = props["Description"]["title"][0]["text"]["content"]
+        assert desc == "A tool for secure dependency management"
+
+    def test_description_without_period_untouched(self, mock_notion):
+        mock_notion.request.return_value = {"results": []}
+        data = {
+            "Description": "A tool for secure dependency management",
+            "Title": "Example",
+            "URL": "https://example.com",
+            "Tags": [],
+        }
+
+        handle_bookmarks_logic("bookmarks", data)
+        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        assert (
+            props["Description"]["title"][0]["text"]["content"]
+            == "A tool for secure dependency management"
+        )
 
 
 # ======================================================================

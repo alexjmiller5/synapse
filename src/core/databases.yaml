@@ -9,7 +9,7 @@ databases:
       AI Title:
         type: "rich_text"
         required: true
-        instruction: "Create a concise, clear title from the text."
+        instruction: "Create a concise, clear title from the text. You may fix obvious typos or dictation errors in the task title (e.g. 'buy grocries' -> 'Buy groceries')."
       Tags:
         type: "multi_select"
         required: true
@@ -236,12 +236,13 @@ databases:
       Location:
         type: "select"
         required: true
-        allowlist: ["Boston", "Dallas", "NYC"]
+        allowlist: ["Boston", "Dallas", "NYC", "Lakeport"]
         instruction: |
           Infer the city from the text/landmarks:
           - "NYC": Union Square, Central Park, Brooklyn, Manhattan.
           - "Boston": Seaport, Fenway, Cambridge, The Charles.
           - "Dallas": Deep Ellum, Bishop Arts, Katy Trail.
+          - "Lakeport": Lakeport CT, Crescent Beach, Bayview Park, Main Street Lakeport.
           - If the location is totally ambiguous, leave empty (the system will create a manual cleanup task).
       Tags:
         type: "multi_select"
@@ -271,9 +272,10 @@ databases:
         type: "title"
         required: true
         instruction: |
-          This is the Summary property. Write a short summary of what the website is about. 
+          This is the Summary property. Write a short summary of what the website is about.
           - If it's a GitHub link, use the repo description exactly as is.
           - Otherwise, " Write a short 1-2 sentence description of what the website is about (based on the page content preview)."
+          - Do NOT end the description with a period.
       Title:
         type: "rich_text"
         required: true
