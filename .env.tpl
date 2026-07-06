@@ -1,0 +1,29 @@
+# Canonical secrets manifest — op:// references only, SAFE to commit.
+# Local dev:       op run --env-file=.env.tpl -- <cmd>   (see justfile)
+# Push to Modal:   just sync-secrets
+
+GEMINI_API_KEY=op://Personal/Synapse Env/GEMINI_API_KEY
+NOTION_INTEGRATION_TOKEN=op://Personal/Synapse Env/NOTION_INTEGRATION_TOKEN
+SPOTIFY_CLIENT_ID=op://Personal/Synapse Env/SPOTIFY_CLIENT_ID
+SPOTIFY_CLIENT_SECRET=op://Personal/Synapse Env/SPOTIFY_CLIENT_SECRET
+GOOGLE_PLACES_API_KEY=op://Personal/Synapse Env/GOOGLE_PLACES_API_KEY
+GOOGLE_YOUTUBE_API_KEY=op://Personal/Synapse Env/GOOGLE_YOUTUBE_API_KEY
+
+NOTION_TASKS_DB_ID=op://Personal/Synapse Env/NOTION_TASKS_DB_ID
+NOTION_GROCERIES_DB_ID=op://Personal/Synapse Env/NOTION_GROCERIES_DB_ID
+NOTION_IDEAS_DB_ID=op://Personal/Synapse Env/NOTION_IDEAS_DB_ID
+NOTION_QUOTES_DB_ID=op://Personal/Synapse Env/NOTION_QUOTES_DB_ID
+NOTION_MOVIES_DB_ID=op://Personal/Synapse Env/NOTION_MOVIES_DB_ID
+NOTION_TV_SHOWS_DB_ID=op://Personal/Synapse Env/NOTION_TV_SHOWS_DB_ID
+NOTION_PODCASTS_DB_ID=op://Personal/Synapse Env/NOTION_PODCASTS_DB_ID
+NOTION_YOUTUBE_VIDEOS_DB_ID=op://Personal/Synapse Env/NOTION_YOUTUBE_VIDEOS_DB_ID
+NOTION_YOUTUBE_CHANNELS_DB_ID=op://Personal/Synapse Env/NOTION_YOUTUBE_CHANNELS_DB_ID
+NOTION_FUN_ACTIVITIES_DB_ID=op://Personal/Synapse Env/NOTION_FUN_ACTIVITIES_DB_ID
+NOTION_PEOPLE_DB_ID=op://Personal/Synapse Env/NOTION_PEOPLE_DB_ID
+NOTION_BOOKMARKS_DB_ID=op://Personal/Synapse Env/NOTION_BOOKMARKS_DB_ID
+NOTION_BUCKET_LIST_DB_ID=op://Personal/Synapse Env/NOTION_BUCKET_LIST_DB_ID
+NOTION_PLACES_DB_ID=op://Personal/Synapse Env/NOTION_PLACES_DB_ID
+NOTION_LOGS_DB_ID=op://Personal/Synapse Env/NOTION_LOGS_DB_ID
+NOTION_TRIPS_DB_ID=op://Personal/Synapse Env/NOTION_TRIPS_DB_ID
+NOTION_PROJECTS_DB_ID=op://Personal/Synapse Env/NOTION_PROJECTS_DB_ID
+NOTION_NOTES_DB_ID=op://Personal/Synapse Env/NOTION_NOTES_DB_ID

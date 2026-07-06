@@ -1,29 +1,33 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = ["requests"]
+# ///
+"""Send one thought to the deployed Synapse webhook (Modal).
+
+Env vars: MODAL_WEBHOOK_URL, MODAL_PROXY_TOKEN_ID, MODAL_PROXY_TOKEN_SECRET.
+Run via `just recept "your text"` (fills them from 1Password).
+"""
+
+import os
 import sys
-import base64
+
 import requests
 
+
 def send_event(input_text):
-    url = "http://localhost:8080"
-
-    # Create the encoded payload
-    data_bytes = input_text.encode("utf-8")
-    encoded_data = base64.b64encode(data_bytes).decode("utf-8")
-
-    payload = {"message": {"data": encoded_data, "attributes": {}}}
+    url = os.environ.get("MODAL_WEBHOOK_URL")
+    if not url:
+        print("❌ MODAL_WEBHOOK_URL is not set.")
+        sys.exit(1)
 
     headers = {
-        "Content-Type": "application/json",
-        "Ce-Id": "123456789",
-        "Ce-Specversion": "1.0",
-        "Ce-Type": "google.cloud.pubsub.topic.v1.messagePublished",
-        "Ce-Source": "//pubsub.googleapis.com/projects/synapse/topics/local",
+        "Modal-Key": os.environ.get("MODAL_PROXY_TOKEN_ID", ""),
+        "Modal-Secret": os.environ.get("MODAL_PROXY_TOKEN_SECRET", ""),
     }
 
     print(f"🚀 Sending: '{input_text}'...")
-
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json={"raw_text": input_text}, headers=headers)
         response.raise_for_status()
         print(f"✅ Success: {response.status_code}")
         print(response.text)
@@ -34,7 +38,7 @@ def send_event(input_text):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 send_event.py <text>")
+        print("Usage: recept.py <text>")
         sys.exit(1)
 
     send_event(" ".join(sys.argv[1:]))
