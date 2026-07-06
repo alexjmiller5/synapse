@@ -13,10 +13,11 @@ app = modal.App(APP_NAME)
 
 image = (
     modal.Image.debian_slim(python_version="3.13")
-    .uv_sync()  # reads pyproject.toml + uv.lock
-    .add_local_python_source("core")
-    .add_local_file("src/core/databases.yaml", "/root/core/databases.yaml")
-    .add_local_file("src/core/prompts.yaml", "/root/core/prompts.yaml")
+    .uv_sync(extra_options="--no-dev")  # reads pyproject.toml + uv.lock; skip dev group
+    # add_local_python_source("core") can't resolve src/core (the package is never
+    # installed and src/ is only on sys.path under pytest) — mount the dir instead.
+    # Lands at /root/core, importable in-container, yaml files included for free.
+    .add_local_dir("src/core", remote_path="/root/core", ignore=["**/__pycache__"])
 )
 
 secrets = [modal.Secret.from_name(APP_NAME)]

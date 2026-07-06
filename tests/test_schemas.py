@@ -53,3 +53,18 @@ class TestCategorySchemaClassify:
     def test_related_project_field(self):
         assert "related_project" in CATEGORY_SCHEMA_CLASSIFY["properties"]
         assert CATEGORY_SCHEMA_CLASSIFY["properties"]["related_project"]["type"] == "string"
+
+
+class TestYamlFixGuards:
+    """CI-run regression guards for YAML-only fixes that no unit test would
+    otherwise touch (their behavior tests live in the integration suite)."""
+
+    def test_fun_activities_location_enum_includes_westport(self):
+        from core.ai_engine import get_gemini_schema
+
+        schema = get_gemini_schema("fun-activities")
+        assert "Lakeport" in schema["properties"]["Location"]["enum"]
+
+    def test_task_ai_title_instruction_allows_typo_fixes(self):
+        instruction = DATABASES["databases"]["tasks"]["properties"]["AI Title"]["instruction"]
+        assert "typos" in instruction
