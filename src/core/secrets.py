@@ -14,8 +14,17 @@ def get_secret(secret_id, version="latest"):
 
 
 def get_db_id(category):
-    """Fetches the DB ID for a category based on convention."""
-    return get_secret(f"notion-{category}-db-id")
+    """DB id for a category: NOTION_<X>_DB_ID env var wins, else committed config.
+
+    Ids are config, not secrets (repo is private). They currently live in
+    databases.yaml — a future refactor may move them into native pydantic
+    config; only this function needs to know where they live.
+    """
+    env_val = get_secret(f"notion-{category}-db-id")
+    if env_val:
+        return env_val
+    stanza = DATABASES.get("databases", {}).get(category) or {}
+    return stanza.get("db_id") or DATABASES.get("db_ids", {}).get(category)
 
 
 def _prefetch_db_ids():
