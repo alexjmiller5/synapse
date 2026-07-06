@@ -1,29 +1,49 @@
+set shell := ["bash", "-cu"]
+
 default:
     @just --list
 
-sync:
-    uv sync
+# Dev: live-reloading deploy of app.py against real Modal infra
+dev:
+    uv run modal serve app.py
 
-run-processor-debug: sync
-    cd workers/processor && uv run functions-framework --target=processor --source=main.py --debug
+test:
+    uv run pytest -k "not integration"
 
-run-processor: sync
-    cd workers/processor && uv run functions-framework --target=processor --source=main.py
+# All static analysis (read-only, CI-safe)
+check:
+    uv run ruff check . && uv run ruff format --check .
 
-recept-local-batch:
-    cd scripts && uv run --with requests send_local_requests.py local_requests.txt
+fmt:
+    uv run ruff format . && uv run ruff check --fix .
 
+# Stream logs from the deployed app
+logs:
+    uv run modal app logs synapse
+
+# Push .env.tpl secrets into the Modal secret store (no plaintext touches disk)
+sync-secrets:
+    uv run modal secret create synapse --from-dotenv <(op inject -i .env.tpl) --force
+
+deploy: test sync-secrets
+    uv run modal deploy app.py
+
+# --- project-specific recipes below (one-offs live in scripts/, run directly) ---
+
+# Integration suite — real Gemini calls (key injected via op)
+test-integration:
+    op run --env-file=.env.tpl -- uv run pytest tests/test_integration.py -v --timeout=120
+
+# Send one thought to the deployed webhook
 recept +args:
-    uv run --with requests scripts/recept.py {{quote(args)}}
+    MODAL_WEBHOOK_URL="${MODAL_WEBHOOK_URL:-$(op read 'op://Personal/Modal Synapse/webhook-url')}" \
+    MODAL_PROXY_TOKEN_ID="${MODAL_PROXY_TOKEN_ID:-$(op read 'op://Personal/Modal Synapse/proxy-token-id')}" \
+    MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://Personal/Modal Synapse/proxy-token-secret')}" \
+    uv run scripts/recept.py {{quote(args)}}
 
-test: sync
-    cd workers/processor && uv run --group dev pytest tests/ -v --ignore=tests/test_integration.py
-
-test-cov: sync
-    cd workers/processor && uv run --group dev pytest tests/ -v --cov --cov-report=term-missing -m "not integration"
-
-test-integration: sync
-    cd workers/processor && uv run --group dev pytest tests/test_integration.py -v --timeout=120
-
-reveal-synapse-notion-secret:
-  op item get 'SYNAPSE_NOTION_INTERNAL_INTEGRATION_SECRET' --fields credential --reveal
+# Send every line of scripts/local_requests.txt to the deployed webhook
+recept-batch:
+    MODAL_WEBHOOK_URL="${MODAL_WEBHOOK_URL:-$(op read 'op://Personal/Modal Synapse/webhook-url')}" \
+    MODAL_PROXY_TOKEN_ID="${MODAL_PROXY_TOKEN_ID:-$(op read 'op://Personal/Modal Synapse/proxy-token-id')}" \
+    MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://Personal/Modal Synapse/proxy-token-secret')}" \
+    uv run scripts/send_local_requests.py scripts/local_requests.txt
