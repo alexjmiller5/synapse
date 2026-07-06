@@ -46,9 +46,3 @@ recept +args:
     MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://Personal/Modal Synapse/proxy-token-secret')}" \
     uv run scripts/recept.py {{quote(args)}}
 
-# Send every line of scripts/local_requests.txt to the deployed webhook
-recept-batch:
-    MODAL_WEBHOOK_URL="${MODAL_WEBHOOK_URL:-$(op read 'op://Personal/Modal Synapse/webhook-url')}" \
-    MODAL_PROXY_TOKEN_ID="${MODAL_PROXY_TOKEN_ID:-$(op read 'op://Personal/Modal Synapse/proxy-token-id')}" \
-    MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://Personal/Modal Synapse/proxy-token-secret')}" \
-    uv run scripts/send_local_requests.py scripts/local_requests.txt
