@@ -1,0 +1,24 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          MODAL_TOKEN_ID: op://Synapse/Modal Synapse/token-id
+          MODAL_TOKEN_SECRET: op://Synapse/Modal Synapse/token-secret
+      - run: uv run pytest -m "not integration"
+      - run: uv run modal deploy app.py
+        # Modal secrets are pushed from the laptop via `just sync-secrets`;
+        # CI only tests and deploys code.

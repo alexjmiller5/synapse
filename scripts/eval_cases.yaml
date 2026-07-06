@@ -1,0 +1,109 @@
+# Classifier eval cases — real capture strings that were misrouted (expected: tasks)
+# plus control cases that must keep their non-task categories.
+# Run via `just eval-classifier`.
+
+misclassified:
+  - text: "watch Eric Andre's new movie, little brother"
+    context: "June 26"
+    expected: tasks
+  - text: "Rewatch Marty supreme"
+    context: "1 weeks from now"
+    expected: tasks
+  - text: "Go to Brooklyn storehouse"
+    context: "July 5 social planning"
+    expected: tasks
+  - text: "do a Tie dye day with friends?"
+    context: "aug 1"
+    expected: tasks
+  - text: "Add the full x men series to my movies db"
+    context: "med prior task"
+    expected: tasks
+  - text: "consider going to gov ball"
+    context: "Task may 1"
+    expected: tasks
+  - text: "- Simple long tail seo - https://youtube.com/shorts/aBcD3fGhIjk Claude could help me come up with ideas similar to this"
+    context: "3 weeks from now"
+    expected: tasks
+  - text: "Spend a day thirfting before Croatia"
+    context: ""
+    expected: tasks
+  - text: "Plan Lakeport trip / party with friends this summer"
+    context: "social"
+    expected: tasks
+  - text: "Go to Portland in the fall to visit Priya"
+    context: "July 1 social planning"
+    expected: tasks
+  - text: "Go to visit Marta this summer in Portugal"
+    context: "july 1 social planning"
+    expected: tasks
+  - text: "create a packing list for croatia + figure out exactly how much cash I'll want to take out"
+    context: "may 20"
+    expected: tasks
+  - text: "consider travelling to Ecuador / se Asia to hang out with Marcus"
+    context: "Sep 1"
+    expected: tasks
+  - text: "plan to go to Japan with Theo - he said he'll probably go after graduation"
+    context: "jan 1 2027"
+    expected: tasks
+
+controls:
+  - text: "Marty supreme"
+    context: "watched all time favorite"
+    expected: movies
+  - text: "Need to watch Dune"
+    context: ""
+    expected: movies
+  - text: "Union Square"
+    context: "Fun"
+    expected: fun-activities
+  - text: "Analyze This movie"
+    context: ""
+    expected: movies
+  - text: "Interstellar"
+    context: "watched 10/10"
+    expected: movies
+  - text: "the whale"
+    context: "watched, brendan fraser was incredible"
+    expected: movies
+  - text: "Museum of Sex"
+    context: "fun things nyc"
+    expected: fun-activities
+  - text: "Comedy cellar"
+    context: "fun"
+    expected: fun-activities
+  - text: "avocados"
+    context: ""
+    expected: groceries
+  - text: "oat milk"
+    context: "groceries"
+    expected: groceries
+  - text: "eggs"
+    context: ""
+    expected: groceries
+  - text: "this guy dresses like he wants to get wedgied"
+    context: "Eli quote"
+    expected: quotes
+  - text: "I'll be back"
+    context: "terminator quote"
+    expected: quotes
+  - text: "https://youtu.be/dQw4w9WgXcQ"
+    context: ""
+    expected: youtube-videos
+  - text: "https://www.youtube.com/watch?v=9bZkp7q19f0"
+    context: ""
+    expected: youtube-videos
+  - text: "severance"
+    context: "need to watch"
+    expected: tv-shows
+  - text: "Arun Vantage senior associate"
+    context: ""
+    expected: people
+  - text: "https://news.ycombinator.com"
+    context: ""
+    expected: bookmarks
+  - text: "Go Skydiving"
+    context: "Bucket List"
+    expected: bucket-list
+  - text: "Idea for an app that generates workout playlists automatically"
+    context: ""
+    expected: ideas
