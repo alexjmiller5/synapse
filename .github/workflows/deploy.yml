@@ -8,17 +8,23 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # The one GH secret: this project's 1Password service-account token.
+    # It authenticates op for BOTH reading the deploy creds and pushing the
+    # app secrets — so CI owns the full deploy, no manual `just sync-secrets`.
+    env:
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - uses: 1Password/install-cli-action@v4
       - uses: 1password/load-secrets-action@v2
         with:
           export-env: true
         env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           MODAL_TOKEN_ID: op://Synapse/Modal Synapse/token-id
           MODAL_TOKEN_SECRET: op://Synapse/Modal Synapse/token-secret
       - run: uv run pytest -m "not integration"
+      # Secrets must exist BEFORE deploy — app.py references modal.Secret.from_name.
+      - name: Push app secrets to Modal
+        run: op inject -i .env.tpl | uv run scripts/sync_secrets.py synapse
       - run: uv run modal deploy app.py
-        # Modal secrets are pushed from the laptop via `just sync-secrets`;
-        # CI only tests and deploys code.
