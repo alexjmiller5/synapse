@@ -99,21 +99,24 @@ databases:
         allowlist: ["Ideated", "Good Idea"]
         instruction: "Determine status based on confidence/progress - but generally default to Ideated. If the user specifies good idea specifically or something along the lines of how great they think it is, use Good Idea"
 
-  quotes:
-    db_id: "18f03953a8af80818514e90a57035436"
-    description: "A memorable quote or saying (often attributed to a person). The input must contain the quote's ACTUAL WORDS. 'Add X's quote to the db' without the quote text is a task, not a quote."
-    properties:
-      Quote:
-        type: "title"
-        required: true
-        instruction: "The actual words spoken (e.g., 'I'll be back')"
-      Context:
-        type: "rich_text"
-        required: false
-        instruction: "The context in which the quote was said, not necesarily the person who said it unless the conetxt happens to include their name in introduction (e.g., 'From the movie The Terminator' or 'Said by Elon Musk during a 2020 interview'). But not just like 'Elon Musk said' - that is not context, that's just attribution which is already handled elsewhere. You are certainly allowed to leave this field empty"
-      Date:
-        type: "date"
-        virtual: true
+  # quotes: DISABLED 2026-07-07 (Alex adds quotes manually). Commented out so
+  # it's excluded from the classifier enum — quote inputs now become tasks.
+  # Uncomment to re-enable.
+  # quotes:
+  #   db_id: "18f03953a8af80818514e90a57035436"
+  #   description: "A memorable quote or saying (often attributed to a person). The input must contain the quote's ACTUAL WORDS. 'Add X's quote to the db' without the quote text is a task, not a quote."
+  #   properties:
+  #     Quote:
+  #       type: "title"
+  #       required: true
+  #       instruction: "The actual words spoken (e.g., 'I'll be back')"
+  #     Context:
+  #       type: "rich_text"
+  #       required: false
+  #       instruction: "The context in which the quote was said, not necesarily the person who said it unless the conetxt happens to include their name in introduction (e.g., 'From the movie The Terminator' or 'Said by Elon Musk during a 2020 interview'). But not just like 'Elon Musk said' - that is not context, that's just attribution which is already handled elsewhere. You are certainly allowed to leave this field empty"
+  #     Date:
+  #       type: "date"
+  #       virtual: true
 
   movies:
     db_id: "d19641022be445f3977663c0ad388643"
