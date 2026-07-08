@@ -39,6 +39,13 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("tasks", {"Name": "Fix bug"}, related_project="Synapse")
         assert result["Priority"] == "High"
 
+    def test_project_tasks_explicit_priority_kept(self):
+        """A 'med'/'low' keyword the AI extracted must survive on project tasks."""
+        med = apply_business_logic("tasks", {"Name": "x", "Priority": "Medium"}, related_project="Synapse")
+        assert med["Priority"] == "Medium"
+        low = apply_business_logic("tasks", {"Name": "y", "Priority": "Low"}, related_project="Synapse")
+        assert low["Priority"] == "Low"
+
     def test_tasks_explicit_priority_kept(self):
         result = apply_business_logic("tasks", {"Name": "Do thing", "Priority": "Low"})
         assert result["Priority"] == "Low"

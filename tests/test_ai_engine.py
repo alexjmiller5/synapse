@@ -76,6 +76,16 @@ class TestSafeJsonLoad:
         with pytest.raises(ValueError):
             safe_json_load("")
 
+    def test_none_raises_valueerror_not_typeerror(self):
+        """An empty Gemini response (None) must raise a retryable ValueError,
+        not the un-retryable TypeError from json.loads(None)."""
+        with pytest.raises(ValueError):
+            safe_json_load(None)
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValueError):
+            safe_json_load("   \n  ")
+
 
 # ======================================================================
 # parse_raw_input

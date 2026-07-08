@@ -21,7 +21,14 @@ GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-la
 
 
 def safe_json_load(text):
-    """Helper to parse JSON and raise specific error if it fails."""
+    """Helper to parse JSON and raise specific error if it fails.
+
+    An empty/None response (Gemini sometimes returns nothing on a safety block)
+    raises ValueError — the retry predicate catches it — instead of letting
+    json.loads(None) throw an un-retryable TypeError.
+    """
+    if not text or not str(text).strip():
+        raise ValueError("Empty response from AI")
     try:
         return json.loads(text)
     except json.JSONDecodeError:
