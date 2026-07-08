@@ -234,7 +234,7 @@ databases:
         type: "status"
         required: true
         allowlist: ["Priority", "Not Started", "In Progress", "Watched"]
-        instruction: "Default to 'Watched' (assuming user just finished it). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'Not Started' if they merely mention wanting to watch it later without urgency."
+        instruction: "Default to 'Not Started' (adding a video usually means Alex wants to watch it, not that he has). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'Not Started' if they merely mention wanting to watch it later without urgency."
       Tags:
         type: "multi_select"
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
@@ -267,18 +267,20 @@ databases:
         allowlist: ["To Do", "Planned", "Done"]
         instruction: "Default to 'To Do'. Use 'Done' if the user implies they already did it."
 
-  people:
-    db_id: "1a803953a8af8067b5bedb83b6358c58"
-    description: "A database for people/contacts. Use ONLY if the user provides a name with context/job info (e.g. 'Arun Vantage senior associate')."
-    properties:
-      Name:
-        type: "title"
-        required: true
-        instruction: "The full name, Title Cased. If only a first name is given, use that. (e.g. 'will barlow' -> 'Will Barlow')."
-      Company:
-        type: "rich_text"
-        required: true
-        instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
+  # people: DISABLED 2026-07-07 (Alex commented out like quotes — adds people manually).
+  # Commented out so it's excluded from the classifier enum; people inputs become tasks.
+#   people:
+#     db_id: "1a803953a8af8067b5bedb83b6358c58"
+#     description: "A database for people/contacts. Use ONLY if the user provides a name with context/job info (e.g. 'Arun Vantage senior associate')."
+#     properties:
+#       Name:
+#         type: "title"
+#         required: true
+#         instruction: "The full name, Title Cased. If only a first name is given, use that. (e.g. 'will barlow' -> 'Will Barlow')."
+#       Company:
+#         type: "rich_text"
+#         required: true
+#         instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
 
   bookmarks:
     db_id: "2a803953a8af8060b9c4e1d94bfab2e0"
