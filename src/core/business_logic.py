@@ -2,6 +2,7 @@ from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import notion
 from core.timeutils import today_eastern
+from core.notion_utils import clean_text
 from core.handlers import (
     handle_groceries_fun_logic,
     handle_youtube_logic,
@@ -24,9 +25,7 @@ def query_notion_db(category_key, query_body=None):
         query_body = {"page_size": 100}
 
     try:
-        resp = notion.request(
-            path=f"databases/{db_id}/query", method="POST", body=query_body
-        )
+        resp = notion.request(path=f"databases/{db_id}/query", method="POST", body=query_body)
         return resp.get("results", [])
     except Exception as e:
         print(f"❌ Failed to query {category_key}: {e}")
@@ -106,9 +105,7 @@ def hydrate_dynamic_options(only_category=None):
 
             # Logic: Use allowlist if present, else real options
             final_options = (
-                [opt for opt in real_options if opt in allowlist]
-                if allowlist
-                else real_options
+                [opt for opt in real_options if opt in allowlist] if allowlist else real_options
             )
 
             # Allowlist entries missing from the live Notion select get filtered
@@ -218,7 +215,7 @@ def fetch_active_projects():
     return prompt_list, id_map
 
 
-def apply_business_logic(category, data, related_project=None):
+def apply_business_logic(category, data, related_project=None, source_text=None):
     today_str = today_eastern().isoformat()
 
     if category == "tasks":
@@ -226,6 +223,14 @@ def apply_business_logic(category, data, related_project=None):
         # Tasks default to High priority (project-routed tasks included) —
         # the AI usually sets this, but never rely on it.
         data.setdefault("Priority", "High")
+        # Grounding guard: a task Name MUST be the user's verbatim text
+        # (databases.yaml says so), but the AI sometimes rewrites/hallucinates it.
+        # Force it back to the original input. ONLY tasks — other categories
+        # legitimately transform their title (groceries Title-Cases, movies
+        # correct titles). clean_text also runs at the write choke-point; applied
+        # here too so the grounded value is clean wherever data is read.
+        if source_text is not None:
+            data["Name"] = clean_text(source_text)
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 

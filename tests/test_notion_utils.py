@@ -11,6 +11,7 @@ from core.notion_utils import (
     _notion_status,
     _notion_select,
     _notion_url,
+    clean_text,
     build_notion_properties,
     create_page,
     update_status,
@@ -21,6 +22,90 @@ from core.notion_utils import (
     fetch_existing_page,
 )
 from helpers import make_notion_page
+
+
+# ======================================================================
+# clean_text — deterministic de-spam / de-mojibake
+# ======================================================================
+class TestCleanText:
+    def test_empty_and_none_safe(self):
+        assert clean_text("") == ""
+        assert clean_text(None) is None  # non-str passes through untouched
+
+    def test_clean_string_is_noop(self):
+        assert clean_text("Buy milk") == "Buy milk"
+
+    def test_strips_leading_trailing_whitespace(self):
+        assert clean_text("  hello  \n") == "hello"
+
+    def test_collapses_newline_spam(self):
+        assert clean_text("a\n\n\n\n\nb") == "a\n\nb"
+
+    def test_keeps_double_newline(self):
+        assert clean_text("a\n\nb") == "a\n\nb"
+
+    def test_collapses_em_dash_spam(self):
+        assert clean_text("wait———really") == "wait—really"
+
+    def test_single_em_dash_untouched(self):
+        assert clean_text("a—b") == "a—b"
+
+    def test_collapses_dot_spam_to_ellipsis(self):
+        assert clean_text("well....") == "well…"
+        assert clean_text("hmm.......") == "hmm…"
+
+    def test_two_dots_untouched(self):
+        # Conservative: only 3+ collapse; a legit ".." is left alone.
+        assert clean_text("wait..") == "wait.."
+
+    def test_collapses_bang_spam(self):
+        assert clean_text("stop!!!!") == "stop!"
+
+    def test_collapses_question_spam(self):
+        assert clean_text("what???") == "what?"
+
+    def test_double_bang_untouched(self):
+        assert clean_text("yes!!") == "yes!!"
+
+    def test_mojibake_smart_quotes(self):
+        rsquo = "\u00e2\u20ac\u2122"  # a-euro-tm mojibake of U+2019
+        ldquo = "\u00e2\u20ac\u0153"  # left double quote mojibake
+        rdquo = "\u00e2\u20ac\u009d"  # right double quote mojibake
+        assert clean_text("It" + rsquo + "s here") == "It's here"
+        assert clean_text(ldquo + "quoted" + rdquo) == chr(34) + "quoted" + chr(34)
+
+    def test_mojibake_em_dash(self):
+        emdash = "\u00e2\u20ac\u201d"  # em-dash mojibake (CP1252 0x94)
+        assert clean_text("a" + emdash + "b") == "a\u2014b"
+
+    def test_mojibake_nbsp_variants(self):
+        assert clean_text("a\u00c2\u00a0b") == "a b"  # mojibake of a NBSP
+        assert clean_text("a\u00a0b") == "a b"  # bare NBSP
+        assert clean_text("\ufeffhello") == "hello"  # BOM stripped
+
+    def test_preserves_accents(self):
+        # Alex has names with accents — never ASCII-fold them.
+        assert clean_text("Sérgio") == "Sérgio"
+        assert clean_text("Mémoire") == "Mémoire"
+        # A legit standalone 'â' (French "âme") must survive — only â€… sequences go.
+        assert clean_text("l'âme") == "l'âme"
+
+    def test_idempotent(self):
+        messy = "  Hey———there!!!!\n\n\n\ndone....  "
+        once = clean_text(messy)
+        assert clean_text(once) == once
+
+    def test_title_applies_clean_text(self):
+        content = _notion_title("Buy milk!!!!\n\n\n\n")["title"][0]["text"]["content"]
+        assert content == "Buy milk!"
+
+    def test_rich_text_applies_clean_text(self):
+        content = _notion_rich_text("done....")["rich_text"][0]["text"]["content"]
+        assert content == "done…"
+
+    def test_rich_text_whitespace_only_becomes_empty(self):
+        # clean_text strips to "" → treated as empty rich_text.
+        assert _notion_rich_text("   \n\n  ") == {"rich_text": []}
 
 
 # ======================================================================
@@ -172,7 +257,12 @@ class TestBuildNotionProperties:
         assert props["Category"]["select"]["name"] == "Dairy"
 
     def test_bookmarks(self):
-        data = {"Description": "A cool site", "Title": "Cool Site", "URL": "https://cool.com", "Tags": ["Github"]}
+        data = {
+            "Description": "A cool site",
+            "Title": "Cool Site",
+            "URL": "https://cool.com",
+            "Tags": ["Github"],
+        }
         props = build_notion_properties("bookmarks", data)
         assert props["URL"] == {"url": "https://cool.com"}
         assert props["Tags"] == {"multi_select": [{"name": "Github"}]}

@@ -56,16 +56,12 @@ def run_pipeline(
 ):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
-    full_str_for_log = (
-        f"{raw_text} (Context: {user_context})" if user_context else raw_text
-    )
+    full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
 
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
     try:
-        print(
-            f"🚀 Pipeline Start: {repr(raw_text)}"
-        )  # Debugging the input to the pipeline
+        print(f"🚀 Pipeline Start: {repr(raw_text)}")  # Debugging the input to the pipeline
 
         # 2. Classify
         # Deterministic pre-check: if the user's context says "task", it IS a task —
@@ -82,15 +78,11 @@ def run_pipeline(
             proj_str = ", ".join(project_prompts) if project_prompts else "None"
             print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
             cat_prompt = generate_classification_prompt(proj_str)
-            classify_input = (
-                f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
-            )
+            classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
 
             response = generate_with_retry(
                 model=GEMINI_MODEL,
-                contents=[
-                    types.Content(parts=[types.Part(text=classify_input)], role="user")
-                ],
+                contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
                 config=types.GenerateContentConfig(
                     system_instruction=cat_prompt,
                     response_mime_type="application/json",
@@ -131,9 +123,7 @@ def run_pipeline(
             if project in project_id_map:
                 print(f"   ✅ Exact match found: {project_id_map[project]}")
             else:
-                print(
-                    f"   ❌ MATCH FAILED. Available keys: {list(project_id_map.keys())}"
-                )
+                print(f"   ❌ MATCH FAILED. Available keys: {list(project_id_map.keys())}")
 
         # 3. Extract
         url_context = (
@@ -161,15 +151,14 @@ def run_pipeline(
 
         extracted = json.loads(raw_ai_text) or {}
 
-        if category == "tasks":
-            extracted["Name"] = raw_text
-
         # 4. Execute
         if not extracted:
             print("   ⚠️ Extraction returned empty.")
             extracted = {"Name": raw_text}
 
-        extracted = apply_business_logic(category, extracted, project)
+        # source_text grounds the tasks Name back to the user's verbatim input
+        # (apply_business_logic overrides only for the tasks category).
+        extracted = apply_business_logic(category, extracted, project, raw_text)
         log_payload["Extractor_Data"] = extracted
 
         url = None
@@ -210,9 +199,7 @@ def run_pipeline(
 
     except Exception as e:
         print(f"❌ Pipeline Error: {e}")
-        log_job_outcome(
-            full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload
-        )
+        log_job_outcome(full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload)
         create_high_priority_task(full_str_for_log)
 
 

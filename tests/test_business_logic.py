@@ -41,14 +41,39 @@ class TestApplyBusinessLogic:
 
     def test_project_tasks_explicit_priority_kept(self):
         """A 'med'/'low' keyword the AI extracted must survive on project tasks."""
-        med = apply_business_logic("tasks", {"Name": "x", "Priority": "Medium"}, related_project="Synapse")
+        med = apply_business_logic(
+            "tasks", {"Name": "x", "Priority": "Medium"}, related_project="Synapse"
+        )
         assert med["Priority"] == "Medium"
-        low = apply_business_logic("tasks", {"Name": "y", "Priority": "Low"}, related_project="Synapse")
+        low = apply_business_logic(
+            "tasks", {"Name": "y", "Priority": "Low"}, related_project="Synapse"
+        )
         assert low["Priority"] == "Low"
 
     def test_tasks_explicit_priority_kept(self):
         result = apply_business_logic("tasks", {"Name": "Do thing", "Priority": "Low"})
         assert result["Priority"] == "Low"
+
+    def test_tasks_name_grounded_to_source_text(self):
+        """AI mangled/rewrote the Name — grounding guard restores the verbatim input."""
+        data = {"Name": "Buy MILK!!!", "Tags": ["Chore"]}
+        result = apply_business_logic("tasks", data, source_text="buy milk")
+        assert result["Name"] == "buy milk"
+
+    def test_tasks_name_grounded_and_cleaned(self):
+        """Grounded Name is also run through clean_text (spam/mojibake stripped)."""
+        result = apply_business_logic("tasks", {"Name": "x"}, source_text="do it!!!!")
+        assert result["Name"] == "do it!"
+
+    def test_tasks_no_source_text_leaves_name(self):
+        """Without source_text (e.g. cleanup tasks) the Name is left as-is."""
+        result = apply_business_logic("tasks", {"Name": "Preserve me"})
+        assert result["Name"] == "Preserve me"
+
+    def test_non_task_name_not_grounded(self):
+        """Groceries legitimately Title-Cases its name — source_text must NOT override it."""
+        result = apply_business_logic("groceries", {"Name": "Eggs"}, source_text="buy eggs")
+        assert result["Name"] == "Eggs"
 
     def test_quotes_formatting(self):
         data = {"Quote": '"I will be back"'}
@@ -250,7 +275,10 @@ class TestHydrateDynamicOptions:
             calls = mock_notion.databases.retrieve.call_count
             # tasks has a handful of select/status props; a full all-category
             # hydrate would retrieve far more DBs. Assert we touched exactly one DB.
-            db_ids = {c.kwargs.get("database_id") or c.args[0] for c in mock_notion.databases.retrieve.call_args_list}
+            db_ids = {
+                c.kwargs.get("database_id") or c.args[0]
+                for c in mock_notion.databases.retrieve.call_args_list
+            }
             assert len(db_ids) == 1, f"expected 1 DB hydrated, got {len(db_ids)}: {db_ids}"
             assert calls >= 1
         finally:
