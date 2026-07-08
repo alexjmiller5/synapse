@@ -45,6 +45,20 @@ misclassified:
   - text: "plan to go to Japan with Theo - he said he'll probably go after graduation"
     context: "jan 1 2027"
     expected: tasks
+  # Project-referencing captures — must be tasks (and link the project, though the
+  # eval only checks category).
+  - text: "Openclaw proj task high"
+    context: ""
+    expected: tasks
+  - text: "Synapse project"
+    context: "redesign it with openclaw in mind"
+    expected: tasks
+  - text: "notion fixing and filling project"
+    context: "figure out a better way to manage projects"
+    expected: tasks
+  - text: "Media center project"
+    context: "Sam Whitfield"
+    expected: tasks
 
 controls:
   - text: "Marty supreme"

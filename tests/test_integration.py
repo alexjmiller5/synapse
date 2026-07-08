@@ -234,7 +234,6 @@ class TestProjectClassification:
         )
         assert classified["category"] == "tasks"
         assert classified.get("related_project") == "Synapse"
-        assert classified.get("project_action") == "task"
 
     def test_hotkey_project_task(self):
         classified = classify(
@@ -253,14 +252,16 @@ class TestProjectClassification:
         assert classified["category"] == "tasks"
         assert classified.get("related_project"), "Should identify a related project"
 
-    def test_project_note_action(self):
+    def test_note_like_thought_becomes_project_task(self):
+        """Project notes are removed — a note-like thought with a project context
+        is now a normal task linked to that project (no project_action)."""
         classified = classify(
             "Decided to use Redis for caching instead of memcached",
             "Synapse",
         )
         assert classified["category"] == "tasks"
         assert classified.get("related_project") == "Synapse"
-        assert classified.get("project_action") == "note"
+        assert "project_action" not in classified
 
     def test_no_project_without_context(self):
         classified = classify("Update dating profile")

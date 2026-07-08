@@ -7,13 +7,25 @@ from core.clients import notion
 from core.timeutils import today_eastern
 
 
+# Notion rejects any single title/rich_text content string longer than 2000 chars
+# with a 400. Truncate (with an ellipsis) so a long capture degrades instead of failing.
+NOTION_TEXT_LIMIT = 2000
+
+
+def _truncate(val, limit=NOTION_TEXT_LIMIT):
+    s = str(val)
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
 def _notion_title(val):
-    return {"title": [{"text": {"content": val}}]}
+    return {"title": [{"text": {"content": _truncate(val)}}]}
 
 
 def _notion_rich_text(val):
     return (
-        {"rich_text": [{"text": {"content": str(val)}}]} if val else {"rich_text": []}
+        {"rich_text": [{"text": {"content": _truncate(val)}}]}
+        if val
+        else {"rich_text": []}
     )
 
 
@@ -223,41 +235,10 @@ def create_project_task(project_id, extracted_data):
     return url
 
 
-def create_project_note(project_id, note_text, context=None):
-    """
-    Creates a Note in the Notes DB and links it to a Project via relation.
-    The captured text (and any user context) lands in the page BODY so the
-    note is never an empty page.
-    """
-    print(f"📝 Creating project note linked to project {project_id}...")
-
-    props = {
-        "Title": _notion_title(note_text),
-        "Project": {"relation": [{"id": project_id}]},
-        "Status": _notion_status("Reference"),
-    }
-
-    body_text = f"{note_text}\n\nContext: {context}" if context else note_text
-    children = [
-        {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {"rich_text": [{"type": "text", "text": {"content": body_text[:2000]}}]},
-        }
-    ]
-
-    db_id = get_db_id("notes")
-    resp = notion.pages.create(parent={"database_id": db_id}, properties=props, children=children)
-    url = resp.get("url")
-    print(f"   ✅ Project note created: {url}")
-    return url
-
-
 def create_cleanup_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
     props = {
         "Name": _notion_title(desc),
-        "AI Title": _notion_rich_text(desc),
         "Status": _notion_status("To Do"),
         "Tags": _notion_multi_select(["Chore"]),
         "Due Date": _notion_date(today_eastern().isoformat()),
@@ -282,7 +263,6 @@ def create_high_priority_task(desc, link_url=None):
     task_text = f"{classification_message}{desc}"
     props = {
         "Name": _notion_title(task_text),
-        "AI Title": _notion_rich_text(task_text),
         "Status": _notion_status("To Do"),
         "Tags": _notion_multi_select(["Chore"]),
         "Due Date": _notion_date(today_eastern().isoformat()),

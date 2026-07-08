@@ -46,9 +46,9 @@ class TestCategorySchemaClassify:
     def test_category_required(self):
         assert "category" in CATEGORY_SCHEMA_CLASSIFY["required"]
 
-    def test_project_action_enum(self):
-        pa = CATEGORY_SCHEMA_CLASSIFY["properties"]["project_action"]
-        assert pa["enum"] == ["task", "note"]
+    def test_project_action_removed(self):
+        """Project notes are gone — a matched project is always a task."""
+        assert "project_action" not in CATEGORY_SCHEMA_CLASSIFY["properties"]
 
     def test_related_project_field(self):
         assert "related_project" in CATEGORY_SCHEMA_CLASSIFY["properties"]
@@ -65,6 +65,28 @@ class TestYamlFixGuards:
         schema = get_gemini_schema("fun-activities")
         assert "Lakeport" in schema["properties"]["Location"]["enum"]
 
-    def test_task_ai_title_instruction_allows_typo_fixes(self):
-        instruction = DATABASES["databases"]["tasks"]["properties"]["AI Title"]["instruction"]
-        assert "typos" in instruction
+    def test_task_ai_title_property_removed(self):
+        """Alex deleted the 'AI Title' property from the Tasks DB — Synapse must
+        no longer define or write it (otherwise every task write 400s)."""
+        assert "AI Title" not in DATABASES["databases"]["tasks"]["properties"]
+
+    def test_movies_tags_instruction_mentions_all_time_favorite(self):
+        instr = DATABASES["databases"]["movies"]["properties"]["Tags"]["instruction"]
+        assert "all time favorite" in instr.lower()
+        assert "All Time Favorite" in DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
+
+    def test_movies_status_priority_keywords(self):
+        instr = DATABASES["databases"]["movies"]["properties"]["Status"]["instruction"]
+        assert "priority movie" in instr.lower()
+        assert "need to watch" in instr.lower()
+
+    def test_youtube_status_need_to_watch_is_priority(self):
+        instr = DATABASES["databases"]["youtube-videos"]["properties"]["Status"]["instruction"]
+        assert "need to watch" in instr.lower()
+        assert "Priority" in instr
+
+    def test_tasks_due_date_resolves_bare_month(self):
+        """A bare month name must resolve to its next occurrence, never January."""
+        instr = DATABASES["databases"]["tasks"]["properties"]["Due Date"]["instruction"]
+        assert "BARE MONTH" in instr
+        assert "NEVER default a bare month to January" in instr

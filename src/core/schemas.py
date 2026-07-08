@@ -26,10 +26,6 @@ CATEGORY_SCHEMA_CLASSIFY = {
             ],
         },
         "related_project": {"type": "string"},
-        "project_action": {
-            "type": "string",
-            "enum": ["task", "note"],
-        },
     },
     "required": ["category"],
 }

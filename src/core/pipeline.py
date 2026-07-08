@@ -10,7 +10,6 @@ from core.notion_utils import (
     create_high_priority_task,
     create_cleanup_task,
     create_project_task,
-    create_project_note,
 )
 from core.ai_engine import (
     GEMINI_MODEL,
@@ -31,6 +30,19 @@ from core.business_logic import (
     apply_business_logic,
     execute_logic,
 )
+
+
+def _match_project(text, project_names):
+    """Return the first active project whose name appears (case-insensitive) in text.
+
+    ponytail: plain contains-match — enough to re-link a project the deterministic
+    'task' path would otherwise drop; upgrade to fuzzy matching only if it misses.
+    """
+    haystack = (text or "").lower()
+    for name in project_names or []:
+        if name.lower() in haystack:
+            return name
+    return None
 
 
 def run_pipeline(
@@ -62,8 +74,10 @@ def run_pipeline(
         if re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
             print("⚡ Context mentions 'task' — deterministic classification: tasks")
             category = "tasks"
-            project = None
-            project_action = "task"
+            # Still link a referenced project so the deterministic path doesn't drop
+            # it. ponytail: case-insensitive contains match on active project names —
+            # simplest correct approach; the classifier path relies on exact map keys too.
+            project = _match_project(f"{raw_text} {user_context}", project_prompts)
         else:
             proj_str = ", ".join(project_prompts) if project_prompts else "None"
             print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
@@ -108,10 +122,9 @@ def run_pipeline(
 
             category = classified.get("category", "tasks")
             project = classified.get("related_project")
-            project_action = classified.get("project_action", "task")
         print(f"🤖 Classification: {category}")
         if project:
-            print(f"   🔍 AI identified project: '{project}' (action: {project_action})")
+            print(f"   🔍 AI identified project: '{project}'")
             if project in project_id_map:
                 print(f"   ✅ Exact match found: {project_id_map[project]}")
             else:
@@ -162,16 +175,10 @@ def run_pipeline(
             project_id = project_id_map.get(project)
             if project_id:
                 project_append = True
-                if project_action == "note":
-                    print(f"   -> Creating project note for: {project}")
-                    url = create_project_note(
-                        project_id, extracted.get("Name", raw_text), context=user_context
-                    )
-                    log_payload["Extractor_Data"]["Action"] = "Created Project Note"
-                else:
-                    print(f"   -> Creating project task for: {project}")
-                    url = create_project_task(project_id, extracted)
-                    log_payload["Extractor_Data"]["Action"] = "Created Project Task"
+                # A matched project is ALWAYS a task now (project notes removed).
+                print(f"   -> Creating project task for: {project}")
+                url = create_project_task(project_id, extracted)
+                log_payload["Extractor_Data"]["Action"] = "Created Project Task"
             else:
                 url = execute_logic(category, extracted)
         else:

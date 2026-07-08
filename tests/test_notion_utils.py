@@ -1,6 +1,5 @@
 """Tests for notion_utils.py — property builders, CRUD operations, logging."""
 
-import json
 from unittest.mock import patch
 import pytest
 
@@ -19,7 +18,6 @@ from core.notion_utils import (
     create_cleanup_task,
     create_high_priority_task,
     create_project_task,
-    create_project_note,
     fetch_existing_page,
 )
 from helpers import make_notion_page
@@ -89,6 +87,21 @@ class TestPropertyBuilders:
         result = _notion_url("https://example.com")
         assert result == {"url": "https://example.com"}
 
+    def test_notion_title_truncates_over_2000(self):
+        """Notion 400s on title content >2000 chars — truncate with an ellipsis."""
+        content = _notion_title("x" * 5000)["title"][0]["text"]["content"]
+        assert len(content) == 2000
+        assert content.endswith("…")
+
+    def test_notion_rich_text_truncates_over_2000(self):
+        content = _notion_rich_text("y" * 5000)["rich_text"][0]["text"]["content"]
+        assert len(content) == 2000
+        assert content.endswith("…")
+
+    def test_notion_title_under_limit_untouched(self):
+        content = _notion_title("short")["title"][0]["text"]["content"]
+        assert content == "short"
+
 
 # ======================================================================
 # build_notion_properties
@@ -97,7 +110,6 @@ class TestBuildNotionProperties:
     def test_tasks_basic(self):
         data = {
             "Name": "Update profile",
-            "AI Title": "Update dating profile",
             "Tags": ["Chore"],
             "Status": "To Do",
             "Due Date": "2026-01-15",
@@ -107,6 +119,12 @@ class TestBuildNotionProperties:
         assert props["Tags"] == {"multi_select": [{"name": "Chore"}]}
         assert props["Status"] == {"status": {"name": "To Do"}}
         assert props["Due Date"] == {"date": {"start": "2026-01-15"}}
+
+    def test_tasks_ai_title_never_written(self):
+        """The deleted 'AI Title' property must never reach Notion, even if an AI
+        extraction still emits it — build_notion_properties drops unknown keys."""
+        props = build_notion_properties("tasks", {"Name": "Do it", "AI Title": "Do it nicely"})
+        assert "AI Title" not in props
 
     def test_tasks_with_links(self):
         data = {
@@ -290,35 +308,6 @@ class TestCreateProjectTask:
         assert url is not None
         call_kwargs = mock_notion.pages.create.call_args.kwargs
         assert call_kwargs["properties"]["Project"] == {"relation": [{"id": "project-id-123"}]}
-
-
-# ======================================================================
-# create_project_note
-# ======================================================================
-class TestCreateProjectNote:
-    def test_creates_note_in_notes_db(self, mock_notion):
-        create_project_note("project-id-456", "Design decision notes")
-        mock_notion.pages.create.assert_called_once()
-        call_kwargs = mock_notion.pages.create.call_args.kwargs
-        assert call_kwargs["properties"]["Title"]["title"][0]["text"]["content"] == "Design decision notes"
-        assert call_kwargs["properties"]["Project"] == {"relation": [{"id": "project-id-456"}]}
-        assert call_kwargs["properties"]["Status"]["status"]["name"] == "Reference"
-
-    def test_note_body_contains_source_text(self, mock_notion):
-        """The note page must not be empty — the captured text lands in the page body."""
-        create_project_note("project-id-456", "Decided to use Redis for caching")
-        call_kwargs = mock_notion.pages.create.call_args.kwargs
-        children = call_kwargs["children"]
-        assert "Decided to use Redis for caching" in json.dumps(children)
-
-    def test_note_body_contains_context(self, mock_notion):
-        """User-provided context ($ notes) lands in the page body too."""
-        create_project_note(
-            "project-id-456", "Decided to use Redis", context="from architecture discussion"
-        )
-        children = json.dumps(mock_notion.pages.create.call_args.kwargs["children"])
-        assert "Decided to use Redis" in children
-        assert "from architecture discussion" in children
 
 
 # ======================================================================
