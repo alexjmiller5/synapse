@@ -67,8 +67,15 @@ def _notion_rich_text(val):
     return {"rich_text": [{"text": {"content": _truncate(val)}}]} if val else {"rich_text": []}
 
 
+def _sanitize_option(name):
+    """Notion select/multi_select option names may not contain commas (API 400)."""
+    return str(name).replace(",", "")
+
+
 def _notion_multi_select(val):
-    return {"multi_select": [{"name": t} for t in val]} if val else {"multi_select": []}
+    if not val:
+        return {"multi_select": []}
+    return {"multi_select": [{"name": _sanitize_option(t)} for t in val]}
 
 
 def _validate_iso_date(val):
@@ -92,7 +99,7 @@ def _notion_status(val):
 
 
 def _notion_select(val):
-    return {"select": {"name": val}} if val else None
+    return {"select": {"name": _sanitize_option(val)}} if val else None
 
 
 def _notion_url(val):
