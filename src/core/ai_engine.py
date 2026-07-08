@@ -11,7 +11,7 @@ from tenacity import (
 )
 
 from core.config import DATABASES, PROMPTS
-from core.clients import gemini_client
+from core.clients import get_gemini_client
 from core.schemas import PARSER_SCHEMA
 from core.timeutils import today_eastern
 
@@ -44,7 +44,7 @@ def safe_json_load(text):
     stop=stop_after_attempt(4),
 )
 def _generate(model, contents, config):
-    response = gemini_client.models.generate_content(
+    response = get_gemini_client().models.generate_content(
         model=model,
         contents=contents,
         config=config,

@@ -175,7 +175,7 @@ class TestGetYoutubeMetadata:
         assert "not found or private" in result
 
     def test_no_youtube_client(self):
-        with patch("core.external_data.youtube", None):
+        with patch("core.external_data.get_youtube", return_value=None):
             result = get_youtube_metadata("https://youtu.be/abc123")
             assert "No YouTube Client" in result
 
@@ -205,7 +205,7 @@ class TestGetVideoChannelDetails:
         assert "youtube.com/channel/ch123" in result["url"]
 
     def test_no_client(self):
-        with patch("core.external_data.youtube", None):
+        with patch("core.external_data.get_youtube", return_value=None):
             assert get_video_channel_details("https://youtu.be/abc") is None
 
     def test_invalid_url(self, mock_youtube):
@@ -227,7 +227,7 @@ class TestGetSpotifyMetadata:
         assert "Ep: Episode 1" in result
 
     def test_no_client(self):
-        with patch("core.external_data.spotify", None):
+        with patch("core.external_data.get_spotify", return_value=None):
             result = get_spotify_metadata("https://open.spotify.com/episode/abc")
             assert "No Spotify Client" in result
 
@@ -270,7 +270,7 @@ class TestGetPlaceDetails:
         assert get_place_details("nonexistent place xyz") is None
 
     def test_no_client(self):
-        with patch("core.external_data.gmaps", None):
+        with patch("core.external_data.get_gmaps", return_value=None):
             assert get_place_details("test") is None
 
     @responses.activate
@@ -349,7 +349,7 @@ class TestEnrichContext:
     def test_podcasts_spotify_routing(self):
         mock_sp = MagicMock()
         mock_sp.episode.return_value = {"show": {"name": "S"}, "name": "E", "description": "D"}
-        with patch("core.external_data.spotify", mock_sp):
+        with patch("core.external_data.get_spotify", return_value=mock_sp):
             result = enrich_context("podcasts", "https://open.spotify.com/episode/abc123")
         assert "Show:" in result
 

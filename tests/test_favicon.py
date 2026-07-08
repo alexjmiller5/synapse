@@ -104,11 +104,11 @@ class TestFaviconUrlGeneration:
 class TestCreatePageBookmarkIcon:
     """Test that create_page sets the correct icon for bookmarks."""
 
-    @patch("core.notion_utils.notion")
+    @patch("core.notion_utils.get_notion")
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_with_github_url_gets_custom_emoji(self, mock_db_id, mock_notion):
         """When creating a bookmark with a GitHub URL, the icon should be the github-light custom emoji."""
-        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from core.notion_utils import create_page
 
@@ -119,16 +119,16 @@ class TestCreatePageBookmarkIcon:
 
         create_page("bookmarks", props)
 
-        call_kwargs = mock_notion.pages.create.call_args[1]
+        call_kwargs = mock_notion.return_value.pages.create.call_args[1]
         assert "icon" in call_kwargs
         assert call_kwargs["icon"]["type"] == "custom_emoji"
         assert call_kwargs["icon"]["custom_emoji"]["id"] == "2d103953-a8af-8072-b828-007aa3901d27"
 
-    @patch("core.notion_utils.notion")
+    @patch("core.notion_utils.get_notion")
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_with_non_github_url_gets_favicon(self, mock_db_id, mock_notion):
         """When creating a bookmark with a non-GitHub URL, the icon should be the site's favicon."""
-        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from core.notion_utils import create_page
 
@@ -139,7 +139,7 @@ class TestCreatePageBookmarkIcon:
 
         create_page("bookmarks", props)
 
-        call_kwargs = mock_notion.pages.create.call_args[1]
+        call_kwargs = mock_notion.return_value.pages.create.call_args[1]
         assert "icon" in call_kwargs
         assert call_kwargs["icon"]["type"] == "external"
         assert "docs.determinate.systems" in call_kwargs["icon"]["external"]["url"]
@@ -147,11 +147,11 @@ class TestCreatePageBookmarkIcon:
         # Verify we use https:// in the URL param
         assert "url=https://" in call_kwargs["icon"]["external"]["url"]
 
-    @patch("core.notion_utils.notion")
+    @patch("core.notion_utils.get_notion")
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_without_url_gets_no_icon(self, mock_db_id, mock_notion):
         """When creating a bookmark without a URL, no icon should be set."""
-        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from core.notion_utils import create_page
 
@@ -161,14 +161,14 @@ class TestCreatePageBookmarkIcon:
 
         create_page("bookmarks", props)
 
-        call_kwargs = mock_notion.pages.create.call_args[1]
+        call_kwargs = mock_notion.return_value.pages.create.call_args[1]
         assert "icon" not in call_kwargs
 
-    @patch("core.notion_utils.notion")
+    @patch("core.notion_utils.get_notion")
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_podcasts_still_get_emoji_icon(self, mock_db_id, mock_notion):
         """Ensure existing emoji icon logic for podcasts is unchanged."""
-        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from core.notion_utils import create_page
 
@@ -176,14 +176,14 @@ class TestCreatePageBookmarkIcon:
 
         create_page("podcasts", props)
 
-        call_kwargs = mock_notion.pages.create.call_args[1]
+        call_kwargs = mock_notion.return_value.pages.create.call_args[1]
         assert call_kwargs["icon"] == {"type": "emoji", "emoji": "🎧"}
 
-    @patch("core.notion_utils.notion")
+    @patch("core.notion_utils.get_notion")
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_other_category_gets_no_icon(self, mock_db_id, mock_notion):
         """Categories without icon logic should not have an icon set."""
-        mock_notion.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
 
         from core.notion_utils import create_page
 
@@ -191,5 +191,5 @@ class TestCreatePageBookmarkIcon:
 
         create_page("tasks", props)
 
-        call_kwargs = mock_notion.pages.create.call_args[1]
+        call_kwargs = mock_notion.return_value.pages.create.call_args[1]
         assert "icon" not in call_kwargs

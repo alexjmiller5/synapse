@@ -1,5 +1,5 @@
 from core.secrets import get_db_id
-from core.clients import notion
+from core.clients import get_notion
 from core.notion_utils import (
     create_page,
     update_status,
@@ -32,7 +32,7 @@ def handle_places_logic(category, data, trips_id_map):
     if target_url:
         db_id = get_db_id("places")
         try:
-            resp = notion.request(
+            resp = get_notion().request(
                 path=f"databases/{db_id}/query",
                 method="POST",
                 body={
@@ -68,7 +68,7 @@ def handle_places_logic(category, data, trips_id_map):
 
         if update_props:
             try:
-                notion.pages.update(page_id=existing_id, properties=update_props)
+                get_notion().pages.update(page_id=existing_id, properties=update_props)
                 print("      ✅ Place updated.")
             except Exception as e:
                 print(f"      ❌ Failed to update place: {e}")
@@ -86,7 +86,7 @@ def handle_places_logic(category, data, trips_id_map):
     if trip_id and new_page_id:
         print(f"      - Linking trip: '{trip_name}'")
         try:
-            notion.pages.update(
+            get_notion().pages.update(
                 page_id=new_page_id,
                 properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
             )
@@ -147,7 +147,7 @@ def handle_youtube_logic(category, data):
     if target_url:
         db_id = get_db_id("youtube-videos")
         try:
-            resp = notion.request(
+            resp = get_notion().request(
                 path=f"databases/{db_id}/query",
                 method="POST",
                 body={
@@ -261,7 +261,7 @@ def handle_bookmarks_logic(category, data):
         db_id = get_db_id("bookmarks")
         try:
             # Specific query for URL property type
-            resp = notion.request(
+            resp = get_notion().request(
                 path=f"databases/{db_id}/query",
                 method="POST",
                 body={"filter": {"property": "URL", "url": {"equals": target_url}}},

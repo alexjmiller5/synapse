@@ -443,7 +443,7 @@ class TestFetchExistingPage:
         assert call_body["filter"]["title"]["contains"] == "Matrix"
 
     def test_no_notion_client(self):
-        with patch("core.notion_utils.notion", None):
+        with patch("core.notion_utils.get_notion", return_value=None):
             result = fetch_existing_page("movies", "Test", "Title")
             assert result is None
 
