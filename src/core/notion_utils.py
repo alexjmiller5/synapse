@@ -4,7 +4,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 from core.config import DATABASES
 from core.secrets import get_db_id
-from core.clients import notion
+from core.clients import get_notion
 from core.timeutils import today_eastern
 
 
@@ -184,7 +184,7 @@ def create_page(category, props):
 
     try:
         # Pass the parameters to the Notion SDK
-        return notion.pages.create(**body_params)
+        return get_notion().pages.create(**body_params)
     except Exception as e:
         print(f"❌ Notion Create Error: {e}")
         raise e
@@ -193,7 +193,7 @@ def create_page(category, props):
 def update_status(page_id, status):
     print(f"🔄 Updating status for {page_id} to '{status}'...")
     try:
-        return notion.pages.update(
+        return get_notion().pages.update(
             page_id=page_id, properties={"Status": {"status": {"name": status}}}
         )
     except Exception as e:
@@ -225,7 +225,7 @@ def append_note(page_id, text):
         return chunks
 
     try:
-        page = notion.pages.retrieve(page_id)
+        page = get_notion().pages.retrieve(page_id)
         current_notes = page["properties"].get("Notes", {}).get("rich_text", [])
 
         safe_notes = []
@@ -247,7 +247,7 @@ def append_note(page_id, text):
                 }
             )
 
-        notion.pages.update(page_id=page_id, properties={"Notes": {"rich_text": safe_notes}})
+        get_notion().pages.update(page_id=page_id, properties={"Notes": {"rich_text": safe_notes}})
         print("   ✅ Note appended successfully.")
 
     except Exception as e:
@@ -323,7 +323,7 @@ def log_job_outcome(
 ):
     print(f"--- Logging: {status} ---")
     log_id = get_db_id("logs")
-    if not notion or not log_id:
+    if not get_notion() or not log_id:
         return
 
     ai_summary_text = ""
@@ -346,14 +346,14 @@ def log_job_outcome(
         # Marks executions that appended a task/note to a project (filterable)
         props["Tags"] = _notion_multi_select(["project-append"])
     try:
-        notion.pages.create(parent={"database_id": log_id}, properties=props)
+        get_notion().pages.create(parent={"database_id": log_id}, properties=props)
     except Exception as e:
         print(f"Log failed: {e}")
 
 
 def fetch_existing_page(category, value, key="Name"):
     db_id = get_db_id(category)
-    if not notion or not db_id:
+    if not get_notion() or not db_id:
         return None
 
     # 1. Clean the search term for better matching
@@ -362,8 +362,8 @@ def fetch_existing_page(category, value, key="Name"):
     try:
         print(f"🔍 Searching {category} for '{value}' (Smart Search: '{clean_val}')...")
 
-        # FIX: Use raw notion.request() to bypass SDK version issues
-        resp = notion.request(
+        # FIX: Use raw get_notion().request() to bypass SDK version issues
+        resp = get_notion().request(
             path=f"databases/{db_id}/query",
             method="POST",
             body={"filter": {"property": key, "title": {"contains": clean_val}}},

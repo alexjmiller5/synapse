@@ -58,11 +58,12 @@ patch("spotipy.Spotify", return_value=MagicMock()).start()
 patch("googlemaps.Client", return_value=MagicMock()).start()
 patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 
-# Now import the clients module — constructors are mocked so no real API calls happen
+# Import the clients module — the external constructors are patched above, so the
+# lazy getters build MOCK clients. Each getter is lru_cached, so calling it here
+# returns the same instance the code-under-test will get.
 import core.clients as _clients_mod  # noqa: E402
 
-# Create mock clients and assign them to the module globals
-_mock_notion = MagicMock()
+_mock_notion = _clients_mod.get_notion()
 _mock_notion.pages.create.return_value = {
     "id": "new-page-id-000",
     "url": "https://www.notion.so/New-Page-newpageid000",
@@ -74,11 +75,10 @@ _mock_notion.pages.update.return_value = {
 _mock_notion.request.return_value = {"results": []}
 _mock_notion.databases.retrieve.return_value = {"properties": {}}
 
-_clients_mod.notion = _mock_notion
-_clients_mod.gemini_client = MagicMock()
-_clients_mod.spotify = MagicMock()
-_clients_mod.youtube = MagicMock()
-_clients_mod.gmaps = MagicMock()
+_mock_gemini = _clients_mod.get_gemini_client()
+_mock_spotify = _clients_mod.get_spotify()
+_mock_youtube = _clients_mod.get_youtube()
+_mock_gmaps = _clients_mod.get_gmaps()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -103,11 +103,11 @@ def _reset_all_mocks():
     _mock_notion.pages.create.side_effect = None
     _mock_notion.pages.update.side_effect = None
 
-    _clients_mod.gemini_client.reset_mock()
-    _clients_mod.gemini_client.models.generate_content.side_effect = None
-    _clients_mod.spotify.reset_mock()
-    _clients_mod.youtube.reset_mock()
-    _clients_mod.gmaps.reset_mock()
+    _mock_gemini.reset_mock()
+    _mock_gemini.models.generate_content.side_effect = None
+    _mock_spotify.reset_mock()
+    _mock_youtube.reset_mock()
+    _mock_gmaps.reset_mock()
     yield
 
 
@@ -120,7 +120,7 @@ def mock_notion():
 @pytest.fixture
 def mock_gemini():
     """Provides a mock Gemini client that returns configurable JSON."""
-    return _clients_mod.gemini_client
+    return _mock_gemini
 
 
 def make_gemini_response(json_data):
@@ -134,22 +134,19 @@ def make_gemini_response(json_data):
 @pytest.fixture
 def mock_spotify():
     """Provides the mock Spotify client."""
-    mock = _clients_mod.spotify
-    mock.reset_mock()
-    return mock
+    _mock_spotify.reset_mock()
+    return _mock_spotify
 
 
 @pytest.fixture
 def mock_youtube():
     """Provides the mock YouTube client."""
-    mock = _clients_mod.youtube
-    mock.reset_mock()
-    return mock
+    _mock_youtube.reset_mock()
+    return _mock_youtube
 
 
 @pytest.fixture
 def mock_gmaps():
     """Provides the mock Google Maps client."""
-    mock = _clients_mod.gmaps
-    mock.reset_mock()
-    return mock
+    _mock_gmaps.reset_mock()
+    return _mock_gmaps

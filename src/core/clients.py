@@ -1,45 +1,62 @@
+"""Lazy external-client factories.
+
+Each getter is lru_cached and built on FIRST USE inside a function — never at
+import — so the secret env vars (injected by Modal at container start) are read
+at the right time. A missing key returns None, degrading just that integration.
+"""
+
+from functools import lru_cache
+
 import google.genai as genai
-from notion_client import Client
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
-from googleapiclient.discovery import build
 import googlemaps
-from core.secrets import get_secret
+import spotipy
+from googleapiclient.discovery import build
+from notion_client import Client
+from spotipy.oauth2 import SpotifyClientCredentials
 
-gemini_client = None
-notion = None
-spotify = None
-gmaps = None
+from core.settings import get_settings
 
-GEMINI_API_KEY = get_secret("gemini-api-key")
-NOTION_API_KEY = get_secret("notion-integration-token")
-SPOTIFY_CLIENT_ID = get_secret("spotify-client-id")
-SPOTIFY_CLIENT_SECRET = get_secret("spotify-client-secret")
-GOOGLE_PLACES_KEY = get_secret("google-places-api-key")
-YOUTUBE_API_KEY = get_secret("google-youtube-api-key")
-# TMDB is plain ?api_key=<key> REST (no SDK/client object) — the key is used
-# directly by core.external_data.get_tmdb_metadata via requests.
-TMDB_API_KEY = get_secret("tmdb-api-key")
 
-if GEMINI_API_KEY:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-if NOTION_API_KEY:
-    notion = Client(auth=NOTION_API_KEY, notion_version="2022-06-28")
-if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+@lru_cache
+def get_gemini_client():
+    key = get_settings().gemini_api_key
+    return genai.Client(api_key=key) if key else None
+
+
+@lru_cache
+def get_notion():
+    token = get_settings().notion_integration_token
+    return Client(auth=token, notion_version="2022-06-28") if token else None
+
+
+@lru_cache
+def get_spotify():
+    s = get_settings()
+    if not (s.spotify_client_id and s.spotify_client_secret):
+        return None
     try:
-        spotify = spotipy.Spotify(
+        return spotipy.Spotify(
             auth_manager=SpotifyClientCredentials(
-                client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET
+                client_id=s.spotify_client_id, client_secret=s.spotify_client_secret
             )
         )
     except Exception:
-        pass
+        return None
 
-if GOOGLE_PLACES_KEY:
-    gmaps = googlemaps.Client(key=GOOGLE_PLACES_KEY)
 
-if YOUTUBE_API_KEY:
+@lru_cache
+def get_gmaps():
+    key = get_settings().google_places_api_key
+    return googlemaps.Client(key=key) if key else None
+
+
+@lru_cache
+def get_youtube():
+    key = get_settings().google_youtube_api_key
+    if not key:
+        return None
     try:
-        youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        return build("youtube", "v3", developerKey=key)
     except Exception as e:
         print(f"❌ Failed to init YouTube client: {e}")
+        return None
