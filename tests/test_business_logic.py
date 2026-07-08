@@ -236,6 +236,28 @@ class TestHydrateDynamicOptions:
         # Verify it ran without error (detailed check would require inspecting DATABASES)
         assert True
 
+    def test_only_category_hydrates_just_that_category(self, mock_notion):
+        """The hot path: hydrate only the classified category, not all ~15
+        (which cost ~40 Notion calls per thought). fetch_property_options must
+        be called only for the requested category's select props."""
+        from core.config import DATABASES
+
+        mock_notion.databases.retrieve.return_value = {
+            "properties": {"Tags": {"type": "multi_select", "multi_select": {"options": []}}}
+        }
+        try:
+            hydrate_dynamic_options(only_category="tasks")
+            calls = mock_notion.databases.retrieve.call_count
+            # tasks has a handful of select/status props; a full all-category
+            # hydrate would retrieve far more DBs. Assert we touched exactly one DB.
+            db_ids = {c.kwargs.get("database_id") or c.args[0] for c in mock_notion.databases.retrieve.call_args_list}
+            assert len(db_ids) == 1, f"expected 1 DB hydrated, got {len(db_ids)}: {db_ids}"
+            assert calls >= 1
+        finally:
+            for details in DATABASES["databases"].values():
+                for rules in details.get("properties", {}).values():
+                    rules.pop("_runtime_options", None)
+
     def test_warns_when_allowlist_option_missing_from_live_select(self, mock_notion, capsys):
         """An allowlist entry absent from the live Notion select is filtered out
         of the AI enum — hydration must warn loudly instead of silently no-oping."""
