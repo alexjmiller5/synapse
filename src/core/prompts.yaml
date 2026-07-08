@@ -45,11 +45,7 @@ categorize_template: |
 
   **STRICT PROJECT RULE:** You must ONLY identify a `related_project` if the user's Context mentions it (e.g., "Fix bug [Context: Synapse]").
   If the Context is empty or unrelated, DO NOT assign a project, even if the task sounds similar. Just categorize it as a normal "task".
-
-  **PROJECT ACTION RULE:** When you DO identify a `related_project`, you must also set `project_action` to either "task" or "note":
-  - "task": An actionable item — something to DO (e.g., "Fix the login bug", "Add dark mode", "Update the README"). This is the default.
-  - "note": A thought, observation, decision, or reference — something to REMEMBER about the project (e.g., "Decided to use Redis for caching", "The API rate limit is 100/min", "Meeting notes from standup"). Notes are informational, not actionable.
-  If no project is identified, omit `project_action`.
+  A matched project is ALWAYS an actionable task linked to that project — there is no separate "note" action.
 
   --- CATEGORIES ---
   You MUST classify the text into one of the following categories:

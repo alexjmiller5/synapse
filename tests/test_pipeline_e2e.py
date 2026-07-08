@@ -4,7 +4,6 @@ Each test sends realistic input through the full pipeline and verifies
 the correct Notion API calls are made with proper data.
 """
 
-import json
 from unittest.mock import patch
 
 from core.pipeline import run_pipeline, run
@@ -19,12 +18,11 @@ def _item(core_text, context_notes=""):
     return {"core_text": core_text, "context_notes": context_notes}
 
 
-def _setup_classify_extract(mock_gemini, category, extracted, project=None, project_action="task"):
+def _setup_classify_extract(mock_gemini, category, extracted, project=None):
     """Configure mock Gemini to return classification then extraction."""
     classify_resp = {"category": category}
     if project:
         classify_resp["related_project"] = project
-        classify_resp["project_action"] = project_action
 
     responses = [
         make_gemini_response(classify_resp),  # Classification
@@ -182,11 +180,9 @@ class TestProjectPipeline:
             make_gemini_response({
                 "category": "tasks",
                 "related_project": "Synapse",
-                "project_action": "task",
             }),
             make_gemini_response({
                 "Name": "Fix login bug",
-                "AI Title": "Fix login bug",
                 "Tags": ["Chore"],
                 "Due Date": "2026-03-29",
             }),
@@ -202,36 +198,33 @@ class TestProjectPipeline:
         task_create = create_calls[0]
         props = task_create.kwargs["properties"]
         assert "Project" in props
+        # Project tasks default to High priority (like regular tasks)
+        assert props["Priority"]["select"]["name"] == "High"
         # Execution log must be tagged as a project-append execution
         log_props = _log_props(mock_notion)
         assert log_props["Tags"]["multi_select"] == [{"name": "project-append"}]
 
-    def test_project_note(self, mock_gemini, mock_notion):
-        """Note action creates a note in Notes DB linked to project."""
-        responses = [
+    def test_task_context_links_project(self, mock_gemini, mock_notion):
+        """Deterministic 'task' pre-check still links a referenced project instead
+        of dropping it — even with 'task' in the context, no classifier call runs."""
+        # Only the extraction response is queued (pre-check skips the classifier).
+        mock_gemini.models.generate_content.side_effect = [
             make_gemini_response({
-                "category": "tasks",
-                "related_project": "Synapse",
-                "project_action": "note",
-            }),
-            make_gemini_response({
-                "Name": "Decided to use Redis for caching",
+                "Name": "Fix Synapse login bug",
                 "Tags": ["Chore"],
-                "Due Date": "2026-03-29",
+                "Due Date": "2026-07-10",
             }),
-            make_gemini_response({"mobile_compatible": False}),
         ]
-        mock_gemini.models.generate_content.side_effect = responses
 
-        _run(_item("Decided to use Redis for caching", "Synapse"))
-        assert mock_notion.pages.create.called
-        # The note page body must contain the captured text (not an empty page)
-        note_call = mock_notion.pages.create.call_args_list[0]
-        children = note_call.kwargs.get("children") or []
-        assert "Decided to use Redis for caching" in json.dumps(children)
-        # Execution log must be tagged as a project-append execution
-        log_props = _log_props(mock_notion)
-        assert log_props["Tags"]["multi_select"] == [{"name": "project-append"}]
+        _run(_item("Fix Synapse login bug", "high priority task"))
+
+        # Classifier was skipped (1 Gemini call = extraction only)
+        assert mock_gemini.models.generate_content.call_count == 1
+        # Task created with a Project relation to the matched 'Synapse' project
+        props = mock_notion.pages.create.call_args_list[0].kwargs["properties"]
+        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
+        assert props["Priority"]["select"]["name"] == "High"
+        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
 
     def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
         """If project name doesn't match, falls back to normal task creation."""
@@ -239,7 +232,6 @@ class TestProjectPipeline:
             make_gemini_response({
                 "category": "tasks",
                 "related_project": "NonExistentProject",
-                "project_action": "task",
             }),
             make_gemini_response({
                 "Name": "Some task",

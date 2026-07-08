@@ -12,10 +12,6 @@ databases:
         type: "title"
         required: true
         instruction: "This MUST be the user's original, unmodified text."
-      AI Title:
-        type: "rich_text"
-        required: true
-        instruction: "Create a concise, clear title from the text. You may fix obvious typos or dictation errors in the task title (e.g. 'buy grocries' -> 'Buy groceries')."
       Tags:
         type: "multi_select"
         required: true
@@ -59,6 +55,7 @@ databases:
           3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
           *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
           *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025). IF IT'S CURRENTLY DEC 2025 AND THE USER CONTEXT SAYS 'Nov 14' THE USER MEANS Nov 14, 2026.*
+          *Note: A BARE MONTH NAME with no day (e.g. "September") means the 1st of the NEXT occurrence of that month relative to today ({current_date}): use this year if that month is still upcoming, otherwise next year. NEVER default a bare month to January — e.g. if today is 2026-07-07, "September" means 2026-09-01, and "March" means 2027-03-01.*
       Status:
         type: "status"
         virtual: true
@@ -135,7 +132,7 @@ databases:
         instruction: "The director's name (if known)."
       Tags:
         type: "multi_select"
-        instruction: "Additional info life if the user specifies it's an All Time favorite, or specifically by Studio Ghibli (the user might specifc that, but if you know that it's a studio ghibli movie even if they don't say that, you should still tag it as such)."
+        instruction: "If the user says the movie is an 'all time favorite' or 'all-time favorite' (or otherwise their favorite of all time), add the 'All Time Favorite' tag. Add 'Studio Ghibli' if the user says so OR if you know it is a Studio Ghibli film even when they don't say it. Leave empty if neither applies."
         allowlist: ["All Time Favorite", "Studio Ghibli"]
       Famous Cast Members:
         type: "multi_select"
@@ -154,8 +151,8 @@ databases:
           ]
         instruction: |
           Determine the status based on the user's specific phrasing. FOLLOW THIS ORDER:
-          1. "Priority": If the user says "need to watch", "must watch", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [movie]" - THAT IS "Not Started".
-          2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating.
+          1. "Priority": If the user says "need to watch", "must watch", "priority movie", "priority", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [movie]" - THAT IS "Not Started".
+          2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating. (This DB has no separate "Watched" status — a watched movie is "Finished".)
           3. "In Progress": If the user says "watching", "started", or "currently on".
           4. "Gave Up": If the user stopped watching or disliked it.
           5. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
@@ -237,7 +234,7 @@ databases:
         type: "status"
         required: true
         allowlist: ["Priority", "Not Started", "In Progress", "Watched"]
-        instruction: "Default to 'Watched' (assuming user just finished it). Only use 'Not Started' or 'In Progress' if the user explicitly says 'need to watch' or 'watching'."
+        instruction: "Default to 'Watched' (assuming user just finished it). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'Not Started' if they merely mention wanting to watch it later without urgency."
       Tags:
         type: "multi_select"
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
