@@ -55,3 +55,4 @@ def webhook(payload: dict) -> dict:
 
     call = process.spawn({"raw_text": payload["raw_text"]})
     return {"status": "accepted", "call_id": call.object_id}
+
