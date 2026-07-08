@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from core import timeutils
 from core.notion_utils import create_cleanup_task
+from helpers import sent_props
 
 
 class _FakeDatetime(datetime):
@@ -56,5 +57,5 @@ class TestWiring:
     def test_cleanup_task_due_date_uses_eastern_today(self, mock_notion):
         with patch("core.notion_utils.today_eastern", return_value=date(2026, 7, 4)):
             create_cleanup_task("Fix something")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "tasks")
         assert props["Due Date"]["date"]["start"] == "2026-07-04"

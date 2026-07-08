@@ -3,6 +3,21 @@
 import json
 from unittest.mock import MagicMock
 
+from core.config import PROPERTY_IDS
+
+
+def props_of(call, category):
+    """Re-key one create/update call's `properties` from stable ids BACK to names."""
+    id_to_name = {pid: name for name, pid in PROPERTY_IDS.get(category, {}).items()}
+    return {id_to_name.get(k, k): v for k, v in call.kwargs["properties"].items()}
+
+
+def sent_props(create_or_update_mock, category):
+    """The `properties` the LAST create/update call sent, re-keyed to names so
+    assertions stay readable. Synapse now writes properties by id, so this verifies
+    the real id-keyed payload while letting tests assert by name."""
+    return props_of(create_or_update_mock.call_args, category)
+
 
 def make_gemini_response(json_data):
     """Helper to create a mock Gemini response with .text property."""
