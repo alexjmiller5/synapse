@@ -343,6 +343,17 @@ def get_tmdb_metadata(title, kind):
     tmdb_key = os.environ.get("TMDB_API_KEY")
     if not tmdb_key:
         return None
+    last_err = None
+    for attempt in range(3):  # Modal->TMDB latency is variable; retry transient failures
+        try:
+            return _tmdb_fetch(kind, title, tmdb_key)
+        except Exception as e:
+            last_err = e
+    print(f"   ⚠️ TMDB fetch failed for {kind} '{title}' after 3 tries: {last_err}")
+    return None
+
+
+def _tmdb_fetch(kind, title, tmdb_key):
     try:
         search = requests.get(
             f"{TMDB_BASE}/search/{kind}",
@@ -387,9 +398,8 @@ def get_tmdb_metadata(title, kind):
                         break
 
         return {"genres": genres, "director": director, "cast": cast}
-    except Exception as e:
-        print(f"   ⚠️ TMDB fetch failed for {kind} '{title}': {e}")
-        return None
+    except Exception:
+        raise  # let the retry loop in get_tmdb_metadata handle it
 
 
 def enrich_context(category, raw_text):
