@@ -132,6 +132,8 @@ class TestApplyBusinessLogic:
         assert result["Genres"] == ["Drama"]
         assert result["Director"] == "AI Director"
         assert result["Famous Cast Members"] == ["AI Actor"]
+        # flags the pipeline to create a low-prior "fix metadata" chore
+        assert result["_tmdb_failed"] is True
 
     def test_tv_show_tmdb_override(self):
         meta = {"genres": ["Drama"], "director": "Vince Gilligan", "cast": ["Bryan Cranston"]}

@@ -221,14 +221,16 @@ def _enrich_from_tmdb(category, data, kind):
     authoritative TMDB data for a movie/TV title.
 
     On no key / no match / any error, get_tmdb_metadata returns None and we
-    leave the AI-extracted fields untouched (graceful fallback). Each field is
-    overridden only when TMDB actually supplies a value.
+    flag `_tmdb_failed` so the pipeline creates a low-prior "fix metadata" chore
+    linked to the new page (instead of silently trusting the AI's guesses).
+    Each field is overridden only when TMDB actually supplies a value.
     """
     title = data.get("Title")
     if not title:
         return
     meta = get_tmdb_metadata(title, kind)
     if not meta:
+        data["_tmdb_failed"] = True  # non-schema flag; build_notion_properties ignores it
         return
 
     if meta["genres"]:

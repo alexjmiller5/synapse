@@ -176,6 +176,12 @@ def run_pipeline(
         else:
             url = execute_logic(category, extracted, inventory_map, trips_id_map)
 
+            # TMDB lookup failed for a movie/TV title — flag it for a manual fix
+            # instead of trusting the AI's guessed genres/director/cast.
+            if url and category in ("movies", "tv-shows") and extracted.get("_tmdb_failed"):
+                title = extracted.get("Title", raw_text)
+                create_cleanup_task(f"Fix metadata for: {title}", link_url=url)
+
             if url and url_context:
                 is_scrape_error = (
                     category == "bookmarks" and "Error fetching metadata" in url_context
