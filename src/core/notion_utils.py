@@ -103,6 +103,8 @@ def build_notion_properties(category, data):
             properties[key] = _notion_date(value)
         elif prop_type == "url":
             properties[key] = _notion_url(value)
+        elif prop_type == "checkbox":
+            properties[key] = {"checkbox": bool(value)}
     return properties
 
 
