@@ -135,8 +135,8 @@ databases:
         instruction: "The director's name (if known)."
       Tags:
         type: "multi_select"
-        instruction: "If the user says the movie is an 'all time favorite' or 'all-time favorite' (or otherwise their favorite of all time), add the 'All Time Favorite' tag. Add 'Studio Ghibli' if the user says so OR if you know it is a Studio Ghibli film even when they don't say it. Leave empty if neither applies."
-        allowlist: ["All Time Favorite", "Studio Ghibli"]
+        instruction: "If the user says the movie is an 'all time favorite' or 'all-time favorite' (or otherwise their favorite of all time), add the 'All-time Favorite' tag. Add 'Studio Ghibli' if the user says so OR if you know it is a Studio Ghibli film even when they don't say it. Leave empty if neither applies."
+        allowlist: ["All-time Favorite", "Studio Ghibli"]
       Famous Cast Members:
         type: "multi_select"
         instruction: "Famous actors in the movie."
@@ -236,8 +236,8 @@ databases:
       Status:
         type: "status"
         required: true
-        allowlist: ["Priority", "Not Started", "In Progress", "Watched"]
-        instruction: "Default to 'Not Started' (adding a video usually means Alex wants to watch it, not that he has). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'Not Started' if they merely mention wanting to watch it later without urgency."
+        allowlist: ["Priority", "To Watch", "In Progress", "Watched"]
+        instruction: "Default to 'To Watch' (adding a video usually means Alex wants to watch it, not that he has). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'To Watch' if they merely mention wanting to watch it later without urgency."
       Tags:
         type: "multi_select"
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
