@@ -94,12 +94,14 @@ controls:
   - text: "eggs"
     context: ""
     expected: groceries
+  # quotes DB disabled 2026-07-07 (Alex adds quotes manually) — quote inputs
+  # now correctly fall through to tasks. Kept as cases to lock that behavior in.
   - text: "this guy dresses like he wants to get wedgied"
     context: "Eli quote"
-    expected: quotes
+    expected: tasks
   - text: "I'll be back"
     context: "terminator quote"
-    expected: quotes
+    expected: tasks
   - text: "https://youtu.be/dQw4w9WgXcQ"
     context: ""
     expected: youtube-videos
