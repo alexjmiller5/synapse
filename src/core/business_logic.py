@@ -78,9 +78,18 @@ def fetch_property_options(db_id, prop_name):
         return []
 
 
-def hydrate_dynamic_options():
-    print("🔄 Hydrating Options...")
+def hydrate_dynamic_options(only_category=None):
+    """Load live Notion select/status options into each category's schema.
+
+    Pass only_category to hydrate a SINGLE category (the classified one) —
+    this is the hot path. Hydrating all ~15 categories up front cost ~40
+    sequential Notion calls per thought; a thought only needs its own
+    category's options, so we defer this until after classification.
+    """
+    print(f"🔄 Hydrating Options{f' for {only_category}' if only_category else ''}...")
     for category, details in DATABASES.get("databases", {}).items():
+        if only_category and category != only_category:
+            continue
         if details.get("helper"):
             continue
         db_id = get_db_id(category)
