@@ -125,7 +125,7 @@ databases:
       Title:
         type: "title"
         required: true
-        instruction: "The official movie title. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. We want actual movies titles here. Also, The official, correctly formatted title. Fix any typos, capitalization, or missing punctuation provided by the user (e.g. 'the avengers' -> 'The Avengers'), DO NOT include the word 'movie' or 'film' in the title unless it is part of the official name (e.g., 'The Lego Movie')."
+        instruction: "The official movie title, EXACTLY as a movie database (TMDB/IMDb) would list it, so an automated metadata lookup finds the right film. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. Fix any typos, capitalization, or missing punctuation (e.g. 'the avengers' -> 'The Avengers'), DO NOT include the word 'movie' or 'film' unless it is part of the official name (e.g., 'The Lego Movie'). DISAMBIGUATE REMAKES: if the user clearly means a specific remake/version of a title with multiple films, append the release year in parentheses -> 'Ghostbusters (2016)'. Leave a bare title (no year) when they mean the original/most well-known version (e.g. 'Ghostbusters' = the 1984 original)."
       Genres:
         type: "multi_select"
         required: true
@@ -166,7 +166,7 @@ databases:
       Title:
         type: "title"
         required: true
-        instruction: "The official, correctly formatted title. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Also if the user  We want actual tv show titles here. Fix any typos, capitalization, or missing punctuation provided by the user (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' in the title unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus')."
+        instruction: "The official TV show title, EXACTLY as a database (TMDB/IMDb) would list it, so an automated metadata lookup finds the right show. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Fix any typos, capitalization, or missing punctuation (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus'). If the user clearly means a specific remake/version of a title with multiple shows, append the release year in parentheses to disambiguate."
       Status:
         type: "status"
         required: true
