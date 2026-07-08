@@ -2,7 +2,7 @@ from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import get_notion
 from core.timeutils import today_eastern
-from core.notion_utils import clean_text
+from core.notion_utils import clean_text, prop_id
 from core.external_data import get_tmdb_metadata, map_genres
 from core.handlers import (
     handle_groceries_fun_logic,
@@ -55,13 +55,18 @@ def fetch_inventory_map(category):
     return inventory
 
 
-def fetch_property_options(db_id, prop_name):
+def fetch_property_options(db_id, prop_name, category=None):
     if not get_notion():
         return []
     try:
         db = get_notion().databases.retrieve(db_id)
+        properties = db["properties"]
 
-        prop = db["properties"].get(prop_name)
+        # Match by stable id (survives a Notion rename); fall back to the name.
+        target_id = prop_id(category, prop_name) if category else prop_name
+        prop = next((p for p in properties.values() if p.get("id") == target_id), None)
+        if prop is None:
+            prop = properties.get(prop_name)
         if not prop:
             return []
 
@@ -101,7 +106,7 @@ def hydrate_dynamic_options(only_category=None):
             if rules.get("type") not in ["select", "multi_select", "status"]:
                 continue
 
-            real_options = fetch_property_options(db_id, prop_name)
+            real_options = fetch_property_options(db_id, prop_name, category)
             allowlist = rules.get("allowlist")
 
             # Logic: Use allowlist if present, else real options

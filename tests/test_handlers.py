@@ -12,7 +12,8 @@ from core.handlers import (
     handle_bucket_list_logic,
     handle_default_logic,
 )
-from helpers import make_notion_page
+from core.notion_utils import prop_id
+from helpers import make_notion_page, props_of, sent_props
 
 
 # ======================================================================
@@ -64,9 +65,8 @@ class TestHandlePlaces:
         # Should create place then link trip via update
         assert mock_notion.pages.create.called
         update_calls = mock_notion.pages.update.call_args_list
-        assert any(
-            "Linked Trip" in str(c) for c in update_calls
-        )
+        linked_trip_id = prop_id("places", "Linked Trip")
+        assert any(linked_trip_id in str(c) for c in update_calls)
 
     def test_trip_linking_existing_place(self, mock_notion):
         data = {
@@ -80,8 +80,7 @@ class TestHandlePlaces:
         trips_map = {"LA Trip": "la-trip-id"}
 
         handle_places_logic("places", data, trips_id_map=trips_map)
-        update_call = mock_notion.pages.update.call_args
-        props = update_call.kwargs.get("properties", {})
+        props = props_of(mock_notion.pages.update.call_args, "places")
         assert "Linked Trip" in props
 
     def test_no_google_maps_url(self, mock_notion):
@@ -189,7 +188,7 @@ class TestHandleYoutube:
             }
             handle_youtube_logic("youtube-videos", data)
 
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "youtube-videos")
         assert props["Video URL"]["url"] == "https://youtu.be/abc"
         # The dedupe query used the sanitized URL too
         dedupe_body = mock_notion.request.call_args.kwargs["body"]
@@ -277,7 +276,7 @@ class TestHandleBookmarks:
         }
 
         handle_bookmarks_logic("bookmarks", data)
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "bookmarks")
         desc = props["Description"]["title"][0]["text"]["content"]
         assert desc == "A tool for secure dependency management"
 
@@ -291,7 +290,7 @@ class TestHandleBookmarks:
         }
 
         handle_bookmarks_logic("bookmarks", data)
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "bookmarks")
         assert (
             props["Description"]["title"][0]["text"]["content"]
             == "A tool for secure dependency management"

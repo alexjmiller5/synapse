@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 from core.pipeline import run_pipeline, run
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
-from helpers import make_gemini_response, make_notion_page
+from core.secrets import get_db_id
+from helpers import make_gemini_response, make_notion_page, props_of
 
 
 # ---------------------------------------------------------------------------
@@ -55,11 +56,13 @@ DEFAULT_CTX = {
 
 
 def _log_props(mock_notion):
-    """Return the properties of the execution-log page create (has Raw Input)."""
+    """Return the properties of the execution-log page create, identified by its
+    parent = the logs DB (props are id-keyed now, so a shared 'title' id can't
+    distinguish it), re-keyed back to names."""
+    log_db = get_db_id("logs")
     for call in mock_notion.pages.create.call_args_list:
-        props = call.kwargs["properties"]
-        if "Raw Input" in props:
-            return props
+        if call.kwargs.get("parent", {}).get("database_id") == log_db:
+            return props_of(call, "logs")
     raise AssertionError("No execution log page was created")
 
 
@@ -196,7 +199,7 @@ class TestProjectPipeline:
         # Check that Project relation was added
         create_calls = mock_notion.pages.create.call_args_list
         task_create = create_calls[0]
-        props = task_create.kwargs["properties"]
+        props = props_of(task_create, "tasks")
         assert "Project" in props
         # Project tasks default to High priority (like regular tasks)
         assert props["Priority"]["select"]["name"] == "High"
@@ -221,7 +224,7 @@ class TestProjectPipeline:
         # Classifier was skipped (1 Gemini call = extraction only)
         assert mock_gemini.models.generate_content.call_count == 1
         # Task created with a Project relation to the matched 'Synapse' project
-        props = mock_notion.pages.create.call_args_list[0].kwargs["properties"]
+        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
         assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
         assert props["Priority"]["select"]["name"] == "High"
         assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]

@@ -2,10 +2,23 @@ import json
 import re
 from datetime import datetime
 from urllib.parse import urlparse
-from core.config import DATABASES
+from core.config import DATABASES, PROPERTY_IDS
 from core.secrets import get_db_id
 from core.clients import get_notion
 from core.timeutils import today_eastern
+
+
+def prop_id(category, name):
+    """Stable Notion property id for (category, name); falls back to the name if the
+    generated map lacks it, so a missing entry degrades to the old name-based write."""
+    return PROPERTY_IDS.get(category, {}).get(name, name)
+
+
+def keys_to_ids(category, props):
+    """Re-key a property payload by stable id (rename-safe). VALUES are untouched —
+    select/multi_select option names stay names (Notion select-writes are name-first
+    and new options auto-create by name)."""
+    return {prop_id(category, k): v for k, v in props.items()}
 
 
 # Notion rejects any single title/rich_text content string longer than 2000 chars
@@ -182,6 +195,10 @@ def create_page(category, props):
                     },
                 }
 
+    # Re-key by stable property id at the write boundary (after the name-based icon
+    # logic above) so a renamed property still writes correctly.
+    body_params["properties"] = keys_to_ids(category, props)
+
     try:
         # Pass the parameters to the Notion SDK
         return get_notion().pages.create(**body_params)
@@ -190,11 +207,13 @@ def create_page(category, props):
         raise e
 
 
-def update_status(page_id, status):
+def update_status(page_id, status, category=None):
     print(f"🔄 Updating status for {page_id} to '{status}'...")
+    # Status property id differs per DB — key by id when the category is known.
+    status_key = prop_id(category, "Status") if category else "Status"
     try:
         return get_notion().pages.update(
-            page_id=page_id, properties={"Status": {"status": {"name": status}}}
+            page_id=page_id, properties={status_key: {"status": {"name": status}}}
         )
     except Exception as e:
         print(f"   ❌ Update Status Failed: {e}")
@@ -346,7 +365,9 @@ def log_job_outcome(
         # Marks executions that appended a task/note to a project (filterable)
         props["Tags"] = _notion_multi_select(["project-append"])
     try:
-        get_notion().pages.create(parent={"database_id": log_id}, properties=props)
+        get_notion().pages.create(
+            parent={"database_id": log_id}, properties=keys_to_ids("logs", props)
+        )
     except Exception as e:
         print(f"Log failed: {e}")
 

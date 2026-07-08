@@ -6,6 +6,8 @@ from core.notion_utils import (
     create_cleanup_task,
     fetch_existing_page,
     build_notion_properties,
+    keys_to_ids,
+    prop_id,
 )
 from core.external_data import get_video_channel_details, sanitize_youtube_url
 
@@ -68,7 +70,9 @@ def handle_places_logic(category, data, trips_id_map):
 
         if update_props:
             try:
-                get_notion().pages.update(page_id=existing_id, properties=update_props)
+                get_notion().pages.update(
+                    page_id=existing_id, properties=keys_to_ids(category, update_props)
+                )
                 print("      ✅ Place updated.")
             except Exception as e:
                 print(f"      ❌ Failed to update place: {e}")
@@ -88,7 +92,7 @@ def handle_places_logic(category, data, trips_id_map):
         try:
             get_notion().pages.update(
                 page_id=new_page_id,
-                properties={"Linked Trip": {"relation": [{"id": trip_id}]}},
+                properties={prop_id(category, "Linked Trip"): {"relation": [{"id": trip_id}]}},
             )
             print("      ✅ Trip linked successfully.")
         except Exception as e:
@@ -105,7 +109,7 @@ def handle_groceries_fun_logic(category, data, inventory_map):
     if category == "groceries" and inventory_map and search_val in inventory_map:
         page_id = inventory_map[search_val]
         print(f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating...")
-        return update_status(page_id, data.get("Status")).get("url")
+        return update_status(page_id, data.get("Status"), category).get("url")
 
     # For Fun Activities, perform a smart search
     if category == "fun-activities":
@@ -113,7 +117,7 @@ def handle_groceries_fun_logic(category, data, inventory_map):
         existing_id = fetch_existing_page(category, search_val, key="Title")
         if existing_id:
             print(f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status...")
-            return update_status(existing_id, data.get("Status")).get("url")
+            return update_status(existing_id, data.get("Status"), category).get("url")
 
         # Create new
         print(f"   ✨ Creating new {category} page.")
@@ -162,7 +166,7 @@ def handle_youtube_logic(category, data):
                 existing_page = resp["results"][0]
                 eid = existing_page["id"]
                 print(f"   ✅ Video already exists: {target_url} (ID: {eid})")
-                return update_status(eid, data.get("Status", "Watched")).get("url")
+                return update_status(eid, data.get("Status", "Watched"), category).get("url")
 
         except Exception as e:
             print(f"   ⚠️ YouTube duplicate check failed: {e}")
@@ -242,7 +246,7 @@ def handle_movies_tv_logic(category, data):
         ]
         if status in significant_statuses:
             print(f"   -> Updating status to {status}")
-            return update_status(eid, status).get("url")
+            return update_status(eid, status, category).get("url")
         return f"https://www.notion.so/{eid.replace('-','')}"
 
     return create_page(category, build_notion_properties(category, data)).get("url")
