@@ -17,6 +17,9 @@ SPOTIFY_CLIENT_ID = get_secret("spotify-client-id")
 SPOTIFY_CLIENT_SECRET = get_secret("spotify-client-secret")
 GOOGLE_PLACES_KEY = get_secret("google-places-api-key")
 YOUTUBE_API_KEY = get_secret("google-youtube-api-key")
+# TMDB is plain ?api_key=<key> REST (no SDK/client object) — the key is used
+# directly by core.external_data.get_tmdb_metadata via requests.
+TMDB_API_KEY = get_secret("tmdb-api-key")
 
 if GEMINI_API_KEY:
     gemini_client = genai.Client(api_key=GEMINI_API_KEY)

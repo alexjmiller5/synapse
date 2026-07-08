@@ -3,7 +3,7 @@ import json
 import requests
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 from inscriptis import get_text
-from core.clients import spotify, youtube, gmaps
+from core.clients import spotify, youtube, gmaps, TMDB_API_KEY
 from core.notion_utils import create_cleanup_task
 
 # Timestamp / tracking params to strip from YouTube URLs before storage
@@ -30,9 +30,7 @@ def extract_url(text):
     # 3. [\w-]+\.      -> Domain name (e.g. 'google.')
     # 4. [\w.]{2,}     -> TLD (e.g. 'com', 'co.uk')
     # 5. \S* -> Any trailing path/query
-    match = re.search(
-        r"\b((?:https?://)?(?:www\.)?[\w-]+\.[\w.]{2,}\S*)", text, re.IGNORECASE
-    )
+    match = re.search(r"\b((?:https?://)?(?:www\.)?[\w-]+\.[\w.]{2,}\S*)", text, re.IGNORECASE)
 
     if match:
         url = match.group(1)
@@ -60,14 +58,10 @@ def fetch_web_metadata(url):
         # 2. Get Title (Strategy: Open Graph -> Standard Title)
 
         # A. Try Open Graph Title first (Usually cleaner/better)
-        og_match = re.search(
-            r'<meta property="og:title" content="(.*?)"', res.text, re.IGNORECASE
-        )
+        og_match = re.search(r'<meta property="og:title" content="(.*?)"', res.text, re.IGNORECASE)
 
         # B. Fallback to standard <title> tag
-        title_match = re.search(
-            r"<title[^>]*>(.*?)</title>", res.text, re.IGNORECASE | re.DOTALL
-        )
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", res.text, re.IGNORECASE | re.DOTALL)
 
         title = "No Title Found"
 
@@ -80,12 +74,7 @@ def fetch_web_metadata(url):
 
         # --- GLOBAL CLEANUP ---
         # 1. Fix HTML entities
-        title = (
-            title.replace("–", "-")
-            .replace(" ", " ")
-            .replace("&", "&")
-            .replace("'", "'")
-        )
+        title = title.replace("–", "-").replace(" ", " ").replace("&", "&").replace("'", "'")
 
         # 2. Remove "GitHub - " prefix (Because GitHub forces this in the title tag)
         if title.startswith("GitHub - "):
@@ -124,9 +113,7 @@ def get_tal_metadata(url):
 
         # 3. VERBOSE FALLBACK: Create the Task immediately
         print("   🧹 Triggering cleanup task for failed scrape...")
-        create_cleanup_task(
-            f"Manual Podcast Entry (Scraping Failed): {url}", link_url=url
-        )
+        create_cleanup_task(f"Manual Podcast Entry (Scraping Failed): {url}", link_url=url)
 
         return f"Error fetching URL: {e} (User has been notified via a Cleanup Task)"
 
@@ -253,9 +240,7 @@ def get_place_details(query):
     try:
         # 1. Text Search to get Place ID
         print("   -> Calling gmaps.find_place...")
-        resp = gmaps.find_place(
-            input=query, input_type="textquery", fields=["place_id"]
-        )
+        resp = gmaps.find_place(input=query, input_type="textquery", fields=["place_id"])
 
         if resp["status"] != "OK" or not resp["candidates"]:
             print(f"   ⚠️ No place found. Response Status: {resp.get('status')}")
@@ -306,6 +291,101 @@ def get_place_details(query):
         }
     except Exception as e:
         print(f"❌ Google Maps Error: {e}")
+        return None
+
+
+TMDB_BASE = "https://api.themoviedb.org/3"
+
+# TMDB genre names that DON'T match Alex's Notion options 1:1. Only genuine
+# spelling differences belong here — exact/case-insensitive matches are handled
+# generically by map_genres. Aliases resolve only if the target option exists;
+# otherwise the raw TMDB name is kept (multi_select auto-creates it).
+TMDB_GENRE_ALIASES = {
+    "science fiction": "Sci-Fi",
+    "sci-fi & fantasy": "Sci-Fi",  # TMDB's combined TV bucket
+    "action & adventure": "Action",  # TMDB's combined TV bucket
+    "war & politics": "War",
+}
+
+
+def map_genres(tmdb_genres, existing_options):
+    """Map TMDB genre names to Alex's existing Notion 'Genres' options.
+
+    - Case-insensitive match to an existing option → use that option's casing.
+    - Known alias whose target exists → use the target.
+    - Otherwise pass the TMDB name through (multi_select auto-creates on write).
+    """
+    by_lower = {o.lower(): o for o in (existing_options or [])}
+    out = []
+    for name in tmdb_genres:
+        key = name.lower()
+        if key in by_lower:
+            mapped = by_lower[key]
+        elif key in TMDB_GENRE_ALIASES and TMDB_GENRE_ALIASES[key].lower() in by_lower:
+            mapped = by_lower[TMDB_GENRE_ALIASES[key].lower()]
+        else:
+            mapped = name
+        if mapped not in out:
+            out.append(mapped)
+    return out
+
+
+def get_tmdb_metadata(title, kind):
+    """Authoritative genres/director/cast for a movie/TV title from TMDB (v3).
+
+    kind ∈ {"movie", "tv"}. Returns
+        {"genres": [name, ...], "director": "<name or ''>", "cast": [top ~5 names]}
+    or None when there's no API key, no search match, or any network/parse error
+    (the pipeline keeps the AI-extracted values whenever this returns None).
+    """
+    if not TMDB_API_KEY:
+        return None
+    try:
+        search = requests.get(
+            f"{TMDB_BASE}/search/{kind}",
+            params={"api_key": TMDB_API_KEY, "query": title},
+            timeout=5,
+        )
+        search.raise_for_status()
+        results = search.json().get("results") or []
+        if not results:
+            return None
+        tmdb_id = results[0]["id"]
+
+        detail = requests.get(
+            f"{TMDB_BASE}/{kind}/{tmdb_id}",
+            params={"api_key": TMDB_API_KEY, "append_to_response": "credits"},
+            timeout=5,
+        )
+        detail.raise_for_status()
+        data = detail.json()
+
+        genres = [g["name"] for g in data.get("genres", []) if g.get("name")]
+        credits = data.get("credits", {}) or {}
+        crew = credits.get("crew") or []
+        cast = [c["name"] for c in (credits.get("cast") or [])[:5] if c.get("name")]
+
+        director = ""
+        if kind == "movie":
+            director = next(
+                (c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), ""
+            )
+        else:
+            # TV: prefer the show's creator(s); fall back to a crew director/EP.
+            creators = data.get("created_by") or []
+            if creators:
+                director = creators[0].get("name", "")
+            if not director:
+                for job in ("Director", "Executive Producer"):
+                    director = next(
+                        (c["name"] for c in crew if c.get("job") == job and c.get("name")), ""
+                    )
+                    if director:
+                        break
+
+        return {"genres": genres, "director": director, "cast": cast}
+    except Exception as e:
+        print(f"   ⚠️ TMDB fetch failed for {kind} '{title}': {e}")
         return None
 
 
