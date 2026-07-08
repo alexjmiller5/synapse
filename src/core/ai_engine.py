@@ -207,7 +207,7 @@ def get_gemini_schema(category):
 
         field_def = {"type": "string"}
 
-        if prop_type == "boolean":
+        if prop_type in ("boolean", "checkbox"):
             field_def = {"type": "boolean"}
 
         elif prop_type in ["multi_select", "array"]:
