@@ -151,10 +151,12 @@ def main():
             continue
 
         matched = f"{meta['matched_title']} ({meta['year']})"
-        if conf == "LOW":
+        # Only exact-title (HIGH) matches auto-apply. MEDIUM (containment) is too
+        # loose — it silently swaps sequels/docs — so it goes to manual review.
+        if conf in ("LOW", "MEDIUM"):
             skipped_low += 1
-            review.append((title, "LOW", matched))
-            print(f"  ⚠ LOW-CONF   {title!r} -> {matched} — SKIPPED")
+            review.append((title, conf, matched))
+            print(f"  ⚠ {conf}   {title!r} -> {matched} — SKIPPED (review)")
             continue
 
         props = build_update(meta, options)
