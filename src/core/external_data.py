@@ -353,53 +353,71 @@ def get_tmdb_metadata(title, kind):
     return None
 
 
+def tmdb_search(kind, title, tmdb_key):
+    """Search TMDB; return all results as [{id, title, year}, ...] (empty on none)."""
+    r = requests.get(
+        f"{TMDB_BASE}/search/{kind}",
+        params={"api_key": tmdb_key, "query": title},
+        timeout=12,
+    )
+    r.raise_for_status()
+    out = []
+    for res in r.json().get("results") or []:
+        release = res.get("release_date") or res.get("first_air_date") or ""
+        out.append(
+            {
+                "id": res["id"],
+                "title": res.get("title") or res.get("name") or "",
+                "year": release[:4] if release else "",
+                "votes": res.get("vote_count", 0),
+            }
+        )
+    return out
+
+
+def tmdb_details(kind, tmdb_id, tmdb_key):
+    """Fetch genres/director/cast for a specific TMDB id."""
+    r = requests.get(
+        f"{TMDB_BASE}/{kind}/{tmdb_id}",
+        params={"api_key": tmdb_key, "append_to_response": "credits"},
+        timeout=12,
+    )
+    r.raise_for_status()
+    data = r.json()
+
+    genres = [g["name"] for g in data.get("genres", []) if g.get("name")]
+    credits = data.get("credits", {}) or {}
+    crew = credits.get("crew") or []
+    cast = [c["name"] for c in (credits.get("cast") or [])[:5] if c.get("name")]
+
+    director = ""
+    if kind == "movie":
+        director = next((c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), "")
+    else:
+        # TV: prefer the show's creator(s); fall back to a crew director/EP.
+        creators = data.get("created_by") or []
+        if creators:
+            director = creators[0].get("name", "")
+        if not director:
+            for job in ("Director", "Executive Producer"):
+                director = next((c["name"] for c in crew if c.get("job") == job and c.get("name")), "")
+                if director:
+                    break
+
+    return {"genres": genres, "director": director, "cast": cast}
+
+
 def _tmdb_fetch(kind, title, tmdb_key):
-    try:
-        search = requests.get(
-            f"{TMDB_BASE}/search/{kind}",
-            params={"api_key": tmdb_key, "query": title},
-            timeout=12,
-        )
-        search.raise_for_status()
-        results = search.json().get("results") or []
-        if not results:
-            return None
-        tmdb_id = results[0]["id"]
-
-        detail = requests.get(
-            f"{TMDB_BASE}/{kind}/{tmdb_id}",
-            params={"api_key": tmdb_key, "append_to_response": "credits"},
-            timeout=12,
-        )
-        detail.raise_for_status()
-        data = detail.json()
-
-        genres = [g["name"] for g in data.get("genres", []) if g.get("name")]
-        credits = data.get("credits", {}) or {}
-        crew = credits.get("crew") or []
-        cast = [c["name"] for c in (credits.get("cast") or [])[:5] if c.get("name")]
-
-        director = ""
-        if kind == "movie":
-            director = next(
-                (c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), ""
-            )
-        else:
-            # TV: prefer the show's creator(s); fall back to a crew director/EP.
-            creators = data.get("created_by") or []
-            if creators:
-                director = creators[0].get("name", "")
-            if not director:
-                for job in ("Director", "Executive Producer"):
-                    director = next(
-                        (c["name"] for c in crew if c.get("job") == job and c.get("name")), ""
-                    )
-                    if director:
-                        break
-
-        return {"genres": genres, "director": director, "cast": cast}
-    except Exception:
-        raise  # let the retry loop in get_tmdb_metadata handle it
+    """Live-path lookup: take TMDB's top (popularity) result. The backfill uses
+    tmdb_search + tmdb_details directly so it can pick by year/oldest instead."""
+    results = tmdb_search(kind, title, tmdb_key)
+    if not results:
+        return None
+    top = results[0]
+    meta = tmdb_details(kind, top["id"], tmdb_key)
+    meta["matched_title"] = top["title"]
+    meta["year"] = top["year"]
+    return meta
 
 
 def enrich_context(category, raw_text):
