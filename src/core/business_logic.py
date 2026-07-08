@@ -3,6 +3,7 @@ from core.secrets import get_db_id
 from core.clients import notion
 from core.timeutils import today_eastern
 from core.notion_utils import clean_text
+from core.external_data import get_tmdb_metadata, map_genres
 from core.handlers import (
     handle_groceries_fun_logic,
     handle_youtube_logic,
@@ -215,6 +216,39 @@ def fetch_active_projects():
     return prompt_list, id_map
 
 
+def _enrich_from_tmdb(category, data, kind):
+    """Override the AI's guessed Genres/Director/Famous Cast Members with
+    authoritative TMDB data for a movie/TV title.
+
+    On no key / no match / any error, get_tmdb_metadata returns None and we
+    leave the AI-extracted fields untouched (graceful fallback). Each field is
+    overridden only when TMDB actually supplies a value.
+    """
+    title = data.get("Title")
+    if not title:
+        return
+    meta = get_tmdb_metadata(title, kind)
+    if not meta:
+        return
+
+    if meta["genres"]:
+        # Map to Alex's existing Notion 'Genres' options (hydrated onto the
+        # property as _runtime_options); unknown genres pass through and
+        # multi_select auto-creates them on write.
+        existing = (
+            DATABASES.get("databases", {})
+            .get(category, {})
+            .get("properties", {})
+            .get("Genres", {})
+            .get("_runtime_options", [])
+        )
+        data["Genres"] = map_genres(meta["genres"], existing)
+    if meta["director"]:
+        data["Director"] = meta["director"]
+    if meta["cast"]:
+        data["Famous Cast Members"] = meta["cast"]
+
+
 def apply_business_logic(category, data, related_project=None, source_text=None):
     today_str = today_eastern().isoformat()
 
@@ -244,6 +278,10 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
     elif category == "movies":
         if "Status" not in data:
             data["Status"] = "Not Started"
+        _enrich_from_tmdb(category, data, "movie")
+
+    elif category == "tv-shows":
+        _enrich_from_tmdb(category, data, "tv")
 
     elif category == "podcasts":
         if data.get("Status") == "Finished":

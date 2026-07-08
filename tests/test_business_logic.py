@@ -1,6 +1,7 @@
 """Tests for business_logic.py — business rules, inventory, projects."""
 
 from datetime import date
+from unittest.mock import patch
 
 from core.business_logic import (
     apply_business_logic,
@@ -97,6 +98,54 @@ class TestApplyBusinessLogic:
         data = {"Title": "Inception", "Status": "Finished"}
         result = apply_business_logic("movies", data)
         assert result["Status"] == "Finished"
+
+    def test_movie_tmdb_overrides_ai_fields(self):
+        """A TMDB match overrides the AI-guessed Genres/Director/Famous Cast Members."""
+        meta = {
+            "genres": ["Science Fiction"],
+            "director": "Christopher Nolan",
+            "cast": ["Leonardo DiCaprio", "Ellen Page"],
+        }
+        data = {
+            "Title": "Inception",
+            "Genres": ["Thriller (AI guess)"],
+            "Director": "Wrong Guy",
+            "Famous Cast Members": ["AI Actor"],
+        }
+        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
+            result = apply_business_logic("movies", data)
+        assert result["Director"] == "Christopher Nolan"
+        assert result["Famous Cast Members"] == ["Leonardo DiCaprio", "Ellen Page"]
+        # Genres run through map_genres (no runtime options in test → passthrough)
+        assert result["Genres"] == ["Science Fiction"]
+
+    def test_movie_no_tmdb_match_keeps_ai_fields(self):
+        """No TMDB match (None) → the AI-extracted values are preserved."""
+        data = {
+            "Title": "Some Obscure Film",
+            "Genres": ["Drama"],
+            "Director": "AI Director",
+            "Famous Cast Members": ["AI Actor"],
+        }
+        with patch("core.business_logic.get_tmdb_metadata", return_value=None):
+            result = apply_business_logic("movies", data)
+        assert result["Genres"] == ["Drama"]
+        assert result["Director"] == "AI Director"
+        assert result["Famous Cast Members"] == ["AI Actor"]
+
+    def test_tv_show_tmdb_override(self):
+        meta = {"genres": ["Drama"], "director": "Vince Gilligan", "cast": ["Bryan Cranston"]}
+        data = {"Title": "Breaking Bad", "Genres": ["Comedy"], "Director": "x"}
+        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
+            result = apply_business_logic("tv-shows", data)
+        assert result["Director"] == "Vince Gilligan"
+        assert result["Famous Cast Members"] == ["Bryan Cranston"]
+
+    def test_non_movie_category_never_tmdb_enriched(self):
+        """Categories other than movies/tv-shows never call TMDB."""
+        with patch("core.business_logic.get_tmdb_metadata") as mock_tmdb:
+            apply_business_logic("tasks", {"Name": "Watch Inception"})
+        mock_tmdb.assert_not_called()
 
     def test_podcasts_finished_sets_date(self):
         data = {"Episode Title": "Ep1", "Status": "Finished"}

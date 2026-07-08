@@ -11,3 +11,4 @@ GOOGLE_YOUTUBE_API_KEY=op://Synapse/Synapse Env/GOOGLE_YOUTUBE_API_KEY
 
 # Notion DB ids are committed config (see src/core/databases.yaml), not secrets.
 # A NOTION_<X>_DB_ID env var still overrides the config value if you set one.
+TMDB_API_KEY=op://Synapse/Synapse Env/TMDB_API_KEY
