@@ -123,6 +123,9 @@ def run_pipeline(
             category = classified.get("category", "tasks")
             project = classified.get("related_project")
         print(f"🤖 Classification: {category}")
+        # Hydrate ONLY the classified category's live Notion options (deferred
+        # from startup — the extraction schema below needs _runtime_options).
+        hydrate_dynamic_options(only_category=category)
         if project:
             print(f"   🔍 AI identified project: '{project}'")
             if project in project_id_map:
@@ -229,7 +232,9 @@ def run(payload: dict):
         print("❌ Critical: Missing API Key or Prompts")
         return
 
-    hydrate_dynamic_options()
+    # Option hydration is deferred to run_pipeline (only the classified
+    # category) — that alone cut ~40 upfront Notion calls per thought to ~2-3.
+    # Projects/inventory/trips are one query each, so they stay here.
     project_prompts, project_id_map = fetch_active_projects()
     inventory_map = fetch_inventory_map("groceries")
     inventory_list = list(inventory_map.keys())
