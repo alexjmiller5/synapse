@@ -55,41 +55,106 @@ def fetch_inventory_map(category):
     return inventory
 
 
-def fetch_property_options(db_id, prop_name, category=None):
-    if not get_notion():
-        return []
+# databases.yaml property type -> the Notion property type it maps to (for validation).
+_YAML_TO_NOTION_TYPE = {
+    "title": "title",
+    "rich_text": "rich_text",
+    "rich_text_list": "rich_text",
+    "select": "select",
+    "multi_select": "multi_select",
+    "status": "status",
+    "date": "date",
+    "url": "url",
+    "relation": "relation",
+    "checkbox": "checkbox",
+}
+
+
+def _options_from_prop(prop):
+    """Option names for a live select/multi_select/status property (else [])."""
+    t = prop.get("type")
+    if t in ("select", "multi_select", "status"):
+        return [o["name"] for o in prop.get(t, {}).get("options", [])]
+    return []
+
+
+def fetch_db_schema(db_id):
+    """Live property schema {name: prop_object} for a DB — one Notion call.
+    Returns {} on no-client / no-id / error."""
+    if not get_notion() or not db_id:
+        return {}
     try:
-        db = get_notion().databases.retrieve(db_id)
-        properties = db["properties"]
-
-        # Match by stable id (survives a Notion rename); fall back to the name.
-        target_id = prop_id(category, prop_name) if category else prop_name
-        prop = next((p for p in properties.values() if p.get("id") == target_id), None)
-        if prop is None:
-            prop = properties.get(prop_name)
-        if not prop:
-            return []
-
-        prop_type = prop.get("type")
-        if prop_type == "select":
-            return [o["name"] for o in prop["select"]["options"]]
-        if prop_type == "multi_select":
-            return [o["name"] for o in prop["multi_select"]["options"]]
-        if prop_type == "status":
-            return [o["name"] for o in prop["status"]["options"]]
-        return []
+        return get_notion().databases.retrieve(db_id).get("properties", {})
     except Exception as e:
-        print(f"   ❌ Exception fetching '{prop_name}': {e}")
-        return []
+        print(f"   ❌ Schema fetch failed for {db_id}: {e}")
+        return {}
+
+
+def _find_prop(schema, category, prop_name):
+    """Locate a property in a live schema by stable id (rename-safe), name fallback."""
+    target_id = prop_id(category, prop_name) if category else prop_name
+    return next((p for p in schema.values() if p.get("id") == target_id), None) or schema.get(
+        prop_name
+    )
+
+
+def fetch_property_options(db_id, prop_name, category=None, schema=None):
+    """Live options for a select/status/multi_select property. Pass a pre-fetched
+    schema to avoid a redundant retrieve (hydration fetches once per category)."""
+    if schema is None:
+        schema = fetch_db_schema(db_id)
+    prop = _find_prop(schema, category, prop_name)
+    return _options_from_prop(prop) if prop else []
+
+
+def validate_category(category, details, schema):
+    """Drift issues between a category's databases.yaml stanza and the live Notion
+    schema: missing properties, type mismatches, allowlist options not in Notion."""
+    issues = []
+    if not schema:
+        return [f"{category}: could not fetch live schema"]
+    for name, rules in details.get("properties", {}).items():
+        ytype = rules.get("type")
+        if ytype == "ignore":
+            continue
+        live = _find_prop(schema, category, name)
+        if not live:
+            issues.append(f"{category}.{name}: not found in Notion (id={prop_id(category, name)})")
+            continue
+        expected = _YAML_TO_NOTION_TYPE.get(ytype, ytype)
+        if live.get("type") != expected:
+            issues.append(f"{category}.{name}: Notion type '{live.get('type')}' != expected '{expected}'")
+        allowlist = rules.get("allowlist")
+        if allowlist:
+            missing = [o for o in allowlist if o not in _options_from_prop(live)]
+            if missing:
+                issues.append(f"{category}.{name}: allowlist options not in Notion select: {missing}")
+    return issues
+
+
+def validate_all():
+    """Validate EVERY (non-helper) category's databases.yaml against live Notion.
+    Returns {category: [issues]} for categories with drift (empty dict = all good)."""
+    report = {}
+    for category, details in DATABASES.get("databases", {}).items():
+        if details.get("helper"):
+            continue
+        db_id = get_db_id(category)
+        if not db_id:
+            report[category] = ["no db_id configured"]
+            continue
+        issues = validate_category(category, details, fetch_db_schema(db_id))
+        if issues:
+            report[category] = issues
+    return report
 
 
 def hydrate_dynamic_options(only_category=None):
-    """Load live Notion select/status options into each category's schema.
+    """Load live Notion select/status options into each category's schema AND
+    validate that category against the live structure (free — same schema fetch).
 
-    Pass only_category to hydrate a SINGLE category (the classified one) —
-    this is the hot path. Hydrating all ~15 categories up front cost ~40
-    sequential Notion calls per thought; a thought only needs its own
-    category's options, so we defer this until after classification.
+    Pass only_category to hydrate a SINGLE category (the classified one) — the hot
+    path. One `databases.retrieve` per category (not per property).
     """
     print(f"🔄 Hydrating Options{f' for {only_category}' if only_category else ''}...")
     for category, details in DATABASES.get("databases", {}).items():
@@ -102,29 +167,22 @@ def hydrate_dynamic_options(only_category=None):
             print(f"   ⚠️ Skipping {category} (No DB ID)")
             continue
 
+        schema = fetch_db_schema(db_id)  # one fetch, reused for hydrate + validate
+
+        # Per-execution config-drift check (databases.yaml vs live Notion).
+        for issue in validate_category(category, details, schema):
+            print(f"   ⚠️ VALIDATE: {issue}")
+
         for prop_name, rules in details.get("properties", {}).items():
             if rules.get("type") not in ["select", "multi_select", "status"]:
                 continue
 
-            real_options = fetch_property_options(db_id, prop_name, category)
+            real_options = fetch_property_options(db_id, prop_name, category, schema=schema)
             allowlist = rules.get("allowlist")
-
-            # Logic: Use allowlist if present, else real options
             final_options = (
                 [opt for opt in real_options if opt in allowlist] if allowlist else real_options
             )
 
-            # Allowlist entries missing from the live Notion select get filtered
-            # out above and become silently unpickable by the AI — warn loudly.
-            if allowlist:
-                missing = [opt for opt in allowlist if opt not in real_options]
-                if missing:
-                    print(
-                        f"   ⚠️ {category} [{prop_name}]: allowlist options missing "
-                        f"from Notion select (AI can never pick them): {missing}"
-                    )
-
-            # Store back into CONFIG memory for Schema Generation
             rules["_runtime_options"] = final_options
             print(
                 f"   🔹 {category} [{prop_name}]: Loaded {len(final_options)} options: {final_options}"

@@ -12,6 +12,8 @@ from core.business_logic import (
     hydrate_dynamic_options,
     query_notion_db,
     fetch_property_options,
+    validate_category,
+    validate_all,
 )
 from helpers import make_notion_page
 
@@ -374,7 +376,7 @@ class TestHydrateDynamicOptions:
         try:
             hydrate_dynamic_options()
             out = capsys.readouterr().out
-            assert "Lakeport" in out and "missing" in out
+            assert "Lakeport" in out and "not in Notion" in out
             location = DATABASES["databases"]["fun-activities"]["properties"]["Location"]
             assert "Lakeport" not in location["_runtime_options"]
         finally:
@@ -428,3 +430,62 @@ class TestFetchPropertyOptions:
         mock_notion.databases.retrieve.return_value = {"properties": {}}
         result = fetch_property_options("fake-db-id", "NonExistent")
         assert result == []
+
+
+# ======================================================================
+# validate_category / validate_all — config-drift detection
+# ======================================================================
+class TestValidateConfig:
+    # a category NOT in property_ids.yaml -> prop_id falls back to names, so the
+    # synthetic schema below is matched by name.
+    CAT = "synthetic-cat"
+
+    def _schema(self, status_type="status", status_opts=("To Do", "Done")):
+        return {
+            "Title": {"id": "title", "type": "title"},
+            "Status": {
+                "id": "sid",
+                "type": status_type,
+                status_type: {"options": [{"name": o} for o in status_opts]},
+            },
+        }
+
+    def test_clean_config_no_issues(self):
+        details = {
+            "properties": {
+                "Title": {"type": "title"},
+                "Status": {"type": "status", "allowlist": ["To Do", "Done"]},
+            }
+        }
+        assert validate_category(self.CAT, details, self._schema()) == []
+
+    def test_flags_missing_property(self):
+        details = {"properties": {"Title": {"type": "title"}, "Genres": {"type": "multi_select"}}}
+        issues = validate_category(self.CAT, details, self._schema())
+        assert any("Genres" in i and "not found" in i for i in issues)
+
+    def test_flags_type_mismatch(self):
+        details = {"properties": {"Status": {"type": "status"}}}
+        # live schema has Status as a select, not status
+        issues = validate_category(self.CAT, details, self._schema(status_type="select"))
+        assert any("Status" in i and "type" in i for i in issues)
+
+    def test_flags_allowlist_gap(self):
+        details = {"properties": {"Status": {"type": "status", "allowlist": ["To Do", "Blocked"]}}}
+        issues = validate_category(self.CAT, details, self._schema(status_opts=("To Do",)))
+        assert any("allowlist" in i and "Blocked" in i for i in issues)
+
+    def test_ignore_type_skipped(self):
+        details = {"properties": {"Helper Field": {"type": "ignore"}}}
+        assert validate_category(self.CAT, details, self._schema()) == []
+
+    def test_empty_schema_reports_issue(self):
+        issues = validate_category(self.CAT, {"properties": {"Title": {"type": "title"}}}, {})
+        assert issues and "could not fetch live schema" in issues[0]
+
+    def test_validate_all_returns_dict(self, mock_notion):
+        # every DB retrieve returns an empty schema -> every category reports drift
+        mock_notion.databases.retrieve.return_value = {"properties": {}}
+        report = validate_all()
+        assert isinstance(report, dict)
+        assert len(report) > 0  # empty live schemas => drift everywhere
