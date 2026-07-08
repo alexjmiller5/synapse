@@ -3,7 +3,8 @@ import json
 import requests
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 from inscriptis import get_text
-from core.clients import spotify, youtube, gmaps, TMDB_API_KEY
+import os
+from core.clients import spotify, youtube, gmaps
 from core.notion_utils import create_cleanup_task
 
 # Timestamp / tracking params to strip from YouTube URLs before storage
@@ -338,12 +339,14 @@ def get_tmdb_metadata(title, kind):
     or None when there's no API key, no search match, or any network/parse error
     (the pipeline keeps the AI-extracted values whenever this returns None).
     """
-    if not TMDB_API_KEY:
+    # Read the key lazily (module-import reads can cache None per Modal container).
+    tmdb_key = os.environ.get("TMDB_API_KEY")
+    if not tmdb_key:
         return None
     try:
         search = requests.get(
             f"{TMDB_BASE}/search/{kind}",
-            params={"api_key": TMDB_API_KEY, "query": title},
+            params={"api_key": tmdb_key, "query": title},
             timeout=5,
         )
         search.raise_for_status()
@@ -354,7 +357,7 @@ def get_tmdb_metadata(title, kind):
 
         detail = requests.get(
             f"{TMDB_BASE}/{kind}/{tmdb_id}",
-            params={"api_key": TMDB_API_KEY, "append_to_response": "credits"},
+            params={"api_key": tmdb_key, "append_to_response": "credits"},
             timeout=5,
         )
         detail.raise_for_status()
