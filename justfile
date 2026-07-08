@@ -36,6 +36,10 @@ deploy: test sync-secrets
 sync-prop-ids:
     op run --env-file=.env.tpl -- uv run scripts/fetch_property_ids.py
 
+# Validate databases.yaml matches the live Notion DB structure (drift check)
+validate:
+    op run --env-file=.env.tpl -- uv run scripts/validate_config.py
+
 # Classifier prompt eval — real Gemini calls against scripts/eval_cases.yaml
 eval-classifier:
     op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
