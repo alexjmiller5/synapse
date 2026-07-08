@@ -73,7 +73,7 @@ class TestYamlFixGuards:
     def test_movies_tags_instruction_mentions_all_time_favorite(self):
         instr = DATABASES["databases"]["movies"]["properties"]["Tags"]["instruction"]
         assert "all time favorite" in instr.lower()
-        assert "All Time Favorite" in DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
+        assert "All-time Favorite" in DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
 
     def test_movies_status_priority_keywords(self):
         instr = DATABASES["databases"]["movies"]["properties"]["Status"]["instruction"]
