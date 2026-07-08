@@ -1,6 +1,6 @@
 from core.config import DATABASES
 from core.secrets import get_db_id
-from core.clients import notion
+from core.clients import get_notion
 from core.timeutils import today_eastern
 from core.notion_utils import clean_text
 from core.external_data import get_tmdb_metadata, map_genres
@@ -19,14 +19,14 @@ from core.handlers import (
 def query_notion_db(category_key, query_body=None):
     """Generic helper to safely query a Notion database."""
     db_id = get_db_id(category_key)
-    if not notion or not db_id:
+    if not get_notion() or not db_id:
         return []
 
     if query_body is None:
         query_body = {"page_size": 100}
 
     try:
-        resp = notion.request(path=f"databases/{db_id}/query", method="POST", body=query_body)
+        resp = get_notion().request(path=f"databases/{db_id}/query", method="POST", body=query_body)
         return resp.get("results", [])
     except Exception as e:
         print(f"❌ Failed to query {category_key}: {e}")
@@ -56,10 +56,10 @@ def fetch_inventory_map(category):
 
 
 def fetch_property_options(db_id, prop_name):
-    if not notion:
+    if not get_notion():
         return []
     try:
-        db = notion.databases.retrieve(db_id)
+        db = get_notion().databases.retrieve(db_id)
 
         prop = db["properties"].get(prop_name)
         if not prop:

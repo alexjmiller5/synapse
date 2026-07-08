@@ -16,6 +16,7 @@ dependencies = [
     "googlemaps>=4.10.0",
     "google-api-python-client>=2.187.0",
     "tenacity>=9.1.2",
+    "pydantic-settings>=2.14.2",
 ]
 
 [dependency-groups]

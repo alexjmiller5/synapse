@@ -4,7 +4,8 @@ import requests
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 from inscriptis import get_text
 import os
-from core.clients import spotify, youtube, gmaps
+
+from core.clients import get_gmaps, get_spotify, get_youtube
 from core.notion_utils import create_cleanup_task
 
 # Timestamp / tracking params to strip from YouTube URLs before storage
@@ -120,6 +121,7 @@ def get_tal_metadata(url):
 
 
 def get_spotify_metadata(url):
+    spotify = get_spotify()
     if not spotify:
         return "No Spotify Client"
     try:
@@ -133,6 +135,7 @@ def get_video_channel_details(url):
     """
     Fetches official Channel Title and Channel ID from a Video URL.
     """
+    youtube = get_youtube()
     if not youtube:
         return None
 
@@ -178,6 +181,7 @@ def get_youtube_video_id(url):
 
 
 def get_youtube_metadata(url):
+    youtube = get_youtube()
     if not youtube:
         return "No YouTube Client Configured"
 
@@ -229,6 +233,7 @@ def get_place_details(query):
     Fetches details from Google Places API.
     Returns RAW types for the AI to map.
     """
+    gmaps = get_gmaps()
     if not gmaps:
         print("   ❌ Google Maps Client is NOT initialized. Skipping.")
         return None
@@ -339,7 +344,8 @@ def get_tmdb_metadata(title, kind):
     or None when there's no API key, no search match, or any network/parse error
     (the pipeline keeps the AI-extracted values whenever this returns None).
     """
-    # Read the key lazily (module-import reads can cache None per Modal container).
+    # TMDB is a raw ?api_key= REST call (no client object); read the key lazily
+    # from the env at call time (import-time reads cache None per Modal container).
     tmdb_key = os.environ.get("TMDB_API_KEY")
     if not tmdb_key:
         return None

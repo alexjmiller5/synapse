@@ -4,7 +4,7 @@ import re
 from google.genai import types
 
 from core.config import PROMPTS
-from core.clients import GEMINI_API_KEY
+from core.settings import get_settings
 from core.notion_utils import (
     log_job_outcome,
     create_high_priority_task,
@@ -221,7 +221,7 @@ def payload_error(payload):
 
 def run(payload: dict):
     print("🧠 Worker awake!")
-    if not GEMINI_API_KEY or not PROMPTS:
+    if not get_settings().gemini_api_key or not PROMPTS:
         print("❌ Critical: Missing API Key or Prompts")
         return
 

@@ -33,9 +33,16 @@ Both files are `add_local_file`d into the image at `/root/core/`.
 ## Conventions
 
 - Secrets are env vars ONLY (Modal secret `synapse` in the cloud, `op run`
-  locally). `core/secrets.py` maps legacy kebab-case ids to env names:
-  `get_secret("gemini-api-key")` → `GEMINI_API_KEY`. `.env.tpl` is the
-  canonical manifest (op:// refs, committed) — the 6 credentials only.
+  locally). `.env.tpl` is the canonical manifest (op:// refs, committed).
+  `core/settings.py` is the typed surface: a pydantic-settings `Settings`
+  (field `gemini_api_key` ← env `GEMINI_API_KEY`) read via the lru_cached
+  `get_settings()`. **Only ever call `get_settings()` inside a function, never
+  at module import** — Modal injects secrets at container start, so an
+  import-time read caches stale `None`s (this bit TMDB once). External clients
+  follow the same rule: `core/clients.py` exposes lazy `get_notion()`,
+  `get_gemini_client()`, etc. (lru_cached, built on first use, `None` if the
+  key is absent) — nothing is instantiated at import. `core/secrets.py`'s
+  `get_secret`/`get_db_id` remain only for the yaml/env DB-id lookup.
 - Notion DB ids are committed config, NOT secrets: each category stanza in
   `databases.yaml` has a `db_id` (non-category ids in the top-level `db_ids`
   mapping). `get_db_id` lets a `NOTION_<X>_DB_ID` env var override. Adding a
