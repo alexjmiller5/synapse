@@ -390,7 +390,7 @@ class TestGetTmdbMetadata:
             },
             status=200,
         )
-        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             meta = get_tmdb_metadata("The Matrix", "movie")
 
         assert meta["genres"] == ["Science Fiction", "Action"]
@@ -410,26 +410,26 @@ class TestGetTmdbMetadata:
             },
             status=200,
         )
-        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             meta = get_tmdb_metadata("Breaking Bad", "tv")
 
         assert meta["director"] == "Vince Gilligan"
         assert meta["cast"] == ["Bryan Cranston"]
 
     def test_no_key_returns_none(self):
-        with patch("core.external_data.TMDB_API_KEY", None):
+        with patch.dict("os.environ", {"TMDB_API_KEY": ""}):
             assert get_tmdb_metadata("The Matrix", "movie") is None
 
     @responses.activate
     def test_no_search_result_returns_none(self):
         responses.add(responses.GET, MOVIE_SEARCH, json={"results": []}, status=200)
-        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             assert get_tmdb_metadata("Nonexistent Film", "movie") is None
 
     @responses.activate
     def test_http_error_returns_none(self):
         responses.add(responses.GET, MOVIE_SEARCH, status=500)
-        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             assert get_tmdb_metadata("The Matrix", "movie") is None
 
 
