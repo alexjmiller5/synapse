@@ -347,7 +347,7 @@ def get_tmdb_metadata(title, kind):
         search = requests.get(
             f"{TMDB_BASE}/search/{kind}",
             params={"api_key": tmdb_key, "query": title},
-            timeout=5,
+            timeout=12,
         )
         search.raise_for_status()
         results = search.json().get("results") or []
@@ -358,7 +358,7 @@ def get_tmdb_metadata(title, kind):
         detail = requests.get(
             f"{TMDB_BASE}/{kind}/{tmdb_id}",
             params={"api_key": tmdb_key, "append_to_response": "credits"},
-            timeout=5,
+            timeout=12,
         )
         detail.raise_for_status()
         data = detail.json()
