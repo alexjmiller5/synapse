@@ -31,6 +31,11 @@ deploy: test sync-secrets
 
 # --- project-specific recipes below (one-offs live in scripts/, run directly) ---
 
+# Regenerate src/core/property_ids.yaml (name->id map). Re-run after ADDING a
+# Notion property Synapse writes; a rename alone keeps working via the stored id.
+sync-prop-ids:
+    op run --env-file=.env.tpl -- uv run scripts/fetch_property_ids.py
+
 # Classifier prompt eval — real Gemini calls against scripts/eval_cases.yaml
 eval-classifier:
     op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py

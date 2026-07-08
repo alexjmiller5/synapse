@@ -337,6 +337,24 @@ class TestHydrateDynamicOptions:
                 for rules in details.get("properties", {}).values():
                     rules.pop("_runtime_options", None)
 
+    def test_fetch_options_matches_by_id_after_rename(self, mock_notion):
+        """Rename-safety: the live schema property was RENAMED (name differs from
+        databases.yaml) but kept its id — options are still found by id."""
+        from core.notion_utils import prop_id
+
+        genres_id = prop_id("movies", "Genres")
+        mock_notion.databases.retrieve.return_value = {
+            "properties": {
+                "Renamed Genres!!": {
+                    "id": genres_id,
+                    "type": "multi_select",
+                    "multi_select": {"options": [{"name": "Action"}, {"name": "Drama"}]},
+                }
+            }
+        }
+        opts = fetch_property_options("fake-movies-db", "Genres", "movies")
+        assert opts == ["Action", "Drama"]
+
     def test_warns_when_allowlist_option_missing_from_live_select(self, mock_notion, capsys):
         """An allowlist entry absent from the live Notion select is filtered out
         of the AI enum — hydration must warn loudly instead of silently no-oping."""

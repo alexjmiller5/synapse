@@ -20,8 +20,10 @@ from core.notion_utils import (
     create_high_priority_task,
     create_project_task,
     fetch_existing_page,
+    prop_id,
+    keys_to_ids,
 )
-from helpers import make_notion_page
+from helpers import make_notion_page, sent_props
 
 
 # ======================================================================
@@ -287,6 +289,32 @@ class TestBuildNotionProperties:
 
 
 # ======================================================================
+# property-id references (rename-safe writes)
+# ======================================================================
+class TestPropertyIdRefs:
+    def test_prop_id_maps_and_falls_back(self):
+        # a real property resolves to an opaque id (not the name)
+        assert prop_id("movies", "Director") != "Director"
+        # unknown property / category -> falls back to the name (never crashes)
+        assert prop_id("movies", "Nonexistent") == "Nonexistent"
+        assert prop_id("no-such-category", "Whatever") == "Whatever"
+
+    def test_keys_to_ids_remaps_keys_not_values(self):
+        out = keys_to_ids("movies", {"Genres": {"multi_select": [{"name": "Action"}]}})
+        assert prop_id("movies", "Genres") in out
+        assert "Genres" not in out  # re-keyed to the id
+        # the option VALUE ("Action") is untouched — stays a name
+        assert out[prop_id("movies", "Genres")]["multi_select"] == [{"name": "Action"}]
+
+    def test_create_page_sends_id_keyed_payload(self, mock_notion):
+        create_page("movies", {"Director": _notion_select("Nolan")})
+        raw = mock_notion.pages.create.call_args.kwargs["properties"]
+        assert prop_id("movies", "Director") in raw
+        assert "Director" not in raw
+        assert raw[prop_id("movies", "Director")]["select"]["name"] == "Nolan"
+
+
+# ======================================================================
 # create_page
 # ======================================================================
 class TestCreatePage:
@@ -295,7 +323,7 @@ class TestCreatePage:
         create_page("tasks", props)
         mock_notion.pages.create.assert_called_once()
         call_kwargs = mock_notion.pages.create.call_args
-        assert call_kwargs.kwargs["properties"] == props
+        assert sent_props(mock_notion.pages.create, "tasks") == props
         assert "database_id" in call_kwargs.kwargs["parent"]
 
     def test_podcast_icon(self, mock_notion):
@@ -349,32 +377,31 @@ class TestLogJobOutcome:
     def test_success_log(self, mock_notion):
         log_job_outcome("test input", "tasks", "Success", created_url="https://notion.so/x")
         mock_notion.pages.create.assert_called_once()
-        call_kwargs = mock_notion.pages.create.call_args.kwargs
-        props = call_kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "logs")
         assert props["Raw Input"]["title"][0]["text"]["content"] == "test input"
         assert props["Code Execution"]["status"]["name"] == "Success"
         assert props["Created Item"]["url"] == "https://notion.so/x"
 
     def test_error_log(self, mock_notion):
         log_job_outcome("bad input", "Unknown", "Error(s)", details="Some error")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "logs")
         assert "Some error" in props["Error Details"]["rich_text"][0]["text"]["content"]
 
     def test_ai_data_serialized(self, mock_notion):
         ai_data = {"Parser_Data": {"core_text": "test"}, "Extractor_Data": {"Name": "test"}}
         log_job_outcome("test", "tasks", "Success", ai_data=ai_data)
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "logs")
         ai_text = props["AI Summary"]["rich_text"][0]["text"]["content"]
         assert "Parser_Data" in ai_text
 
     def test_project_append_adds_tag(self, mock_notion):
         log_job_outcome("test", "tasks", "Success", project_append=True)
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "logs")
         assert props["Tags"]["multi_select"] == [{"name": "project-append"}]
 
     def test_no_project_append_omits_tag(self, mock_notion):
         log_job_outcome("test", "tasks", "Success")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "logs")
         assert "Tags" not in props
 
 
@@ -384,14 +411,14 @@ class TestLogJobOutcome:
 class TestCreateCleanupTask:
     def test_basic(self, mock_notion):
         create_cleanup_task("Fix something")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "tasks")
         assert props["Name"]["title"][0]["text"]["content"] == "Fix something"
         assert props["Priority"]["select"]["name"] == "Low"
         assert props["Tags"]["multi_select"][0]["name"] == "Chore"
 
     def test_with_link(self, mock_notion):
         create_cleanup_task("Fix it", link_url="https://notion.so/page")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "tasks")
         assert "https://notion.so/page" in props["Links"]["rich_text"][0]["text"]["content"]
 
 
@@ -401,7 +428,7 @@ class TestCreateCleanupTask:
 class TestCreateHighPriorityTask:
     def test_basic(self, mock_notion):
         create_high_priority_task("Failed thought")
-        props = mock_notion.pages.create.call_args.kwargs["properties"]
+        props = sent_props(mock_notion.pages.create, "tasks")
         assert "Classify the following thought" in props["Name"]["title"][0]["text"]["content"]
         assert props["Priority"]["select"]["name"] == "High"
 
@@ -414,8 +441,8 @@ class TestCreateProjectTask:
         data = {"Name": "Fix bug", "Status": "To Do", "Tags": ["Chore"], "Due Date": "2026-03-01"}
         url = create_project_task("project-id-123", data)
         assert url is not None
-        call_kwargs = mock_notion.pages.create.call_args.kwargs
-        assert call_kwargs["properties"]["Project"] == {"relation": [{"id": "project-id-123"}]}
+        props = sent_props(mock_notion.pages.create, "tasks")
+        assert props["Project"] == {"relation": [{"id": "project-id-123"}]}
 
 
 # ======================================================================
