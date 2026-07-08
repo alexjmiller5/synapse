@@ -15,6 +15,8 @@ from core.external_data import (
     resolve_final_url,
     get_tal_metadata,
     sanitize_youtube_url,
+    get_tmdb_metadata,
+    map_genres,
 )
 
 
@@ -118,7 +120,9 @@ class TestFetchWebMetadata:
 
     @responses.activate
     def test_github_prefix_removal(self):
-        html = '<html><head><title>GitHub - owner/repo: Description</title></head><body></body></html>'
+        html = (
+            "<html><head><title>GitHub - owner/repo: Description</title></head><body></body></html>"
+        )
         responses.add(responses.GET, "https://github.com/owner/repo", body=html, status=200)
         result = fetch_web_metadata("https://github.com/owner/repo")
         assert "GitHub - " not in result.split("\n")[0]
@@ -326,7 +330,9 @@ class TestEnrichContext:
         assert "GOOGLE MAPS DATA" in result
 
     def test_bookmarks_routing(self):
-        with patch("core.external_data.fetch_web_metadata", return_value="HTML Title: Test\nContent..."):
+        with patch(
+            "core.external_data.fetch_web_metadata", return_value="HTML Title: Test\nContent..."
+        ):
             result = enrich_context("bookmarks", "https://example.com")
             assert "HTML Title" in result
 
@@ -342,9 +348,7 @@ class TestEnrichContext:
 
     def test_podcasts_spotify_routing(self):
         mock_sp = MagicMock()
-        mock_sp.episode.return_value = {
-            "show": {"name": "S"}, "name": "E", "description": "D"
-        }
+        mock_sp.episode.return_value = {"show": {"name": "S"}, "name": "E", "description": "D"}
         with patch("core.external_data.spotify", mock_sp):
             result = enrich_context("podcasts", "https://open.spotify.com/episode/abc123")
         assert "Show:" in result
@@ -356,6 +360,98 @@ class TestEnrichContext:
     def test_unhandled_category(self):
         result = enrich_context("tasks", "https://example.com")
         assert result is None
+
+
+# ======================================================================
+# get_tmdb_metadata
+# ======================================================================
+MOVIE_SEARCH = "https://api.themoviedb.org/3/search/movie"
+MOVIE_DETAIL = "https://api.themoviedb.org/3/movie/603"
+TV_SEARCH = "https://api.themoviedb.org/3/search/tv"
+TV_DETAIL = "https://api.themoviedb.org/3/tv/1396"
+
+
+class TestGetTmdbMetadata:
+    @responses.activate
+    def test_movie_happy_path(self):
+        responses.add(responses.GET, MOVIE_SEARCH, json={"results": [{"id": 603}]}, status=200)
+        responses.add(
+            responses.GET,
+            MOVIE_DETAIL,
+            json={
+                "genres": [{"name": "Science Fiction"}, {"name": "Action"}],
+                "credits": {
+                    "crew": [
+                        {"job": "Writer", "name": "Nope"},
+                        {"job": "Director", "name": "Lana Wachowski"},
+                    ],
+                    "cast": [{"name": f"Actor {i}"} for i in range(10)],
+                },
+            },
+            status=200,
+        )
+        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+            meta = get_tmdb_metadata("The Matrix", "movie")
+
+        assert meta["genres"] == ["Science Fiction", "Action"]
+        assert meta["director"] == "Lana Wachowski"
+        assert meta["cast"] == [f"Actor {i}" for i in range(5)]  # top ~5
+
+    @responses.activate
+    def test_tv_uses_created_by_for_director(self):
+        responses.add(responses.GET, TV_SEARCH, json={"results": [{"id": 1396}]}, status=200)
+        responses.add(
+            responses.GET,
+            TV_DETAIL,
+            json={
+                "genres": [{"name": "Drama"}],
+                "created_by": [{"name": "Vince Gilligan"}],
+                "credits": {"crew": [], "cast": [{"name": "Bryan Cranston"}]},
+            },
+            status=200,
+        )
+        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+            meta = get_tmdb_metadata("Breaking Bad", "tv")
+
+        assert meta["director"] == "Vince Gilligan"
+        assert meta["cast"] == ["Bryan Cranston"]
+
+    def test_no_key_returns_none(self):
+        with patch("core.external_data.TMDB_API_KEY", None):
+            assert get_tmdb_metadata("The Matrix", "movie") is None
+
+    @responses.activate
+    def test_no_search_result_returns_none(self):
+        responses.add(responses.GET, MOVIE_SEARCH, json={"results": []}, status=200)
+        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+            assert get_tmdb_metadata("Nonexistent Film", "movie") is None
+
+    @responses.activate
+    def test_http_error_returns_none(self):
+        responses.add(responses.GET, MOVIE_SEARCH, status=500)
+        with patch("core.external_data.TMDB_API_KEY", "fake-key"):
+            assert get_tmdb_metadata("The Matrix", "movie") is None
+
+
+# ======================================================================
+# map_genres
+# ======================================================================
+class TestMapGenres:
+    def test_science_fiction_alias_to_existing_sci_fi(self):
+        assert map_genres(["Science Fiction"], ["Sci-Fi", "Action"]) == ["Sci-Fi"]
+
+    def test_unknown_genre_passes_through(self):
+        assert map_genres(["Mumblecore"], ["Sci-Fi", "Action"]) == ["Mumblecore"]
+
+    def test_case_insensitive_uses_existing_casing(self):
+        assert map_genres(["documentary"], ["Documentary"]) == ["Documentary"]
+
+    def test_alias_target_absent_keeps_tmdb_name(self):
+        # No "Sci-Fi" option exists -> the TMDB name is kept (multi_select auto-creates)
+        assert map_genres(["Science Fiction"], ["Drama"]) == ["Science Fiction"]
+
+    def test_dedupes(self):
+        assert map_genres(["Action", "Action"], ["Action"]) == ["Action"]
 
 
 # ======================================================================
