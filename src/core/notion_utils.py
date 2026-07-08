@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from urllib.parse import urlparse
 from core.config import DATABASES
@@ -12,21 +13,58 @@ from core.timeutils import today_eastern
 NOTION_TEXT_LIMIT = 2000
 
 
+# Common "UTF-8 decoded as CP1252/Latin-1" mojibake → the character it should be.
+# Ordered longest/most-specific first so a 3-char sequence is matched before the
+# 2-char NBSP one. Only multi-char artifact sequences are replaced — a bare
+# accented letter (é in "Sérgio", â in French "âme") never matches, so accents
+# are preserved. Escapes used so the source stays ASCII and unambiguous.
+_MOJIBAKE_MAP = [
+    ("\u00e2\u20ac\u2122", "'"),  # UTF-8 U+2019 (') decoded as CP1252
+    ("\u00e2\u20ac\u02dc", "'"),  # U+2018 (') left single quote
+    ("\u00e2\u20ac\u0153", '"'),  # U+201C (") left double quote
+    ("\u00e2\u20ac\u009d", '"'),  # U+201D (") right double quote
+    ("\u00e2\u20ac\u201d", "\u2014"),  # U+2014 em dash (CP1252 0x94)
+    ("\u00e2\u20ac\u0094", "\u2014"),  # U+2014 em dash (latin-1 0x94)
+    ("\u00e2\u20ac\u0093", "\u2013"),  # U+2013 en dash
+    ("\u00c2\u00a0", " "),  # mojibake of a NBSP
+    ("\ufeff", ""),  # stray BOM
+    ("\u00a0", " "),  # bare NBSP -> normal space
+]
+
+
+def clean_text(s):
+    """Deterministically de-spam and de-mojibake an extracted string.
+
+    Applied to every title/rich_text value before truncation so obvious AI/paste
+    junk (newline spam, repeated punctuation, encoding artifacts) never reaches
+    Notion. Conservative and idempotent: only collapses clearly-spammy repeats
+    and a fixed set of mojibake sequences; never ASCII-folds accents. Non-str
+    input passes through untouched.
+    """
+    if not isinstance(s, str):
+        return s
+    for bad, good in _MOJIBAKE_MAP:
+        s = s.replace(bad, good)
+    s = re.sub(r"\n{3,}", "\n\n", s)  # newline spam -> blank line
+    s = re.sub(r"—{2,}", "—", s)  # em-dash spam -> one em dash
+    s = re.sub(r"\.{3,}", "…", s)  # 3+ dots -> single ellipsis
+    s = re.sub(r"!{3,}", "!", s)  # !!! spam -> one
+    s = re.sub(r"\?{3,}", "?", s)  # ??? spam -> one
+    return s.strip()
+
+
 def _truncate(val, limit=NOTION_TEXT_LIMIT):
     s = str(val)
     return s if len(s) <= limit else s[: limit - 1] + "…"
 
 
 def _notion_title(val):
-    return {"title": [{"text": {"content": _truncate(val)}}]}
+    return {"title": [{"text": {"content": _truncate(clean_text(val))}}]}
 
 
 def _notion_rich_text(val):
-    return (
-        {"rich_text": [{"text": {"content": _truncate(val)}}]}
-        if val
-        else {"rich_text": []}
-    )
+    val = clean_text(val)
+    return {"rich_text": [{"text": {"content": _truncate(val)}}]} if val else {"rich_text": []}
 
 
 def _notion_multi_select(val):
@@ -37,15 +75,11 @@ def _validate_iso_date(val):
     """Notion's date.start only accepts ISO 8601. Raise loudly on anything else so the
     failure is tracked in the Logs DB rather than producing a cryptic Notion 400."""
     if not isinstance(val, str) or not val.strip():
-        raise ValueError(
-            f"Date property requires a non-empty ISO 8601 date string, got {val!r}"
-        )
+        raise ValueError(f"Date property requires a non-empty ISO 8601 date string, got {val!r}")
     try:
         datetime.fromisoformat(val)
     except ValueError as e:
-        raise ValueError(
-            f"Date property must be an ISO 8601 date (YYYY-MM-DD), got {val!r}"
-        ) from e
+        raise ValueError(f"Date property must be an ISO 8601 date (YYYY-MM-DD), got {val!r}") from e
 
 
 def _notion_date(val):
@@ -131,9 +165,7 @@ def create_page(category, props):
                 # Use custom "github-light" emoji for GitHub URLs
                 body_params["icon"] = {
                     "type": "custom_emoji",
-                    "custom_emoji": {
-                        "id": "2d103953-a8af-8072-b828-007aa3901d27"
-                    },
+                    "custom_emoji": {"id": "2d103953-a8af-8072-b828-007aa3901d27"},
                 }
             elif domain:
                 body_params["icon"] = {
@@ -197,24 +229,18 @@ def append_note(page_id, text):
 
             chunks = get_utf16_split(content)
             for chunk in chunks:
-                safe_notes.append(
-                    {"type": "text", "text": {"content": chunk}, "annotations": anns}
-                )
+                safe_notes.append({"type": "text", "text": {"content": chunk}, "annotations": anns})
 
         new_chunks = get_utf16_split(f"{text}")
         for chunk in new_chunks:
             safe_notes.append(
                 {
                     "type": "text",
-                    "text": {
-                        "content": chunk if chunk != new_chunks[0] else f"\n{chunk}"
-                    },
+                    "text": {"content": chunk if chunk != new_chunks[0] else f"\n{chunk}"},
                 }
             )
 
-        notion.pages.update(
-            page_id=page_id, properties={"Notes": {"rich_text": safe_notes}}
-        )
+        notion.pages.update(page_id=page_id, properties={"Notes": {"rich_text": safe_notes}})
         print("   ✅ Note appended successfully.")
 
     except Exception as e:
@@ -259,9 +285,7 @@ def create_cleanup_task(desc, link_url=None):
 
 def create_high_priority_task(desc, link_url=None):
     print(f"🧹 Creating cleanup task: {desc}")
-    classification_message = (
-        "Classify the following thought (it failed due to pipeline errors): "
-    )
+    classification_message = "Classify the following thought (it failed due to pipeline errors): "
     task_text = f"{classification_message}{desc}"
     props = {
         "Name": _notion_title(task_text),
