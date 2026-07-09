@@ -1,6 +1,6 @@
 """Tests for business_logic.py — business rules, inventory, projects."""
 
-from datetime import date
+from core.timeutils import today_eastern
 from unittest.mock import patch
 
 from core.business_logic import (
@@ -83,7 +83,7 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("quotes", data)
         assert result["Quote"].startswith("\u201c")
         assert result["Quote"].endswith("\u201d")
-        assert result["Date"] == date.today().isoformat()
+        assert result["Date"] == today_eastern().isoformat()
 
     def test_quotes_strips_smart_quotes(self):
         data = {"Quote": "\u201cAlready quoted\u201d"}
@@ -154,7 +154,7 @@ class TestApplyBusinessLogic:
     def test_podcasts_finished_sets_date(self):
         data = {"Episode Title": "Ep1", "Status": "Finished"}
         result = apply_business_logic("podcasts", data)
-        assert result["Date Listened To"] == date.today().isoformat()
+        assert result["Date Listened To"] == today_eastern().isoformat()
 
     def test_podcasts_not_finished_no_date(self):
         data = {"Episode Title": "Ep1", "Status": "Not Started"}
@@ -164,7 +164,7 @@ class TestApplyBusinessLogic:
     def test_youtube_watched_sets_date(self):
         data = {"Title": "Video", "Status": "Watched"}
         result = apply_business_logic("youtube-videos", data)
-        assert result["Date Watched"] == date.today().isoformat()
+        assert result["Date Watched"] == today_eastern().isoformat()
 
     def test_youtube_not_watched_no_date(self):
         data = {"Title": "Video", "Status": "Not Started"}
