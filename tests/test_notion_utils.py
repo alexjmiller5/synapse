@@ -141,7 +141,9 @@ class TestPropertyBuilders:
     def test_notion_multi_select_strips_commas(self):
         # Notion rejects option names containing commas (e.g. "Tyler, the Creator")
         result = _notion_multi_select(["Tyler, the Creator", "Anne Hathaway"])
-        assert result == {"multi_select": [{"name": "Tyler the Creator"}, {"name": "Anne Hathaway"}]}
+        assert result == {
+            "multi_select": [{"name": "Tyler the Creator"}, {"name": "Anne Hathaway"}]
+        }
 
     def test_notion_date(self):
         result = _notion_date("2026-01-15")

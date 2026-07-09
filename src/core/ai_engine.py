@@ -151,12 +151,16 @@ def generate_extraction_prompt(
     # 2. Inventory Section
     inventory_section = ""
     if inventory_list:
-        inventory_section = f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
+        inventory_section = (
+            f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
+        )
 
     # NEW: Trips Section
     trips_section = ""
     if category == "places" and trips_inventory:
-        trips_section = f"--- AVAILABLE TRIPS (For 'Linked Trip' Logic) ---\n{json.dumps(trips_inventory)}"
+        trips_section = (
+            f"--- AVAILABLE TRIPS (For 'Linked Trip' Logic) ---\n{json.dumps(trips_inventory)}"
+        )
     # 3. Context Section
     combined_context = ""
     if url_context:
@@ -223,7 +227,7 @@ def get_gemini_schema(category):
             # IF allow_new is True, we remove 'enum' so AI can write anything
             # Note: Notion 'status' properties usually require specific IDs, but 'select' allows creation.
             allow_new = rules.get("create_new", False)
-            
+
             if opts and not allow_new:
                 field_def = {"type": "string", "enum": opts}
             else:

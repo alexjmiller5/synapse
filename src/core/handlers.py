@@ -77,7 +77,7 @@ def handle_places_logic(category, data, trips_id_map):
             except Exception as e:
                 print(f"      ❌ Failed to update place: {e}")
 
-        return f"https://www.notion.so/{existing_id.replace('-','')}"
+        return f"https://www.notion.so/{existing_id.replace('-', '')}"
 
     # 4. PATH B: CREATE NEW
     print("      - Creating new Place page...")
@@ -127,9 +127,7 @@ def handle_groceries_fun_logic(category, data, inventory_map):
         # Check for Location Ambiguity (After creation, so we have a link)
         if not data.get("Location"):
             print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
-            create_cleanup_task(
-                f"Classify Location for: {search_val}", link_url=created_url
-            )
+            create_cleanup_task(f"Classify Location for: {search_val}", link_url=created_url)
 
         return created_url
 
@@ -247,7 +245,7 @@ def handle_movies_tv_logic(category, data):
         if status in significant_statuses:
             print(f"   -> Updating status to {status}")
             return update_status(eid, status, category).get("url")
-        return f"https://www.notion.so/{eid.replace('-','')}"
+        return f"https://www.notion.so/{eid.replace('-', '')}"
 
     return create_page(category, build_notion_properties(category, data)).get("url")
 
@@ -272,9 +270,7 @@ def handle_bookmarks_logic(category, data):
             )
             if resp.get("results"):
                 print(f"   ✅ Bookmark already exists: {target_url}")
-                return (
-                    f"https://www.notion.so/{resp['results'][0]['id'].replace('-','')}"
-                )
+                return f"https://www.notion.so/{resp['results'][0]['id'].replace('-', '')}"
         except Exception as e:
             print(f"   ⚠️ Bookmark duplicate check failed: {e}")
 

@@ -398,7 +398,9 @@ def tmdb_details(kind, tmdb_id, tmdb_key):
 
     director = ""
     if kind == "movie":
-        director = next((c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), "")
+        director = next(
+            (c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), ""
+        )
     else:
         # TV: prefer the show's creator(s); fall back to a crew director/EP.
         creators = data.get("created_by") or []
@@ -406,7 +408,9 @@ def tmdb_details(kind, tmdb_id, tmdb_key):
             director = creators[0].get("name", "")
         if not director:
             for job in ("Director", "Executive Producer"):
-                director = next((c["name"] for c in crew if c.get("job") == job and c.get("name")), "")
+                director = next(
+                    (c["name"] for c in crew if c.get("job") == job and c.get("name")), ""
+                )
                 if director:
                     break
 

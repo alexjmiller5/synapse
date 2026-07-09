@@ -144,7 +144,9 @@ class TestHandleYoutube:
 
         with patch("core.handlers.get_video_channel_details") as mock_channel:
             mock_channel.return_value = {
-                "title": "MKBHD", "id": "ch1", "url": "https://youtube.com/channel/ch1"
+                "title": "MKBHD",
+                "id": "ch1",
+                "url": "https://youtube.com/channel/ch1",
             }
             data = {"Title": "Review", "Video URL": "https://youtu.be/abc", "Status": "Watched"}
             handle_youtube_logic("youtube-videos", data)
@@ -241,7 +243,12 @@ class TestHandleMoviesTv:
 class TestHandleBookmarks:
     def test_new_bookmark(self, mock_notion):
         mock_notion.request.return_value = {"results": []}
-        data = {"Description": "A site", "Title": "Example", "URL": "https://example.com", "Tags": []}
+        data = {
+            "Description": "A site",
+            "Title": "Example",
+            "URL": "https://example.com",
+            "Tags": [],
+        }
 
         handle_bookmarks_logic("bookmarks", data)
         mock_notion.pages.create.assert_called_once()

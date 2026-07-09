@@ -167,7 +167,10 @@ def main():
         print(f"  ✓ {conf:6} {title!r} -> {matched} | dir={d} | genres=[{g}]")
         if apply:
             resp = requests.patch(
-                f"{NOTION}/pages/{page['id']}", headers=HEADERS, json={"properties": props}, timeout=30
+                f"{NOTION}/pages/{page['id']}",
+                headers=HEADERS,
+                json={"properties": props},
+                timeout=30,
             )
             if resp.status_code >= 300:
                 print(f"      ❌ write failed: {resp.status_code} {resp.text[:120]}")
@@ -175,8 +178,10 @@ def main():
         updated += 1
         time.sleep(0.3)  # Notion ~3 req/s; TMDB fine at this pace
 
-    print(f"\n=== {'applied' if apply else 'would apply'}: {updated} | "
-          f"low-confidence skipped: {skipped_low} | no-match: {no_match}")
+    print(
+        f"\n=== {'applied' if apply else 'would apply'}: {updated} | "
+        f"low-confidence skipped: {skipped_low} | no-match: {no_match}"
+    )
     if review:
         print("\nNeeds manual review:")
         for t, why, matched in review:
