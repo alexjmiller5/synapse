@@ -337,13 +337,6 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 
-    elif category == "quotes":
-        data["Date"] = today_str
-        raw_quote = data.get("Quote", "")
-        if raw_quote:
-            clean_quote = raw_quote.strip('"').strip("'").strip("“").strip("”")
-            data["Quote"] = f"“{clean_quote}”"
-
     elif category == "movies":
         if "Status" not in data:
             data["Status"] = "Not Started"

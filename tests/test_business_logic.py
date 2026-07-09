@@ -78,19 +78,6 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("groceries", {"Name": "Eggs"}, source_text="buy eggs")
         assert result["Name"] == "Eggs"
 
-    def test_quotes_formatting(self):
-        data = {"Quote": '"I will be back"'}
-        result = apply_business_logic("quotes", data)
-        assert result["Quote"].startswith("\u201c")
-        assert result["Quote"].endswith("\u201d")
-        assert result["Date"] == today_eastern().isoformat()
-
-    def test_quotes_strips_smart_quotes(self):
-        data = {"Quote": "\u201cAlready quoted\u201d"}
-        result = apply_business_logic("quotes", data)
-        # Should not double-quote
-        assert result["Quote"] == "\u201cAlready quoted\u201d"
-
     def test_movies_default_status(self):
         data = {"Title": "Inception"}
         result = apply_business_logic("movies", data)
