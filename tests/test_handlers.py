@@ -333,15 +333,3 @@ class TestHandleDefault:
         data = {"Description": "Random idea", "Tags": ["Tech"]}
         handle_default_logic("ideas", data)
         mock_notion.pages.create.assert_called_once()
-
-    def test_quotes_no_context_creates_cleanup(self, mock_notion):
-        data = {"Quote": "\u201cI will be back\u201d"}
-        handle_default_logic("quotes", data)
-        # Should create quote page + cleanup task = 2 create calls
-        assert mock_notion.pages.create.call_count == 2
-
-    def test_quotes_with_context_no_cleanup(self, mock_notion):
-        data = {"Quote": "\u201cI will be back\u201d", "Context": "Arnold in Terminator"}
-        handle_default_logic("quotes", data)
-        # Only the quote page, no cleanup
-        assert mock_notion.pages.create.call_count == 1

@@ -94,7 +94,7 @@ parser_instruction: |
   ## Examples
   - `Buy milk @ Call John` -> [{core_text: "Buy milk"}, {core_text: "Call John"}]
   - `Finish report $ urgent due friday` -> [{core_text: "Finish report", context_notes: "urgent due friday"}]
-  - `Eli quote $ this guy dresses like he wants to get wegied` -> [{core_text: "this guy dresses like he wants to get wegied", context_notes: "Eli quote"}]
+  - `notion finance sync proj $ add a webhook to trigger a sync` -> [{core_text: "add a webhook to trigger a sync", context_notes: "notion finance sync proj"}]  # a short project/label is context; the actionable content is core, regardless of side
 
   ## Output format
   Return a JSON list of objects. Each object must have "core_text" (the main content)

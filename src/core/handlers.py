@@ -293,13 +293,4 @@ def handle_bucket_list_logic(category, data):
 
 
 def handle_default_logic(category, data):
-    resp = create_page(category, build_notion_properties(category, data))
-    created_url = resp.get("url")
-    if category == "quotes":
-        if not data.get("Context"):
-            quote_preview = data.get("Quote") or data.get("Name") or "Unknown Quote"
-            create_cleanup_task(
-                f"Link person to quote: {quote_preview[:30]}...",
-                link_url=created_url,
-            )
-    return created_url
+    return create_page(category, build_notion_properties(category, data)).get("url")
