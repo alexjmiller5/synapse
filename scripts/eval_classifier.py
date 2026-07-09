@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "google-genai~=1.49.0",
-#     "PyYAML~=6.0.3",
-#     "tenacity>=9.1.2",
-#     "notion-client~=2.7.0",
-#     "spotipy~=2.25.1",
-#     "googlemaps>=4.10.0",
-#     "google-api-python-client>=2.187.0",
-# ]
-# ///
+# Runs in the project env (uv run) so it uses the SAME dependency versions as the
+# deployed service — it imports core.*, so pinning a separate set here just risks
+# drift (an old google-genai once closed the client mid-eval).
 """Eval the classification prompt against scripts/eval_cases.yaml with real Gemini calls.
 
 Measures the PROMPT alone (the deterministic task-context pre-check in
@@ -68,6 +59,12 @@ def eval_case(prompt: str, case: dict, repeats: int) -> tuple[dict, str, bool]:
 
 
 def run_set(prompt: str, name: str, cases: list[dict], repeats: int) -> float:
+    # Warm the lru_cached Gemini client single-threaded — concurrent first-access
+    # from the pool below races the cache and can create/GC a duplicate client
+    # (httpx then reports "client has been closed"). Production is serialized.
+    from core.clients import get_gemini_client
+
+    get_gemini_client()
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda c: eval_case(prompt, c, repeats), cases))
 
