@@ -123,12 +123,16 @@ def validate_category(category, details, schema):
             continue
         expected = _YAML_TO_NOTION_TYPE.get(ytype, ytype)
         if live.get("type") != expected:
-            issues.append(f"{category}.{name}: Notion type '{live.get('type')}' != expected '{expected}'")
+            issues.append(
+                f"{category}.{name}: Notion type '{live.get('type')}' != expected '{expected}'"
+            )
         allowlist = rules.get("allowlist")
         if allowlist:
             missing = [o for o in allowlist if o not in _options_from_prop(live)]
             if missing:
-                issues.append(f"{category}.{name}: allowlist options not in Notion select: {missing}")
+                issues.append(
+                    f"{category}.{name}: allowlist options not in Notion select: {missing}"
+                )
     return issues
 
 

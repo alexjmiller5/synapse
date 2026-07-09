@@ -34,9 +34,7 @@ class TestModelFallback:
         good = make_gemini_response({"ok": True})
         mock_gemini.models.generate_content.side_effect = [self._not_found(), good]
 
-        resp = generate_with_retry(
-            model=ai_engine.GEMINI_MODEL, contents=[], config=self._config()
-        )
+        resp = generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
 
         assert resp is good
         assert mock_gemini.models.generate_content.call_count == 2
@@ -66,7 +64,7 @@ class TestSafeJsonLoad:
         assert safe_json_load('{"key": "value"}') == {"key": "value"}
 
     def test_valid_array(self):
-        assert safe_json_load('[1, 2, 3]') == [1, 2, 3]
+        assert safe_json_load("[1, 2, 3]") == [1, 2, 3]
 
     def test_invalid_json_raises(self):
         with pytest.raises(ValueError, match="Malformed JSON"):
@@ -195,32 +193,28 @@ class TestGenerateExtractionPrompt:
 
     def test_includes_url_context(self):
         prompt = generate_extraction_prompt(
-            "bookmarks", "https://example.com",
-            url_context="HTML Title: Example\nContent..."
+            "bookmarks", "https://example.com", url_context="HTML Title: Example\nContent..."
         )
         assert "CONTEXT FROM URL" in prompt
         assert "Example" in prompt
 
     def test_includes_inventory(self):
         prompt = generate_extraction_prompt(
-            "groceries", "Buy eggs",
-            inventory_list=["Eggs", "Milk", "Bread"]
+            "groceries", "Buy eggs", inventory_list=["Eggs", "Milk", "Bread"]
         )
         assert "EXISTING INVENTORY" in prompt
         assert "Eggs" in prompt
 
     def test_includes_trips_for_places(self):
         prompt = generate_extraction_prompt(
-            "places", "some place",
-            trips_inventory=["NYC Trip (Date: 2026-06-01)"]
+            "places", "some place", trips_inventory=["NYC Trip (Date: 2026-06-01)"]
         )
         assert "AVAILABLE TRIPS" in prompt
         assert "NYC Trip" in prompt
 
     def test_no_trips_for_non_places(self):
         prompt = generate_extraction_prompt(
-            "tasks", "do something",
-            trips_inventory=["NYC Trip (Date: 2026-06-01)"]
+            "tasks", "do something", trips_inventory=["NYC Trip (Date: 2026-06-01)"]
         )
         assert "AVAILABLE TRIPS" not in prompt
 
@@ -231,10 +225,7 @@ class TestGenerateExtractionPrompt:
         assert "YYYY-MM-DD" in prompt
 
     def test_includes_user_context(self):
-        prompt = generate_extraction_prompt(
-            "tasks", "Do thing",
-            user_context="urgent due friday"
-        )
+        prompt = generate_extraction_prompt("tasks", "Do thing", user_context="urgent due friday")
         assert "USER EXPLICIT CONTEXT" in prompt
         assert "urgent due friday" in prompt
 

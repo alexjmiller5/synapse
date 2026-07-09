@@ -35,7 +35,9 @@ if not GEMINI_API_KEY:
     try:
         result = subprocess.run(
             ["op", "read", "op://OpenClaw/Gemini Free Tier API Key/credential"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             GEMINI_API_KEY = result.stdout.strip()
@@ -67,7 +69,9 @@ from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
 # Direct Gemini REST API (bypasses conftest SDK mocks)
 # Uses the same model constant as production (core.ai_engine.GEMINI_MODEL)
 # ---------------------------------------------------------------------------
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+GEMINI_URL = (
+    f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+)
 
 
 def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5):
@@ -89,7 +93,7 @@ def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5
             timeout=30,
         )
         if resp.status_code == 429:
-            wait = min(2 ** attempt * 2, 30)
+            wait = min(2**attempt * 2, 30)
             print(f"  ⏳ Rate limited, waiting {wait}s (attempt {attempt + 1}/{_retries})")
             time.sleep(wait)
             continue
@@ -112,8 +116,12 @@ def _rate_limit_pause():
 
 
 ACTIVE_PROJECTS = [
-    "Synapse", "Blueprint", "Social Pipe", "OpenClaw",
-    "My Media Center", "Hotkey Creation & Optimization",
+    "Synapse",
+    "Blueprint",
+    "Social Pipe",
+    "OpenClaw",
+    "My Media Center",
+    "Hotkey Creation & Optimization",
     "Filling & Fixing Notion Databases",
 ]
 
@@ -417,9 +425,7 @@ class TestIdeaClassification:
 # ======================================================================
 class TestFunActivitiesClassification:
     def test_fun_activity_nyc(self):
-        cat, data, _ = full_pipeline(
-            "get drunk at Applebees with company", "Fun activities nyc"
-        )
+        cat, data, _ = full_pipeline("get drunk at Applebees with company", "Fun activities nyc")
         assert cat == "fun-activities"
         assert data.get("Location") == "NYC"
 
@@ -491,6 +497,7 @@ class TestParser:
         """Parse using real Gemini via REST API."""
         system_instruction = PROMPTS.get("parser_instruction", "")
         from core.schemas import PARSER_SCHEMA
+
         return _gemini_call(system_instruction, text, PARSER_SCHEMA)
 
     def test_single_item(self):
@@ -592,6 +599,7 @@ class TestFailedExtractionRegression:
         due = data.get("Due Date", "")
         if due:
             from datetime import datetime
+
             try:
                 datetime.strptime(due, "%Y-%m-%d")
             except ValueError:
