@@ -105,7 +105,7 @@ controls:
     expected: tv-shows
   - text: "Arun Vantage senior associate"
     context: ""
-    expected: people
+    expected: tasks  # people DB disabled 2026-07-07 -> name+job now routes to tasks
   - text: "https://news.ycombinator.com"
     context: ""
     expected: bookmarks
