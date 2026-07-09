@@ -27,7 +27,7 @@ def _setup_classify_extract(mock_gemini, category, extracted, project=None):
 
     responses = [
         make_gemini_response(classify_resp),  # Classification
-        make_gemini_response(extracted),       # Extraction
+        make_gemini_response(extracted),  # Extraction
     ]
     mock_gemini.models.generate_content.side_effect = responses
 
@@ -84,12 +84,16 @@ def _run(item_data, **overrides):
 # ======================================================================
 class TestTaskPipeline:
     def test_simple_task(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(mock_gemini, "tasks", {
-            "Name": "Update dating profile",
-            "AI Title": "Update dating profile",
-            "Tags": ["Chore"],
-            "Due Date": "2026-03-29",
-        })
+        _setup_classify_extract_mobile(
+            mock_gemini,
+            "tasks",
+            {
+                "Name": "Update dating profile",
+                "AI Title": "Update dating profile",
+                "Tags": ["Chore"],
+                "Due Date": "2026-03-29",
+            },
+        )
 
         _run(_item("Update dating profile"))
         # Should create a task page + log outcome = 2 creates
@@ -98,35 +102,49 @@ class TestTaskPipeline:
         assert "Tags" not in _log_props(mock_notion)
 
     def test_task_with_context(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(mock_gemini, "tasks", {
-            "Name": "Cancel Uber One",
-            "AI Title": "Cancel Uber One subscription",
-            "Tags": ["Chore"],
-            "Due Date": "2027-01-01",
-        })
+        _setup_classify_extract_mobile(
+            mock_gemini,
+            "tasks",
+            {
+                "Name": "Cancel Uber One",
+                "AI Title": "Cancel Uber One subscription",
+                "Tags": ["Chore"],
+                "Due Date": "2027-01-01",
+            },
+        )
 
         _run(_item("Cancel Uber One", "Jan 1"))
         assert mock_notion.pages.create.called
 
     def test_task_mobile_compatible(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(mock_gemini, "tasks", {
-            "Name": "Text mom back",
-            "AI Title": "Text mom back",
-            "Tags": ["Chore"],
-            "Due Date": "2026-03-29",
-        }, mobile_compat=True)
+        _setup_classify_extract_mobile(
+            mock_gemini,
+            "tasks",
+            {
+                "Name": "Text mom back",
+                "AI Title": "Text mom back",
+                "Tags": ["Chore"],
+                "Due Date": "2026-03-29",
+            },
+            mobile_compat=True,
+        )
 
         _run(_item("Text mom back"))
         # Verify the create call happened
         assert mock_notion.pages.create.called
 
     def test_task_not_mobile_compatible(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(mock_gemini, "tasks", {
-            "Name": "Fix production server",
-            "AI Title": "Fix production server",
-            "Tags": ["Work"],
-            "Due Date": "2026-03-29",
-        }, mobile_compat=False)
+        _setup_classify_extract_mobile(
+            mock_gemini,
+            "tasks",
+            {
+                "Name": "Fix production server",
+                "AI Title": "Fix production server",
+                "Tags": ["Work"],
+                "Due Date": "2026-03-29",
+            },
+            mobile_compat=False,
+        )
 
         _run(_item("Fix production server"))
         assert mock_notion.pages.create.called
@@ -141,12 +159,14 @@ class TestTaskContextPrecheck:
         # Only the extraction response is queued: a classification call would
         # consume it and break the sequence.
         mock_gemini.models.generate_content.side_effect = [
-            make_gemini_response({
-                "Name": "Add the full x men series to my movies db",
-                "AI Title": "Add X-Men series to movies DB",
-                "Tags": ["Chore"],
-                "Due Date": "2026-07-10",
-            }),
+            make_gemini_response(
+                {
+                    "Name": "Add the full x men series to my movies db",
+                    "AI Title": "Add X-Men series to movies DB",
+                    "Tags": ["Chore"],
+                    "Due Date": "2026-07-10",
+                }
+            ),
         ]
 
         _run(_item("Add the full x men series to my movies db", "med prior task"))
@@ -158,12 +178,16 @@ class TestTaskContextPrecheck:
 
     def test_date_context_still_calls_classifier(self, mock_gemini, mock_notion):
         """A plain date context does NOT trigger the pre-check — classifier runs."""
-        _setup_classify_extract_mobile(mock_gemini, "tasks", {
-            "Name": "watch Eric Andre's new movie, little brother",
-            "AI Title": "Watch Little Brother",
-            "Tags": ["Chore"],
-            "Due Date": "2026-06-26",
-        })
+        _setup_classify_extract_mobile(
+            mock_gemini,
+            "tasks",
+            {
+                "Name": "watch Eric Andre's new movie, little brother",
+                "AI Title": "Watch Little Brother",
+                "Tags": ["Chore"],
+                "Due Date": "2026-06-26",
+            },
+        )
 
         _run(_item("watch Eric Andre's new movie, little brother", "June 26"))
 
@@ -180,15 +204,19 @@ class TestProjectPipeline:
     def test_project_task(self, mock_gemini, mock_notion):
         """Task with project context creates a project-linked task."""
         responses = [
-            make_gemini_response({
-                "category": "tasks",
-                "related_project": "Synapse",
-            }),
-            make_gemini_response({
-                "Name": "Fix login bug",
-                "Tags": ["Chore"],
-                "Due Date": "2026-03-29",
-            }),
+            make_gemini_response(
+                {
+                    "category": "tasks",
+                    "related_project": "Synapse",
+                }
+            ),
+            make_gemini_response(
+                {
+                    "Name": "Fix login bug",
+                    "Tags": ["Chore"],
+                    "Due Date": "2026-03-29",
+                }
+            ),
             make_gemini_response({"mobile_compatible": False}),
         ]
         mock_gemini.models.generate_content.side_effect = responses
@@ -212,11 +240,13 @@ class TestProjectPipeline:
         of dropping it — even with 'task' in the context, no classifier call runs."""
         # Only the extraction response is queued (pre-check skips the classifier).
         mock_gemini.models.generate_content.side_effect = [
-            make_gemini_response({
-                "Name": "Fix Synapse login bug",
-                "Tags": ["Chore"],
-                "Due Date": "2026-07-10",
-            }),
+            make_gemini_response(
+                {
+                    "Name": "Fix Synapse login bug",
+                    "Tags": ["Chore"],
+                    "Due Date": "2026-07-10",
+                }
+            ),
         ]
 
         _run(_item("Fix Synapse login bug", "high priority task"))
@@ -232,15 +262,19 @@ class TestProjectPipeline:
     def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
         """If project name doesn't match, falls back to normal task creation."""
         responses = [
-            make_gemini_response({
-                "category": "tasks",
-                "related_project": "NonExistentProject",
-            }),
-            make_gemini_response({
-                "Name": "Some task",
-                "Tags": ["Chore"],
-                "Due Date": "2026-03-29",
-            }),
+            make_gemini_response(
+                {
+                    "category": "tasks",
+                    "related_project": "NonExistentProject",
+                }
+            ),
+            make_gemini_response(
+                {
+                    "Name": "Some task",
+                    "Tags": ["Chore"],
+                    "Due Date": "2026-03-29",
+                }
+            ),
             make_gemini_response({"mobile_compatible": False}),
         ]
         mock_gemini.models.generate_content.side_effect = responses
@@ -257,20 +291,28 @@ class TestProjectPipeline:
 # ======================================================================
 class TestGroceryPipeline:
     def test_new_grocery(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "groceries", {
-            "Name": "Quinoa",
-            "Category": "Grains",
-            "Status": "On List",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "groceries",
+            {
+                "Name": "Quinoa",
+                "Category": "Grains",
+                "Status": "On List",
+            },
+        )
 
         _run(_item("Buy quinoa", "groceries"))
         assert mock_notion.pages.create.called
 
     def test_existing_grocery_update(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "groceries", {
-            "Name": "Eggs",
-            "Status": "On List",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "groceries",
+            {
+                "Name": "Eggs",
+                "Status": "On List",
+            },
+        )
 
         _run(_item("Buy eggs", "groceries"))
         # Existing item → update status
@@ -282,12 +324,16 @@ class TestGroceryPipeline:
 # ======================================================================
 class TestYouTubePipeline:
     def test_new_video(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "youtube-videos", {
-            "Title": "Great Video",
-            "Video URL": "https://youtu.be/abc123",
-            "Status": "Watched",
-            "channel_handle": "@TestChannel",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "youtube-videos",
+            {
+                "Title": "Great Video",
+                "Video URL": "https://youtu.be/abc123",
+                "Status": "Watched",
+                "channel_handle": "@TestChannel",
+            },
+        )
         mock_notion.request.return_value = {"results": []}
 
         with patch("core.handlers.get_video_channel_details", return_value=None):
@@ -300,21 +346,29 @@ class TestYouTubePipeline:
 # ======================================================================
 class TestMovieTvPipeline:
     def test_new_movie(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "movies", {
-            "Title": "Inception",
-            "Genres": ["Sci-Fi"],
-            "Status": "Not Started",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "movies",
+            {
+                "Title": "Inception",
+                "Genres": ["Sci-Fi"],
+                "Status": "Not Started",
+            },
+        )
         mock_notion.request.return_value = {"results": []}
 
         _run(_item("Inception"))
         mock_notion.pages.create.assert_called()
 
     def test_existing_movie_status_update(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "movies", {
-            "Title": "Inception",
-            "Status": "Finished",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "movies",
+            {
+                "Title": "Inception",
+                "Status": "Finished",
+            },
+        )
         existing = make_notion_page("movie-id", "Title", "Inception")
         # fetch_existing_page in handle_movies_tv_logic calls notion.request
         mock_notion.request.return_value = {"results": [existing]}
@@ -329,28 +383,40 @@ class TestMovieTvPipeline:
 # ======================================================================
 class TestBookmarkPipeline:
     def test_new_bookmark(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "bookmarks", {
-            "Description": "A cool dev tool",
-            "Title": "DevTool",
-            "URL": "https://devtool.io",
-            "Tags": [],
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "bookmarks",
+            {
+                "Description": "A cool dev tool",
+                "Title": "DevTool",
+                "URL": "https://devtool.io",
+                "Tags": [],
+            },
+        )
         mock_notion.request.return_value = {"results": []}
 
-        with patch("core.external_data.fetch_web_metadata", return_value="HTML Title: DevTool\nContent..."):
+        with patch(
+            "core.external_data.fetch_web_metadata", return_value="HTML Title: DevTool\nContent..."
+        ):
             _run(_item("https://devtool.io"))
         assert mock_notion.pages.create.called
 
     def test_github_bookmark_auto_tagged(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "bookmarks", {
-            "Description": "A repo",
-            "Title": "owner/repo",
-            "URL": "https://github.com/owner/repo",
-            "Tags": [],
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "bookmarks",
+            {
+                "Description": "A repo",
+                "Title": "owner/repo",
+                "URL": "https://github.com/owner/repo",
+                "Tags": [],
+            },
+        )
         mock_notion.request.return_value = {"results": []}
 
-        with patch("core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."):
+        with patch(
+            "core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."
+        ):
             _run(_item("https://github.com/owner/repo"))
         assert mock_notion.pages.create.called
 
@@ -360,10 +426,14 @@ class TestBookmarkPipeline:
 # ======================================================================
 class TestPeoplePipeline:
     def test_new_person(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "people", {
-            "Name": "Arun Mehta",
-            "Company": "Vantage Senior Associate",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "people",
+            {
+                "Name": "Arun Mehta",
+                "Company": "Vantage Senior Associate",
+            },
+        )
 
         _run(_item("Arun Vantage senior associate"))
         mock_notion.pages.create.assert_called()
@@ -374,9 +444,13 @@ class TestPeoplePipeline:
 # ======================================================================
 class TestQuotePipeline:
     def test_new_quote(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "quotes", {
-            "Quote": "I will be back",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "quotes",
+            {
+                "Quote": "I will be back",
+            },
+        )
 
         _run(_item("I will be back", "Arnold"))
         assert mock_notion.pages.create.called
@@ -387,11 +461,15 @@ class TestQuotePipeline:
 # ======================================================================
 class TestIdeaPipeline:
     def test_new_idea(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "ideas", {
-            "Description": "App that tracks sleep patterns",
-            "Tags": ["Tech"],
-            "Status": "Ideated",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "ideas",
+            {
+                "Description": "App that tracks sleep patterns",
+                "Tags": ["Tech"],
+                "Status": "Ideated",
+            },
+        )
 
         _run(_item("Idea for an app that tracks sleep patterns"))
         mock_notion.pages.create.assert_called()
@@ -402,11 +480,15 @@ class TestIdeaPipeline:
 # ======================================================================
 class TestFunActivitiesPipeline:
     def test_with_location(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "fun-activities", {
-            "Title": "Walk around Seaport",
-            "Status": "To Do",
-            "Location": "Boston",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "fun-activities",
+            {
+                "Title": "Walk around Seaport",
+                "Status": "To Do",
+                "Location": "Boston",
+            },
+        )
         mock_notion.request.return_value = {"results": []}
 
         _run(_item("Walk around Seaport", "fun"))
@@ -418,15 +500,22 @@ class TestFunActivitiesPipeline:
 # ======================================================================
 class TestPodcastPipeline:
     def test_spotify_podcast(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "podcasts", {
-            "Episode Title": "Great Episode",
-            "Podcast Name": "My Show",
-            "Genres": ["Comedy"],
-            "Status": "Not Started",
-            "URL": "https://open.spotify.com/episode/abc",
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "podcasts",
+            {
+                "Episode Title": "Great Episode",
+                "Podcast Name": "My Show",
+                "Genres": ["Comedy"],
+                "Status": "Not Started",
+                "URL": "https://open.spotify.com/episode/abc",
+            },
+        )
 
-        with patch("core.external_data.get_spotify_metadata", return_value="Show: My Show\nEp: Great Episode\nDesc: Good"):
+        with patch(
+            "core.external_data.get_spotify_metadata",
+            return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
+        ):
             _run(_item("https://open.spotify.com/episode/abc"))
         mock_notion.pages.create.assert_called()
 
@@ -436,10 +525,14 @@ class TestPodcastPipeline:
 # ======================================================================
 class TestBucketListPipeline:
     def test_new_item(self, mock_gemini, mock_notion):
-        _setup_classify_extract(mock_gemini, "bucket-list", {
-            "Item": "Skydive in Dubai",
-            "Tags": ["Adventure"],
-        })
+        _setup_classify_extract(
+            mock_gemini,
+            "bucket-list",
+            {
+                "Item": "Skydive in Dubai",
+                "Tags": ["Adventure"],
+            },
+        )
 
         _run(_item("Skydive in Dubai", "bucket list"))
         mock_notion.pages.create.assert_called()
@@ -465,12 +558,15 @@ class TestProcessorEntryPoint:
     def test_batch_processing(self, mock_gemini, mock_notion):
         """run() should read raw_text from the payload, parse, and run pipeline for each item."""
         # Mock parse_raw_input to return 2 items
-        with patch("core.pipeline.parse_raw_input") as mock_parse, \
-             patch("core.pipeline.hydrate_dynamic_options"), \
-             patch("core.pipeline.fetch_active_projects", return_value=(["Synapse"], {"Synapse": "id"})), \
-             patch("core.pipeline.fetch_inventory_map", return_value={}), \
-             patch("core.pipeline.fetch_trips_inventory", return_value=([], {})):
-
+        with (
+            patch("core.pipeline.parse_raw_input") as mock_parse,
+            patch("core.pipeline.hydrate_dynamic_options"),
+            patch(
+                "core.pipeline.fetch_active_projects", return_value=(["Synapse"], {"Synapse": "id"})
+            ),
+            patch("core.pipeline.fetch_inventory_map", return_value={}),
+            patch("core.pipeline.fetch_trips_inventory", return_value=([], {})),
+        ):
             mock_parse.return_value = [
                 {"core_text": "Buy milk", "context_notes": "groceries"},
                 {"core_text": "Call John", "context_notes": ""},
@@ -481,7 +577,9 @@ class TestProcessorEntryPoint:
                 make_gemini_response({"category": "groceries"}),
                 make_gemini_response({"Name": "Milk", "Status": "On List", "Category": "Dairy"}),
                 make_gemini_response({"category": "tasks"}),
-                make_gemini_response({"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}),
+                make_gemini_response(
+                    {"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}
+                ),
                 make_gemini_response({"mobile_compatible": False}),
             ]
 
