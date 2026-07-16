@@ -301,3 +301,66 @@ class TestGetGeminiSchema:
         """A checkbox prop (tasks.'AI Ready') becomes a JSON-schema boolean field."""
         schema = get_gemini_schema("tasks")
         assert schema["properties"]["AI Ready"] == {"type": "boolean"}
+
+
+# ======================================================================
+# Enum size cap (Gemini 400 INVALID_ARGUMENT on huge enums)
+# ======================================================================
+class TestEnumCap:
+    """Gemini rejects response schemas whose enums exceed its constrained-decoding
+    grammar limit (~150 distinct real-world names). Open-world fields must never
+    be enum-constrained, and any hydrated option list past MAX_ENUM_OPTIONS must
+    drop its enum instead of 400ing every capture in that category."""
+
+    def _movies_props(self):
+        from core.config import DATABASES
+
+        return DATABASES["databases"]["movies"]["properties"]
+
+    def test_movie_open_world_fields_have_no_enum(self, monkeypatch):
+        """Director / Famous Cast Members are create_new — no enum even when hydrated."""
+        props = self._movies_props()
+        monkeypatch.setitem(props["Director"], "_runtime_options", ["A Director"])
+        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", ["An Actor"])
+        schema = get_gemini_schema("movies")
+        assert "enum" not in schema["properties"]["Director"]
+        assert "enum" not in schema["properties"]["Famous Cast Members"]["items"]
+
+    def test_tv_open_world_fields_have_no_enum(self, monkeypatch):
+        from core.config import DATABASES
+
+        props = DATABASES["databases"]["tv-shows"]["properties"]
+        monkeypatch.setitem(props["Director"], "_runtime_options", ["A Director"])
+        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", ["An Actor"])
+        schema = get_gemini_schema("tv-shows")
+        assert "enum" not in schema["properties"]["Director"]
+        assert "enum" not in schema["properties"]["Famous Cast Members"]["items"]
+
+    def test_enum_dropped_above_cap(self, monkeypatch):
+        """A strict field whose live options outgrow the cap loses its enum."""
+        props = self._movies_props()
+        big = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
+        monkeypatch.setitem(props["Genres"], "_runtime_options", big)
+        schema = get_gemini_schema("movies")
+        assert "enum" not in schema["properties"]["Genres"]["items"]
+
+    def test_enum_kept_at_cap(self, monkeypatch):
+        props = self._movies_props()
+        small = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS)]
+        monkeypatch.setitem(props["Genres"], "_runtime_options", small)
+        schema = get_gemini_schema("movies")
+        assert schema["properties"]["Genres"]["items"]["enum"] == small
+
+    def test_prompt_omits_oversized_option_lists(self, monkeypatch):
+        """The prompt's valid-options dump is capped too (2k names ≈ 30k wasted tokens)."""
+        props = self._movies_props()
+        big = [f"Actor Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
+        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", big)
+        prompt = generate_extraction_prompt("movies", "some movie")
+        assert "Actor Number 5" not in prompt
+
+    def test_prompt_keeps_small_option_lists(self, monkeypatch):
+        props = self._movies_props()
+        monkeypatch.setitem(props["Genres"], "_runtime_options", ["Sci-Fi", "Drama"])
+        prompt = generate_extraction_prompt("movies", "some movie")
+        assert "Sci-Fi" in prompt

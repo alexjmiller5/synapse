@@ -132,6 +132,9 @@ databases:
         instruction: "Select relevant genres."
       Director:
         type: "select"
+        # Open-world field: TMDB overrides it post-extraction, and enum-constraining
+        # 400+ distinct names 400s the Gemini call (grammar too complex).
+        create_new: true
         instruction: "The director's name (if known)."
       Tags:
         type: "multi_select"
@@ -139,6 +142,7 @@ databases:
         allowlist: ["All-time Favorite", "Studio Ghibli"]
       Famous Cast Members:
         type: "multi_select"
+        create_new: true # open-world, TMDB-overridden — see Director
         instruction: "Famous actors in the movie."
       Status:
         type: "status"
@@ -178,9 +182,11 @@ databases:
         instruction: "Select relevant genres."
       Director:
         type: "select"
+        create_new: true # open-world, TMDB-overridden — see movies.Director
         instruction: "The director's name (if known)."
       Famous Cast Members:
         type: "multi_select"
+        create_new: true # open-world, TMDB-overridden — see movies.Director
         instruction: "Famous actors in the show."
 
   podcasts:
