@@ -16,9 +16,11 @@ def get_secret(secret_id, version="latest"):
 def get_db_id(category):
     """DB id for a category: NOTION_<X>_DB_ID env var wins, else committed config.
 
-    Ids are config, not secrets (repo is private). They currently live in
-    databases.yaml — a future refactor may move them into native pydantic
-    config; only this function needs to know where they live.
+    Ids are non-secret workspace identifiers (useless without the Notion
+    token), committed in databases.yaml and kept configurable via these env
+    overrides so other workspaces can point at their own DBs. A future
+    refactor may move them into native pydantic config; only this function
+    needs to know where they live.
     """
     env_val = get_secret(f"notion-{category}-db-id")
     if env_val:
