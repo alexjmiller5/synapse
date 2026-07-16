@@ -85,8 +85,15 @@ The justfile is the interface, not a script catalog; one-offs go in
 | `just eval-classifier` | Classifier-prompt eval vs `scripts/eval_cases.yaml` (real Gemini) |
 | `just logs` | Stream deployed-app logs |
 | `just sync-secrets` | Push `.env.tpl` → Modal secret store |
-| `just deploy` | test + sync-secrets + `modal deploy` |
+| `just deploy` | test + sync-secrets + `modal deploy` — CI's job, not yours (below) |
 | `just recept "text"` | POST one thought to the deployed webhook |
+
+**Deploying = commit + push to `main`.** `.github/workflows/deploy.yml` runs
+tests, syncs secrets, and `modal deploy`s — never run `just deploy` locally
+unless there's a legitimate stated reason (e.g. CI itself is broken): local
+deploys ship code that isn't in git, and the next push silently reverts it.
+After pushing, verify with the gh CLI (`gh run watch <id> --exit-status`;
+on failure `gh run view <id> --log-failed`) — never assume it succeeded.
 
 ## TDD
 
