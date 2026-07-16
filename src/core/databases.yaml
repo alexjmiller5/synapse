@@ -259,13 +259,16 @@ databases:
       Location:
         type: "select"
         required: true
+        # Example cities — override with YOUR list via the NOTION_FUN_ACTIVITIES_LOCATIONS
+        # env var (comma-separated; see core/config.py). Values must exist as options on
+        # the live Notion select (hydration intersects with live options).
         allowlist: ["Boston", "Dallas", "NYC", "Lakeport"]
         instruction: |
           Infer the city from the text/landmarks:
           - "NYC": Union Square, Central Park, Brooklyn, Manhattan.
           - "Boston": Seaport, Fenway, Cambridge, The Charles.
           - "Dallas": Deep Ellum, Bishop Arts, Katy Trail.
-          - "Lakeport": Lakeport CT, Crescent Beach, Bayview Park, Main Street Lakeport.
+          - "Lakeport": Crescent Beach, Bayview Park, Main Street Lakeport.
           - If the location is totally ambiguous, leave empty (the system will create a manual cleanup task).
       Tags:
         type: "multi_select"
@@ -285,7 +288,7 @@ databases:
 #       Name:
 #         type: "title"
 #         required: true
-#         instruction: "The full name, Title Cased. If only a first name is given, use that. (e.g. 'will barlow' -> 'Will Barlow')."
+#         instruction: "The full name, Title Cased. If only a first name is given, use that. (e.g. 'arun mehta' -> 'Arun Mehta')."
 #       Company:
 #         type: "rich_text"
 #         required: true

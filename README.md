@@ -47,26 +47,18 @@ op run --env-file=.env.tpl -- uv run <cmd>
 Everything else is code; these are one-time console/dashboard actions:
 
 1. **Modal auth (local):** `uv run modal token new`.
-2. **Modal Proxy Auth Token:** Modal dashboard → Settings → Proxy Auth Tokens → mint a token. Give the token ID/secret to Receptor (and store them on the `Modal Synapse` 1Password item). The webhook rejects requests without `Modal-Key`/`Modal-Secret` headers.
-3. **Google API keys:** the old GCP project is gone, so re-mint a **Places API key** and a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the `Synapse Env` 1Password item.
-4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the `Personal` vault.
+2. **Modal Proxy Auth Token:** Modal dashboard → Settings → Proxy Auth Tokens → mint a token. Give the token ID/secret to the Receptor client (and store them on a 1Password item of your choosing). The webhook rejects requests without `Modal-Key`/`Modal-Secret` headers.
+3. **Google API keys:** mint a **Places API key** and a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the 1Password item that `.env.tpl` references.
+4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the project's vault (the one `.env.tpl` references).
 5. **Push secrets to Modal:** `just sync-secrets` (reads `.env.tpl`, injects via `op`, creates/updates the `synapse` Modal secret).
-6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI — e.g. `Lakeport` on Fun Activities → Location). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value.
-7. **Executions DB `Tags` property:** already added (2026-07-06) — a `Tags` multi_select with the `project-append` option exists on the Synapse Executions DB. Only re-add if the DB is ever recreated.
-
-## Receptor client changes (v2 migration)
-
-The [Receptor](https://github.com/alexjmiller5/receptor) app must be updated for the Modal endpoint:
-
-- **URL:** the Modal webhook URL (shown by `modal deploy` / the Modal dashboard), not the old API Gateway URL.
-- **Headers:** send `Modal-Key` and `Modal-Secret` (proxy auth token) instead of the old API key.
-- **Response:** expect **200** with `{"status": "accepted", "call_id": ...}` — not 202.
+6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value. The Fun Activities `Location` allowlist is personal config: the committed yaml carries generic example cities — set `NOTION_FUN_ACTIVITIES_LOCATIONS` (comma-separated, in the env item `.env.tpl` references) to your real city list.
+7. **Executions DB `Tags` property:** a `Tags` multi_select with the `project-append` option must exist on the Executions DB.
 
 ## Configuration: `src/core/databases.yaml`
 
 The whole pipeline is YAML-driven. To add a new Notion database category:
 
-1. Add the category definition to `databases.yaml`, including its `db_id` — that single edit is the whole onboarding. (Non-category ids live in the top-level `db_ids` mapping.) No 1Password or `.env.tpl` change needed; the 18 `NOTION_*_DB_ID` fields on the `Synapse Env` 1Password item are unused and can be deleted at leisure.
+1. Add the category definition to `databases.yaml`, including its `db_id` — that single edit is the whole onboarding. (Non-category ids live in the top-level `db_ids` mapping.) No 1Password or `.env.tpl` change needed.
 
 ### Database level
 

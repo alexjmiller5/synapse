@@ -12,3 +12,7 @@ GOOGLE_YOUTUBE_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pb
 # Notion DB ids are committed config (see src/core/databases.yaml), not secrets.
 # A NOTION_<X>_DB_ID env var still overrides the config value if you set one.
 TMDB_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/TMDB_API_KEY
+
+# Personal config (not a secret): comma-separated Location allowlist for
+# fun-activities — the committed databases.yaml carries generic example cities.
+NOTION_FUN_ACTIVITIES_LOCATIONS=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/NOTION_FUN_ACTIVITIES_LOCATIONS
