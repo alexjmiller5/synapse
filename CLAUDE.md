@@ -65,6 +65,12 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   5xx/bad JSON, one-shot fallback to `GEMINI_FALLBACK_MODEL` on 404). The
   model name lives in ONE place: `core.ai_engine.GEMINI_MODEL`
   (env-overridable).
+- Response-schema enums are capped at `ai_engine.MAX_ENUM_OPTIONS` (100):
+  Gemini 400s (INVALID_ARGUMENT) when an enum of distinct real-world names
+  compiles to too large a constrained-decoding grammar (~150+). Past the cap
+  a field silently loses its enum + prompt options dump. Open-world,
+  TMDB-overridden fields (movies/tv `Director`, `Famous Cast Members`) are
+  `create_new: true` so they never enum at all.
 
 ## Commands
 

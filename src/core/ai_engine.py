@@ -19,6 +19,13 @@ from core.timeutils import today_eastern
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-latest")
 
+# Gemini 400s (INVALID_ARGUMENT) when a response-schema enum compiles to too
+# large a constrained-decoding grammar — empirically ~150+ distinct real-world
+# names (2026-07: movies 'Director' hit 425, 'Famous Cast Members' 1987).
+# Past this cap a field loses its enum (and its prompt options dump) instead
+# of failing every capture in the category.
+MAX_ENUM_OPTIONS = 100
+
 
 def safe_json_load(text):
     """Helper to parse JSON and raise specific error if it fails.
@@ -138,7 +145,7 @@ def generate_extraction_prompt(
     valid_opts_lines = []
     for prop_name, rules in db_config.get("properties", {}).items():
         options = rules.get("_runtime_options") or rules.get("allowlist")
-        if options:
+        if options and len(options) <= MAX_ENUM_OPTIONS:
             # CHECK THE FLAG
             is_strict = not rules.get("create_new", False)
             header = (
@@ -217,7 +224,7 @@ def get_gemini_schema(category):
         elif prop_type in ["multi_select", "array"]:
             opts = rules.get("_runtime_options") or rules.get("allowlist") or []
             # IF allow_new is True, we remove 'enum' so AI can write anything
-            if opts and not allow_new:
+            if opts and not allow_new and len(opts) <= MAX_ENUM_OPTIONS:
                 field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
             else:
                 field_def = {"type": "array", "items": {"type": "string"}}
@@ -228,7 +235,7 @@ def get_gemini_schema(category):
             # Note: Notion 'status' properties usually require specific IDs, but 'select' allows creation.
             allow_new = rules.get("create_new", False)
 
-            if opts and not allow_new:
+            if opts and not allow_new and len(opts) <= MAX_ENUM_OPTIONS:
                 field_def = {"type": "string", "enum": opts}
             else:
                 field_def = {"type": "string"}
