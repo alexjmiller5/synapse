@@ -65,6 +65,23 @@ class TestYamlFixGuards:
         schema = get_gemini_schema("fun-activities")
         assert "Lakeport" in schema["properties"]["Location"]["enum"]
 
+    def test_location_allowlist_env_override(self, monkeypatch):
+        """NOTION_FUN_ACTIVITIES_LOCATIONS replaces the committed example cities."""
+        from core.config import apply_env_overrides
+
+        dbs = {
+            "databases": {
+                "fun-activities": {"properties": {"Location": {"allowlist": ["Lakeport"]}}}
+            }
+        }
+        monkeypatch.delenv("NOTION_FUN_ACTIVITIES_LOCATIONS", raising=False)
+        loc = apply_env_overrides(dbs)["databases"]["fun-activities"]["properties"]["Location"]
+        assert loc["allowlist"] == ["Lakeport"]
+
+        monkeypatch.setenv("NOTION_FUN_ACTIVITIES_LOCATIONS", "Boston, Springfield ,NYC")
+        loc = apply_env_overrides(dbs)["databases"]["fun-activities"]["properties"]["Location"]
+        assert loc["allowlist"] == ["Boston", "Springfield", "NYC"]
+
     def test_task_ai_title_property_removed(self):
         """Alex deleted the 'AI Title' property from the Tasks DB — Synapse must
         no longer define or write it (otherwise every task write 400s)."""
