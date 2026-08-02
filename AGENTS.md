@@ -20,7 +20,9 @@ tests or on any future platform.
 
 ## The pipeline (`core/pipeline.py: run`)
 
-1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context
+1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
+   skipped entirely (verbatim pass-through) when the text has no `@`/`$` —
+   the LLM round-trip has mangled URLs it was meant to copy
 2. Classify → category (+ optional `related_project` / `project_action`)
 3. Extract structured fields per `databases.yaml` schema
 4. `apply_business_logic` + category handler → Notion writes; every outcome
