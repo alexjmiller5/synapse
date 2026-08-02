@@ -85,6 +85,13 @@ def parse_raw_input(raw_text):
     """
     Uses Gemini to intelligently split valid delimiters.
     """
+    # No '@' item separator and no '$' context separator → nothing to split.
+    # Skip the LLM entirely: it exists only to split, and round-tripping text
+    # it should copy verbatim has mangled it (appended '_' to
+    # github.com/kunchenguid/axi, subzeroid/instagrapi, subzeroid/aiograpi).
+    if "@" not in raw_text and "$" not in raw_text:
+        return [{"core_text": raw_text.strip(), "context_notes": ""}]
+
     print("🧠 Parsing raw input for delimiters...")
 
     system_instruction = PROMPTS.get("parser_instruction")
