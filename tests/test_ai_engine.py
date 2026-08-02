@@ -90,12 +90,19 @@ class TestSafeJsonLoad:
 # ======================================================================
 class TestParseRawInput:
     def test_single_item(self, mock_gemini):
-        response = make_gemini_response([{"core_text": "Buy eggs", "context_notes": ""}])
-        mock_gemini.models.generate_content.return_value = response
-
         result = parse_raw_input("Buy eggs")
         assert len(result) == 1
         assert result[0]["core_text"] == "Buy eggs"
+
+    def test_no_delimiters_skips_gemini(self, mock_gemini):
+        """No '@'/'$' → nothing to split, so the LLM must not see the text at
+        all: round-tripping a bare URL through Gemini mangled repo names
+        (github.com/kunchenguid/axi came back as axi_)."""
+        result = parse_raw_input("https://github.com/kunchenguid/axi\n")
+        assert result == [
+            {"core_text": "https://github.com/kunchenguid/axi", "context_notes": ""}
+        ]
+        mock_gemini.models.generate_content.assert_not_called()
 
     def test_multiple_items(self, mock_gemini):
         items = [
@@ -120,10 +127,11 @@ class TestParseRawInput:
         """On Gemini failure, falls back to raw text as single item."""
         mock_gemini.models.generate_content.side_effect = Exception("API down")
 
-        result = parse_raw_input("Some text here")
+        result = parse_raw_input("Some text $ here")
         assert len(result) == 1
-        assert result[0]["core_text"] == "Some text here"
+        assert result[0]["core_text"] == "Some text $ here"
         assert result[0]["context_notes"] == ""
+        mock_gemini.models.generate_content.assert_called_once()
 
 
 # ======================================================================
