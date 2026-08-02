@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Synapse: AI middleware that captures natural-language text and routes it to Notion.
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
