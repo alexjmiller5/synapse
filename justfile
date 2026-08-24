@@ -50,8 +50,8 @@ test-integration:
 
 # Send one thought to the deployed webhook
 recept +args:
-    MODAL_WEBHOOK_URL="${MODAL_WEBHOOK_URL:-$(op read 'op://Synapse/Modal Synapse/webhook-url')}" \
-    MODAL_PROXY_TOKEN_ID="${MODAL_PROXY_TOKEN_ID:-$(op read 'op://Synapse/Modal Synapse/proxy-token-id')}" \
-    MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://Synapse/Modal Synapse/proxy-token-secret')}" \
+    MODAL_WEBHOOK_URL="${MODAL_WEBHOOK_URL:-$(op read 'op://skkfhuuqegdpyzuobf6h6dyoly/tf26sufzmjt3zphrx37hexmbse/webhook-url')}" \
+    MODAL_PROXY_TOKEN_ID="${MODAL_PROXY_TOKEN_ID:-$(op read 'op://skkfhuuqegdpyzuobf6h6dyoly/tf26sufzmjt3zphrx37hexmbse/proxy-token-id')}" \
+    MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://skkfhuuqegdpyzuobf6h6dyoly/tf26sufzmjt3zphrx37hexmbse/proxy-token-secret')}" \
     uv run scripts/recept.py {{quote(args)}}
 
