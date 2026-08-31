@@ -1,6 +1,11 @@
 # Classifier eval cases — real capture strings that were misrouted (expected: tasks)
 # plus control cases that must keep their non-task categories.
 # Run via `just eval-classifier`.
+#
+# Person and place names in these cases are FAKE (invented stand-ins, not real
+# people the user knows) — keep it that way: never add a real person's name or
+# other personal data here; substitute a made-up name when adapting a real
+# capture into a case.
 
 misclassified:
   - text: "watch Eric Andre's new movie, little brother"
