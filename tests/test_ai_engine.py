@@ -99,9 +99,7 @@ class TestParseRawInput:
         all: round-tripping a bare URL through Gemini mangled repo names
         (github.com/kunchenguid/axi came back as axi_)."""
         result = parse_raw_input("https://github.com/kunchenguid/axi\n")
-        assert result == [
-            {"core_text": "https://github.com/kunchenguid/axi", "context_notes": ""}
-        ]
+        assert result == [{"core_text": "https://github.com/kunchenguid/axi", "context_notes": ""}]
         mock_gemini.models.generate_content.assert_not_called()
 
     def test_multiple_items(self, mock_gemini):

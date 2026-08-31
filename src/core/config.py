@@ -24,6 +24,12 @@ def apply_env_overrides(databases):
     replaces the fun-activities Location allowlist — same idea as the
     NOTION_<X>_DB_ID overrides in core/secrets.py. Values must still exist as
     options on the live Notion select (hydration intersects with live options).
+
+    NOTION_TASKS_PLACE_TAGS (comma-separated, e.g. "Hometown,Lake House") names
+    Tasks Tags options that mark "do when next at this place" tasks: they join the
+    Tags allowlist and are exposed to prompt instructions as {place_tags} (tasks
+    tagged with one get no fallback Due Date). Options must exist on the live
+    Notion property.
     """
     raw = os.environ.get("NOTION_FUN_ACTIVITIES_LOCATIONS")
     prop = (
@@ -34,6 +40,15 @@ def apply_env_overrides(databases):
     )
     if raw and prop is not None:
         prop["allowlist"] = [s.strip() for s in raw.split(",") if s.strip()]
+
+    raw_place_tags = os.environ.get("NOTION_TASKS_PLACE_TAGS")
+    tasks = databases.get("databases", {}).get("tasks")
+    if raw_place_tags and tasks is not None:
+        place_tags = [s.strip() for s in raw_place_tags.split(",") if s.strip()]
+        tasks["place_tags"] = place_tags
+        allow = tasks.get("properties", {}).get("Tags", {}).get("allowlist")
+        if allow is not None:
+            allow.extend(t for t in place_tags if t not in allow)
     return databases
 
 

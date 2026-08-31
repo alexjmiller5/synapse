@@ -1,3 +1,5 @@
+import re
+
 from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import get_notion
@@ -300,6 +302,13 @@ def _enrich_from_tmdb(category, data, kind):
         data["_tmdb_failed"] = True  # non-schema flag; build_notion_properties ignores it
         return
 
+    # Adopt TMDB's canonical title so the page matches the metadata written for it
+    # (the AI titled "disclosure day" as "Disclosure"; TMDB matched "Disclosure Day").
+    # Skip when the AI deliberately year-disambiguated ("Ghostbusters (2016)") —
+    # the bare matched title would collide with the original in dedupe.
+    if meta.get("matched_title") and not re.search(r"\(\d{4}\)", title):
+        data["Title"] = meta["matched_title"]
+
     if meta["genres"]:
         # Map to Alex's existing Notion 'Genres' options (hydrated onto the
         # property as _runtime_options); unknown genres pass through and
@@ -334,6 +343,11 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         # here too so the grounded value is clean wherever data is read.
         if source_text is not None:
             data["Name"] = clean_text(source_text)
+        # Place-tagged tasks (NOTION_TASKS_PLACE_TAGS) are dateless by design: the
+        # prompt returns "" when no date was given — drop it so an empty date
+        # payload never reaches Notion.
+        if not data.get("Due Date"):
+            data.pop("Due Date", None)
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 

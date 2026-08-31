@@ -124,6 +124,38 @@ class TestApplyBusinessLogic:
         # flags the pipeline to create a low-prior "fix metadata" chore
         assert result["_tmdb_failed"] is True
 
+    def test_movie_tmdb_adopts_matched_title(self):
+        """TMDB's canonical title replaces the AI's guess so the page title matches
+        the metadata written for it ('Disclosure' → 'Disclosure Day')."""
+        meta = {
+            "genres": [],
+            "director": "",
+            "cast": [],
+            "matched_title": "Disclosure Day",
+            "year": "2026",
+        }
+        data = {"Title": "Disclosure"}
+        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
+            result = apply_business_logic("movies", data)
+        assert result["Title"] == "Disclosure Day"
+
+    def test_movie_year_disambiguated_title_kept(self):
+        """An AI title with '(YYYY)' is deliberate remake disambiguation — the bare
+        TMDB matched title must not overwrite it (dedupe would collide)."""
+        meta = {"genres": [], "director": "", "cast": [], "matched_title": "Ghostbusters"}
+        data = {"Title": "Ghostbusters (2016)"}
+        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
+            result = apply_business_logic("movies", data)
+        assert result["Title"] == "Ghostbusters (2016)"
+
+    def test_tasks_empty_due_date_dropped(self):
+        """Place-tagged tasks are dateless: the prompt returns '' for Due Date and
+        the empty value must be removed, never sent to Notion."""
+        result = apply_business_logic(
+            "tasks", {"Name": "fix the dock lines", "Tags": ["Lake House"], "Due Date": ""}
+        )
+        assert "Due Date" not in result
+
     def test_tv_show_tmdb_override(self):
         meta = {"genres": ["Drama"], "director": "Vince Gilligan", "cast": ["Bryan Cranston"]}
         data = {"Title": "Breaking Bad", "Genres": ["Comedy"], "Director": "x"}

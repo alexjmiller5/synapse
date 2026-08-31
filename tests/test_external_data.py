@@ -374,7 +374,21 @@ TV_DETAIL = "https://api.themoviedb.org/3/tv/1396"
 class TestGetTmdbMetadata:
     @responses.activate
     def test_movie_happy_path(self):
-        responses.add(responses.GET, MOVIE_SEARCH, json={"results": [{"id": 603}]}, status=200)
+        responses.add(
+            responses.GET,
+            MOVIE_SEARCH,
+            json={
+                "results": [
+                    {
+                        "id": 603,
+                        "title": "The Matrix",
+                        "release_date": "1999-03-30",
+                        "vote_count": 26000,
+                    }
+                ]
+            },
+            status=200,
+        )
         responses.add(
             responses.GET,
             MOVIE_DETAIL,
@@ -396,10 +410,26 @@ class TestGetTmdbMetadata:
         assert meta["genres"] == ["Science Fiction", "Action"]
         assert meta["director"] == "Lana Wachowski"
         assert meta["cast"] == [f"Actor {i}" for i in range(5)]  # top ~5
+        assert meta["matched_title"] == "The Matrix"
+        assert meta["year"] == "1999"
 
     @responses.activate
     def test_tv_uses_created_by_for_director(self):
-        responses.add(responses.GET, TV_SEARCH, json={"results": [{"id": 1396}]}, status=200)
+        responses.add(
+            responses.GET,
+            TV_SEARCH,
+            json={
+                "results": [
+                    {
+                        "id": 1396,
+                        "name": "Breaking Bad",
+                        "first_air_date": "2008-01-20",
+                        "vote_count": 15000,
+                    }
+                ]
+            },
+            status=200,
+        )
         responses.add(
             responses.GET,
             TV_DETAIL,
@@ -431,6 +461,62 @@ class TestGetTmdbMetadata:
         responses.add(responses.GET, MOVIE_SEARCH, status=500)
         with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             assert get_tmdb_metadata("The Matrix", "movie") is None
+
+    @responses.activate
+    def test_low_vote_junk_match_returns_none(self):
+        """A top hit with almost no votes is fan-content, not the film Alex means —
+        return None so the _tmdb_failed cleanup path runs instead of trusting it."""
+        responses.add(
+            responses.GET,
+            MOVIE_SEARCH,
+            json={"results": [{"id": 9, "title": "Into the Backrooms", "vote_count": 1}]},
+            status=200,
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert get_tmdb_metadata("Backrooms II", "movie") is None
+
+    @responses.activate
+    def test_the_prefix_retry_finds_real_film(self):
+        """'The Backrooms' search returns only junk; the stripped 'Backrooms' retry
+        finds the real film and its title/year are surfaced as the match."""
+        responses.add(
+            responses.GET,
+            MOVIE_SEARCH,
+            json={"results": [{"id": 9, "title": "Into the Backrooms", "vote_count": 1}]},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            MOVIE_SEARCH,
+            json={
+                "results": [
+                    {
+                        "id": 42,
+                        "title": "Backrooms",
+                        "release_date": "2026-07-24",
+                        "vote_count": 3046,
+                    }
+                ]
+            },
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "https://api.themoviedb.org/3/movie/42",
+            json={
+                "genres": [{"name": "Horror"}],
+                "credits": {
+                    "crew": [{"job": "Director", "name": "Kane Parsons"}],
+                    "cast": [{"name": "Chiwetel Ejiofor"}],
+                },
+            },
+            status=200,
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            meta = get_tmdb_metadata("The Backrooms", "movie")
+        assert meta["matched_title"] == "Backrooms"
+        assert meta["year"] == "2026"
+        assert meta["director"] == "Kane Parsons"
 
 
 # ======================================================================

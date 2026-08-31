@@ -259,6 +259,48 @@ class TestProjectPipeline:
         assert props["Priority"]["select"]["name"] == "High"
         assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
 
+    def test_task_context_typod_project_rescued_by_classifier(self, mock_gemini, mock_notion):
+        """Deterministic 'task' path: when the contains-match misses (typo'd or
+        paraphrased project name) but the text mentions a project ('proj'), one
+        classifier call rescues the link — category stays tasks."""
+        mock_gemini.models.generate_content.side_effect = [
+            # Rescue classification (its category is ignored; only the project is used)
+            make_gemini_response(
+                {"category": "tasks", "related_project": "Notion Task Burndown Chart"}
+            ),
+            make_gemini_response(
+                {
+                    "Name": "add manual markers on dates",
+                    "Tags": ["Chore"],
+                    "Due Date": "2026-08-03",
+                }
+            ),
+        ]
+
+        _run(
+            _item("add manual markers on dates", "notion task burdown chart proj"),
+            project_prompts=["Notion Task Burndown Chart"],
+            project_id_map={"Notion Task Burndown Chart": "burndown-id"},
+        )
+
+        assert mock_gemini.models.generate_content.call_count == 2
+        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
+        assert props["Project"] == {"relation": [{"id": "burndown-id"}]}
+        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
+
+    def test_task_context_without_proj_mention_skips_rescue(self, mock_gemini, mock_notion):
+        """No project reference in text/context → the deterministic path stays at
+        one Gemini call (extraction only), no rescue classification."""
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": "clean the desk", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
+        ]
+
+        _run(_item("clean the desk", "low prior task"))
+
+        assert mock_gemini.models.generate_content.call_count == 1
+
     def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
         """If project name doesn't match, falls back to normal task creation."""
         responses = [
@@ -339,6 +381,32 @@ class TestYouTubePipeline:
         with patch("core.handlers.get_video_channel_details", return_value=None):
             _run(_item("https://youtu.be/abc123"))
         assert mock_notion.pages.create.called
+
+    def test_youtube_homepage_url_fails_loudly(self, mock_gemini, mock_notion):
+        """A videoless YouTube URL (bare youtube.com/) creates NO video page — the
+        error path logs Error(s) and creates a high-priority triage task instead."""
+        _setup_classify_extract(
+            mock_gemini,
+            "youtube-videos",
+            {
+                "Title": "Could not extract Video ID",
+                "Video URL": "https://youtube.com/",
+                "Status": "To Watch",
+            },
+        )
+        mock_notion.request.return_value = {"results": []}
+
+        _run(_item("https://youtube.com/"))
+
+        yt_db = get_db_id("youtube-videos")
+        tasks_db = get_db_id("tasks")
+        parents = [
+            c.kwargs.get("parent", {}).get("database_id")
+            for c in mock_notion.pages.create.call_args_list
+        ]
+        assert yt_db not in parents  # no junk video page
+        assert tasks_db in parents  # high-priority triage task created
+        assert _log_props(mock_notion)["Code Execution"]["status"]["name"] == "Error(s)"
 
 
 # ======================================================================

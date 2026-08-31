@@ -417,13 +417,26 @@ def tmdb_details(kind, tmdb_id, tmdb_key):
     return {"genres": genres, "director": director, "cast": cast}
 
 
+# A top search hit with almost no votes is fan-content/junk, not the film Alex
+# means (TMDB matched "The Backrooms" to a 1-vote short while the real film sat
+# under "Backrooms"). Below the floor we return None → the _tmdb_failed cleanup
+# path, instead of writing a junk match's metadata.
+TMDB_MIN_VOTES = 20
+
+
 def _tmdb_fetch(kind, title, tmdb_key):
     """Live-path lookup: take TMDB's top (popularity) result. The backfill uses
     tmdb_search + tmdb_details directly so it can pick by year/oldest instead."""
     results = tmdb_search(kind, title, tmdb_key)
-    if not results:
+    top = results[0] if results else None
+    # TMDB search treats a leading "The " literally and can miss the real film —
+    # retry stripped when the first pass found nothing credible.
+    if (top is None or top["votes"] < TMDB_MIN_VOTES) and title.lower().startswith("the "):
+        alt = tmdb_search(kind, title[4:], tmdb_key)
+        if alt and (top is None or alt[0]["votes"] > top["votes"]):
+            top = alt[0]
+    if top is None or top["votes"] < TMDB_MIN_VOTES:
         return None
-    top = results[0]
     meta = tmdb_details(kind, top["id"], tmdb_key)
     meta["matched_title"] = top["title"]
     meta["year"] = top["year"]

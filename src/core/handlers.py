@@ -9,7 +9,11 @@ from core.notion_utils import (
     keys_to_ids,
     prop_id,
 )
-from core.external_data import get_video_channel_details, sanitize_youtube_url
+from core.external_data import (
+    get_video_channel_details,
+    get_youtube_video_id,
+    sanitize_youtube_url,
+)
 
 
 def handle_places_logic(category, data, trips_id_map):
@@ -140,6 +144,12 @@ def handle_youtube_logic(category, data):
     # shared with different ?t=/?si= values maps to one page.
     if data.get("Video URL"):
         data["Video URL"] = sanitize_youtube_url(data["Video URL"])
+
+    # A YouTube URL with no video id (bare youtube.com/, a channel page) has no
+    # video to store — fail loudly so the pipeline's error path logs it and creates
+    # a triage task, instead of creating a junk "Could not extract Video ID" page.
+    if not data.get("Video URL") or not get_youtube_video_id(data["Video URL"]):
+        raise ValueError(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
 
     props = build_notion_properties(category, data)
     target_url = data.get("Video URL")

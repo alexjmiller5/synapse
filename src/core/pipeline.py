@@ -45,6 +45,34 @@ def _match_project(text, project_names):
     return None
 
 
+def _classify_with_ai(raw_text, user_context, project_prompts):
+    """One classifier call; returns the parsed {'category', 'related_project'} dict."""
+    proj_str = ", ".join(project_prompts) if project_prompts else "None"
+    print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
+    cat_prompt = generate_classification_prompt(proj_str)
+    classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+
+    response = generate_with_retry(
+        model=GEMINI_MODEL,
+        contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
+        config=types.GenerateContentConfig(
+            system_instruction=cat_prompt,
+            response_mime_type="application/json",
+            response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
+        ),
+    )
+
+    # --- VERBOSE DEBUGGING START ---
+    print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
+    if response.candidates and len(response.candidates) > 0:
+        print(f"🔍 DEBUG: Finish Reason: {response.candidates[0].finish_reason}")
+    else:
+        print("🔍 DEBUG: No candidates returned in response.")
+    # --- VERBOSE DEBUGGING END ---
+
+    return json.loads(response.text)
+
+
 def run_pipeline(
     item_data,
     project_prompts,
@@ -74,44 +102,19 @@ def run_pipeline(
             # it. ponytail: case-insensitive contains match on active project names —
             # simplest correct approach; the classifier path relies on exact map keys too.
             project = _match_project(f"{raw_text} {user_context}", project_prompts)
+            if not project and re.search(r"\bproj\w*", f"{raw_text} {user_context}", re.IGNORECASE):
+                # The text names a project the contains-match couldn't find (typo
+                # "burdown", paraphrase "file renaming convention proj") — ask the
+                # classifier just for the project: it sees the exact active-project
+                # list, so it returns exact map keys. Category stays tasks.
+                # ponytail: gated on the word "proj*" so plain task captures skip
+                # the extra LLM call; widen the gate if a rename slips through.
+                print("   🔁 No contains-match but 'proj' mentioned — classifier rescue")
+                project = _classify_with_ai(raw_text, user_context, project_prompts).get(
+                    "related_project"
+                )
         else:
-            proj_str = ", ".join(project_prompts) if project_prompts else "None"
-            print(f"🔍 DEBUG: Project Prompt String: {proj_str[:100]}...")
-            cat_prompt = generate_classification_prompt(proj_str)
-            classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
-
-            response = generate_with_retry(
-                model=GEMINI_MODEL,
-                contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
-                config=types.GenerateContentConfig(
-                    system_instruction=cat_prompt,
-                    response_mime_type="application/json",
-                    response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
-                ),
-            )
-
-            # --- VERBOSE DEBUGGING START ---
-            print(f"🔍 DEBUG: Response Object ID: {id(response)}")
-
-            # 1. Check raw text value
-            print(f"🔍 DEBUG: response.text is type: {type(response.text)}")
-            print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
-
-            # 2. Check Finish Reason (The key indicator for blocks)
-            if response.candidates and len(response.candidates) > 0:
-                candidate = response.candidates[0]
-                print(f"🔍 DEBUG: Finish Reason: {candidate.finish_reason}")
-
-                # 3. Check Safety Ratings (if available)
-                if hasattr(candidate, "safety_ratings"):
-                    print(f"🔍 DEBUG: Safety Ratings: {candidate.safety_ratings}")
-            else:
-                print("🔍 DEBUG: No candidates returned in response.")
-            # --- VERBOSE DEBUGGING END ---
-
-            # Check if text is None (Safety Filter Trigger)
-            classified = json.loads(response.text)
-
+            classified = _classify_with_ai(raw_text, user_context, project_prompts)
             category = classified.get("category", "tasks")
             project = classified.get("related_project")
         print(f"🤖 Classification: {category}")

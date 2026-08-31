@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from core.handlers import (
     handle_places_logic,
     handle_groceries_fun_logic,
@@ -154,6 +156,19 @@ class TestHandleYoutube:
             assert mock_notion.pages.create.called
             # Should have created channel + video + cleanup = 3 creates
             assert mock_notion.pages.create.call_count >= 2
+
+    def test_no_video_id_raises(self, mock_notion):
+        """A YouTube URL with no video id (homepage/channel page) must fail loudly —
+        never create a junk 'Could not extract Video ID' page."""
+        data = {"Title": "Could not extract Video ID", "Video URL": "https://youtube.com/"}
+        with pytest.raises(ValueError, match="No YouTube video ID"):
+            handle_youtube_logic("youtube-videos", data)
+        mock_notion.pages.create.assert_not_called()
+
+    def test_missing_video_url_raises(self, mock_notion):
+        with pytest.raises(ValueError, match="No YouTube video ID"):
+            handle_youtube_logic("youtube-videos", {"Title": "No URL at all"})
+        mock_notion.pages.create.assert_not_called()
 
     def test_duplicate_video_update(self, mock_notion):
         existing = make_notion_page("vid-id", "Title", "Old Video")
