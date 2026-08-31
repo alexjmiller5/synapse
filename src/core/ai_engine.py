@@ -187,6 +187,9 @@ def generate_extraction_prompt(
         )
 
     # 4. Instructions Section
+    # {place_tags}: the category's personal place tags (NOTION_TASKS_PLACE_TAGS
+    # via config.apply_env_overrides) — kept out of the committed yaml.
+    place_tags_json = json.dumps(db_config.get("place_tags", []))
     instr_lines = []
     for prop_name, rules in db_config.get("properties", {}).items():
         instr = rules.get("instruction")
@@ -194,6 +197,7 @@ def generate_extraction_prompt(
         if instr and not is_virtual:
             formatted_instr = instr.replace("{current_date}", today_eastern().isoformat())
             formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
+            formatted_instr = formatted_instr.replace("{place_tags}", place_tags_json)
             instr_lines.append(f"- `{prop_name}`: {formatted_instr}")
 
     return PROMPTS["extraction_template"].format(

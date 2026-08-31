@@ -16,3 +16,8 @@ TMDB_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/TMDB_API
 # Personal config (not a secret): comma-separated Location allowlist for
 # fun-activities — the committed databases.yaml carries generic example cities.
 NOTION_FUN_ACTIVITIES_LOCATIONS=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/NOTION_FUN_ACTIVITIES_LOCATIONS
+
+# Personal config (not a secret): comma-separated Tasks Tags options naming
+# personal places — joins the Tags allowlist; tasks tagged with one get no
+# fallback Due Date (done whenever the user is next at that place).
+NOTION_TASKS_PLACE_TAGS=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/NOTION_TASKS_PLACE_TAGS
