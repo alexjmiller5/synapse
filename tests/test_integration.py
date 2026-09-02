@@ -34,7 +34,11 @@ if GEMINI_API_KEY and GEMINI_API_KEY.startswith("fake-"):
 if not GEMINI_API_KEY:
     try:
         result = subprocess.run(
-            ["op", "read", "op://OpenClaw/Gemini Free Tier API Key/credential"],
+            [
+                "op",
+                "read",
+                "op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GEMINI_API_KEY",
+            ],
             capture_output=True,
             text=True,
             timeout=10,

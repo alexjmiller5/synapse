@@ -176,8 +176,23 @@ databases:
       Status:
         type: "status"
         required: true
-        allowlist: ["Priority", "Finished", "In Progress", "Not Started"]
-        instruction: "Analyze the user's intent. If they imply they finished it (e.g., 'watched', 'seen', 'rate'), use 'Finished'. If they are currently watching, use 'In Progress'. If they just mention the title with no context (e.g., 'The Matrix'), default to 'Not Started'. Or if they say 'Watch [title]' or 'Must watch [title]', use 'Not Started' because the user is essentially tell you they want to watch a movie and haven't. If they mention they gave up, use 'Gave Up'. If they mention watching parts of it, use 'Watched Parts'. If the user says need to watch or must watch or something along those lines, use 'Priority'."
+        allowlist:
+          [
+            "Priority",
+            "Not Started",
+            "Watched Some",
+            "In Progress",
+            "Finished",
+            "Gave Up",
+          ]
+        instruction: |
+          Determine the status based on the user's specific phrasing. FOLLOW THIS ORDER:
+          1. "Priority": If the user says "need to watch", "must watch", "priority", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [title]" - THAT IS "Not Started".
+          2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating.
+          3. "In Progress": If the user says "watching", "started", or "currently on".
+          4. "Gave Up": If the user stopped watching or disliked it.
+          5. "Watched Some": If they mention having watched parts/some episodes of it.
+          6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix"), or says "watch [title]" without urgency.
       Genres:
         type: "multi_select"
         required: true

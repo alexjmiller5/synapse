@@ -128,6 +128,33 @@ class TestYamlFixGuards:
         assert "priority movie" in instr.lower()
         assert "need to watch" in instr.lower()
 
+    def test_tv_status_allowlist_matches_live_options(self):
+        """The live TV Shows DB has six statuses (verified 2026-09-01); an
+        allowlist missing two makes them unreachable — hydration intersects
+        with live options, it never adds."""
+        allow = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["allowlist"]
+        assert set(allow) == {
+            "Priority",
+            "Not Started",
+            "Watched Some",
+            "In Progress",
+            "Finished",
+            "Gave Up",
+        }
+
+    def test_tv_status_instruction_uses_tv_names_and_is_unambiguous(self):
+        instr = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["instruction"]
+        # "Watched Parts" is the MOVIES name; on TV the partial-watch status is
+        # "Watched Some" — naming a non-existent status sends picks into the
+        # hydration filter and the field comes back empty
+        assert "Watched Parts" not in instr
+        assert "Watched Some" in instr
+        # "must watch" must map to exactly one status (Priority, matching
+        # movies) — the old text routed "Must watch [title]" to Not Started in
+        # one clause and "must watch" to Priority in another
+        assert "Must watch [title]" not in instr
+        assert "must watch" in instr.lower() and "Priority" in instr
+
     def test_youtube_status_need_to_watch_is_priority(self):
         instr = DATABASES["databases"]["youtube-videos"]["properties"]["Status"]["instruction"]
         assert "need to watch" in instr.lower()
