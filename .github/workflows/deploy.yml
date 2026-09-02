@@ -25,8 +25,8 @@ jobs:
         with:
           export-env: true
         env:
-          MODAL_TOKEN_ID: op://Synapse/Modal Synapse/token-id
-          MODAL_TOKEN_SECRET: op://Synapse/Modal Synapse/token-secret
+          MODAL_TOKEN_ID: op://Synapse/Synapse CI Modal Token/token-id
+          MODAL_TOKEN_SECRET: op://Synapse/Synapse CI Modal Token/token-secret
       - run: uv run pytest -m "not integration"
       # Secrets must exist BEFORE deploy — app.py references modal.Secret.from_name.
       - name: Push app secrets to Modal
