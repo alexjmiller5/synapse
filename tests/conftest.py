@@ -26,13 +26,14 @@ FAKE_SECRETS = {
     "spotify-client-secret": "fake-spotify-secret",
     "google-places-api-key": "fake-places-key",
     "google-youtube-api-key": "fake-youtube-key",
+    # life-data hub (movies/tv-shows)
+    "life-hub-url": "https://hub.test.invalid",
+    "life-hub-token": "fake-hub-token",
     # DB IDs
     "notion-tasks-db-id": "fake-tasks-db-id",
     "notion-groceries-db-id": "fake-groceries-db-id",
     "notion-ideas-db-id": "fake-ideas-db-id",
     "notion-quotes-db-id": "fake-quotes-db-id",
-    "notion-movies-db-id": "fake-movies-db-id",
-    "notion-tv-shows-db-id": "fake-tv-shows-db-id",
     "notion-podcasts-db-id": "fake-podcasts-db-id",
     "notion-youtube-videos-db-id": "fake-yt-videos-db-id",
     "notion-youtube-channels-db-id": "fake-yt-channels-db-id",

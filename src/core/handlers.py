@@ -1,3 +1,6 @@
+from typing import NamedTuple
+
+from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import get_notion
 from core.notion_utils import (
@@ -12,8 +15,22 @@ from core.notion_utils import (
 from core.external_data import (
     get_video_channel_details,
     get_youtube_video_id,
+    resolve_tmdb_id,
     sanitize_youtube_url,
 )
+from core.life_hub import push_rows
+from core.timeutils import now_utc_iso_ms
+
+
+class Failed(NamedTuple):
+    """A handler outcome that created nothing (a cleanup task was filed instead).
+
+    The pipeline logs it as Error(s) with no Created Item - returning None here
+    would be indistinguishable from a successful write with no URL, and the
+    Executions log would claim Success over an empty result.
+    """
+
+    detail: str
 
 
 def handle_places_logic(category, data, trips_id_map):
@@ -240,24 +257,37 @@ def handle_youtube_logic(category, data):
 
 
 def handle_movies_tv_logic(category, data):
-    status = data.get("Status")
-    eid = fetch_existing_page(category, data["Title"], "Title")
+    """Movies and TV shows are life-data rows, not Notion pages.
 
-    if eid:
-        print(f"   -> Found existing {category} {eid}...")
-        significant_statuses = [
-            "Priority",
-            "Finished",
-            "In Progress",
-            "Watched Parts",
-            "Gave Up",
-        ]
-        if status in significant_statuses:
-            print(f"   -> Updating status to {status}")
-            return update_status(eid, status, category).get("url")
-        return f"https://www.notion.so/{eid.replace('-', '')}"
+    The TMDB id IS the row id, so an unconfident match is worse than none: we
+    file a cleanup task and write nothing rather than pin a row to the wrong
+    film. Everything else about the title (genres, cast, poster) is derived on
+    the hub - we push only the columns we actually know, and the hub's upsert
+    touches only those, so a status capture never clobbers tags or date_watched.
+    """
+    table = DATABASES["databases"][category]["hub_table"]
+    kind = "movie" if category == "movies" else "tv"
+    title = data.get("Title")
 
-    return create_page(category, build_notion_properties(category, data)).get("url")
+    tmdb_id = resolve_tmdb_id(kind, title)
+    if not tmdb_id:
+        create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
+        return Failed(f"No confident TMDB match for {title!r} - nothing written")
+
+    # The extractor emits "" for a field it could not fill; status is required.
+    status = data.get("Status") or "Not Started"
+    row = {"id": tmdb_id, "status": status, "updated_at": now_utc_iso_ms()}
+    if data.get("Tags"):
+        row["tags"] = data["Tags"]
+
+    rejected = push_rows(table, [row]).get("rejected") or []
+    if rejected:
+        message = rejected[0].get("message")
+        create_cleanup_task(f"life-data rejected {title!r}: {message}")
+        return Failed(f"life-data rejected {table}/{tmdb_id}: {message}")
+
+    print(f"   ✅ Pushed {table}/{tmdb_id}")
+    return f"{table}/{tmdb_id}"
 
 
 def handle_bookmarks_logic(category, data):

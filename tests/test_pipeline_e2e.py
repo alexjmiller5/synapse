@@ -10,7 +10,7 @@ from unittest.mock import patch
 from core.pipeline import run_pipeline, run
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 from core.secrets import get_db_id
-from helpers import make_gemini_response, make_notion_page, props_of
+from helpers import make_gemini_response, props_of
 
 
 # ---------------------------------------------------------------------------
@@ -414,37 +414,46 @@ class TestYouTubePipeline:
 # Movie/TV Tests
 # ======================================================================
 class TestMovieTvPipeline:
-    def test_new_movie(self, mock_gemini, mock_notion):
+    def test_movie_pushed_to_life_data_and_logged_by_row_ref(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
             "movies",
-            {
-                "Title": "Inception",
-                "Genres": ["Sci-Fi"],
-                "Status": "Not Started",
-            },
+            {"Title": "Inception", "Status": "Not Started", "Tags": ["All-time Favorite"]},
         )
-        mock_notion.request.return_value = {"results": []}
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="27205"),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            _run(_item("Inception"))
 
-        _run(_item("Inception"))
-        mock_notion.pages.create.assert_called()
+        assert push.call_args.args[0] == "movies"
+        assert push.call_args.args[1][0]["id"] == "27205"
+        # No movie page in Notion - only the Executions log row, carrying the
+        # life-data row reference as Created Item.
+        log_props = props_of(mock_notion.pages.create.call_args, "logs")
+        assert log_props["Created Item"]["url"] == "movies/27205"
+        assert log_props["Category"]["select"]["name"] == "movies"
 
-    def test_existing_movie_status_update(self, mock_gemini, mock_notion):
+    def test_unresolvable_movie_files_a_cleanup_task(self, mock_gemini, mock_notion):
         _setup_classify_extract(
-            mock_gemini,
-            "movies",
-            {
-                "Title": "Inception",
-                "Status": "Finished",
-            },
+            mock_gemini, "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
         )
-        existing = make_notion_page("movie-id", "Title", "Inception")
-        # fetch_existing_page in handle_movies_tv_logic calls notion.request
-        mock_notion.request.return_value = {"results": [existing]}
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value=None),
+            patch("core.handlers.push_rows") as push,
+        ):
+            _run(_item("Some Obscure Film"))
 
-        _run(_item("Inception", "watched"))
-        # Should update existing movie status, not create new
-        mock_notion.pages.update.assert_called()
+        push.assert_not_called()
+        log = _log_props(mock_notion)
+        assert log["Code Execution"]["status"]["name"] == "Error(s)"
+        assert "Created Item" not in log
+        names = [
+            props_of(c, "tasks")["Name"]["title"][0]["text"]["content"]
+            for c in mock_notion.pages.create.call_args_list
+            if "Name" in props_of(c, "tasks")
+        ]
+        assert any("TMDB" in n for n in names)
 
 
 # ======================================================================

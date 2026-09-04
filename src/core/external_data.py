@@ -336,29 +336,6 @@ def map_genres(tmdb_genres, existing_options):
     return out
 
 
-def get_tmdb_metadata(title, kind):
-    """Authoritative genres/director/cast for a movie/TV title from TMDB (v3).
-
-    kind ∈ {"movie", "tv"}. Returns
-        {"genres": [name, ...], "director": "<name or ''>", "cast": [top ~5 names]}
-    or None when there's no API key, no search match, or any network/parse error
-    (the pipeline keeps the AI-extracted values whenever this returns None).
-    """
-    # TMDB is a raw ?api_key= REST call (no client object); read the key lazily
-    # from the env at call time (import-time reads cache None per Modal container).
-    tmdb_key = os.environ.get("TMDB_API_KEY")
-    if not tmdb_key:
-        return None
-    last_err = None
-    for attempt in range(3):  # Modal->TMDB latency is variable; retry transient failures
-        try:
-            return _tmdb_fetch(kind, title, tmdb_key)
-        except Exception as e:
-            last_err = e
-    print(f"   ⚠️ TMDB fetch failed for {kind} '{title}' after 3 tries: {last_err}")
-    return None
-
-
 def tmdb_search(kind, title, tmdb_key):
     """Search TMDB; return all results as [{id, title, year}, ...] (empty on none)."""
     r = requests.get(
@@ -419,28 +396,72 @@ def tmdb_details(kind, tmdb_id, tmdb_key):
 
 # A top search hit with almost no votes is fan-content/junk, not the film Alex
 # means (TMDB matched "The Backrooms" to a 1-vote short while the real film sat
-# under "Backrooms"). Below the floor we return None → the _tmdb_failed cleanup
-# path, instead of writing a junk match's metadata.
+# under "Backrooms"). Below the floor we resolve nothing → the cleanup-task
+# path, instead of pinning a life-data row to a junk match's id.
 TMDB_MIN_VOTES = 20
 
 
-def _tmdb_fetch(kind, title, tmdb_key):
-    """Live-path lookup: take TMDB's top (popularity) result. The backfill uses
-    tmdb_search + tmdb_details directly so it can pick by year/oldest instead."""
-    results = tmdb_search(kind, title, tmdb_key)
-    top = results[0] if results else None
-    # TMDB search treats a leading "The " literally and can miss the real film —
-    # retry stripped when the first pass found nothing credible.
-    if (top is None or top["votes"] < TMDB_MIN_VOTES) and title.lower().startswith("the "):
-        alt = tmdb_search(kind, title[4:], tmdb_key)
-        if alt and (top is None or alt[0]["votes"] > top["votes"]):
-            top = alt[0]
-    if top is None or top["votes"] < TMDB_MIN_VOTES:
+_YEAR_SUFFIX = re.compile(r"\s*\((\d{4})\)\s*$")
+
+
+def _toggle_the(query):
+    """'The Backrooms' <-> 'Backrooms' - TMDB's search treats a leading article
+    literally and can miss the real film either way round."""
+    return query[4:] if query.lower().startswith("the ") else f"The {query}"
+
+
+def _pick(results, query, year):
+    """The one result confident enough to write, or None.
+
+    Precedence: a single case-insensitive exact title match > a lone search
+    result > the most popular result clearing TMDB_MIN_VOTES. TMDB returns
+    results in popularity order. A `year` from the capture filters both the
+    exact matches and the popularity fallback (the id is row identity, so
+    handing back the other remake is a silent merge); it is ignored only when
+    no result carries that year at all.
+    """
+    exact = [r for r in results if r["title"].strip().lower() == query.strip().lower()]
+    if year:
+        exact = [r for r in exact if r["year"] == year]
+    if len(exact) == 1:
+        return exact[0]
+    if len(results) == 1:
+        return results[0]
+    pool = [r for r in results if r["year"] == year] if year else []
+    return next((r for r in (pool or results) if r["votes"] >= TMDB_MIN_VOTES), None)
+
+
+def resolve_tmdb_id(kind, title):
+    """The TMDB id (as a string) for a movie/TV title, or None if nothing matched
+    confidently. That id IS the life-data row id, so a wrong match is worse than
+    no match - the caller files a cleanup task instead.
+
+    A trailing '(YYYY)' pins a specific remake; it is dropped from the query TMDB
+    sees. One retry toggles a leading 'The ' and drops the year before giving up.
+    """
+    # TMDB is a raw ?api_key= REST call (no client object); read the key lazily
+    # from the env at call time (import-time reads cache None per Modal container).
+    tmdb_key = os.environ.get("TMDB_API_KEY")
+    if not tmdb_key or not title:
         return None
-    meta = tmdb_details(kind, top["id"], tmdb_key)
-    meta["matched_title"] = top["title"]
-    meta["year"] = top["year"]
-    return meta
+
+    m = _YEAR_SUFFIX.search(title)
+    year = m.group(1) if m else None
+    query = _YEAR_SUFFIX.sub("", title).strip()
+
+    for attempt_query, attempt_year in ((query, year), (_toggle_the(query), None)):
+        try:
+            results = tmdb_search(kind, attempt_query, tmdb_key)
+        except Exception as e:
+            print(f"   ⚠️ TMDB search failed for {kind} {attempt_query!r}: {e}")
+            return None
+        chosen = _pick(results, attempt_query, attempt_year)
+        if chosen:
+            print(f"   🎬 TMDB {kind} {title!r} -> {chosen['title']!r} ({chosen['id']})")
+            return str(chosen["id"])
+
+    print(f"   ⚠️ No confident TMDB {kind} match for {title!r}")
+    return None
 
 
 def enrich_context(category, raw_text):
