@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import get_notion
@@ -18,6 +20,17 @@ from core.external_data import (
 )
 from core.life_hub import push_rows
 from core.timeutils import now_utc_iso_ms
+
+
+class Failed(NamedTuple):
+    """A handler outcome that created nothing (a cleanup task was filed instead).
+
+    The pipeline logs it as Error(s) with no Created Item - returning None here
+    would be indistinguishable from a successful write with no URL, and the
+    Executions log would claim Success over an empty result.
+    """
+
+    detail: str
 
 
 def handle_places_logic(category, data, trips_id_map):
@@ -258,15 +271,20 @@ def handle_movies_tv_logic(category, data):
 
     tmdb_id = resolve_tmdb_id(kind, title)
     if not tmdb_id:
-        return create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
+        create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
+        return Failed(f"No confident TMDB match for {title!r} - nothing written")
 
-    row = {"id": tmdb_id, "status": data.get("Status"), "updated_at": now_utc_iso_ms()}
+    # The extractor emits "" for a field it could not fill; status is required.
+    status = data.get("Status") or "Not Started"
+    row = {"id": tmdb_id, "status": status, "updated_at": now_utc_iso_ms()}
     if data.get("Tags"):
         row["tags"] = data["Tags"]
 
     rejected = push_rows(table, [row]).get("rejected") or []
     if rejected:
-        return create_cleanup_task(f"life-data rejected {title!r}: {rejected[0].get('message')}")
+        message = rejected[0].get("message")
+        create_cleanup_task(f"life-data rejected {title!r}: {message}")
+        return Failed(f"life-data rejected {table}/{tmdb_id}: {message}")
 
     print(f"   ✅ Pushed {table}/{tmdb_id}")
     return f"{table}/{tmdb_id}"

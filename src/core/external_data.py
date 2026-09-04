@@ -413,9 +413,12 @@ def _toggle_the(query):
 def _pick(results, query, year):
     """The one result confident enough to write, or None.
 
-    Precedence: a single case-insensitive exact title match (pinned to `year`
-    when the capture carried one) > a lone search result > the most popular
-    result clearing TMDB_MIN_VOTES. TMDB returns results in popularity order.
+    Precedence: a single case-insensitive exact title match > a lone search
+    result > the most popular result clearing TMDB_MIN_VOTES. TMDB returns
+    results in popularity order. A `year` from the capture filters both the
+    exact matches and the popularity fallback (the id is row identity, so
+    handing back the other remake is a silent merge); it is ignored only when
+    no result carries that year at all.
     """
     exact = [r for r in results if r["title"].strip().lower() == query.strip().lower()]
     if year:
@@ -424,7 +427,8 @@ def _pick(results, query, year):
         return exact[0]
     if len(results) == 1:
         return results[0]
-    return next((r for r in results if r["votes"] >= TMDB_MIN_VOTES), None)
+    pool = [r for r in results if r["year"] == year] if year else []
+    return next((r for r in (pool or results) if r["votes"] >= TMDB_MIN_VOTES), None)
 
 
 def resolve_tmdb_id(kind, title):

@@ -66,7 +66,11 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   stanza carries no `db_id` and is skipped by `hydrate_dynamic_options`,
   `validate_all`, and `scripts/fetch_property_ids.py`, so its yaml allowlists
   ARE the catalog's options - keep them in step with life-data's catalog.
-  `Created Item` on the Executions log holds `<table>/<id>`, not a URL.
+  `Created Item` on the Executions log holds `<table>/<id>`, not a URL - it is
+  a Notion url property, so `log_job_outcome` retries once without it (ref moved
+  into `AI Summary`) rather than lose the whole row. A handler that wrote
+  nothing returns `handlers.Failed(detail)`, which the pipeline logs as
+  `Error(s)`; returning None there would log a Success over an empty result.
 - Notion DB ids are committed config, NOT secrets: each Notion-backed category
   stanza in `databases.yaml` has a `db_id` (non-category ids in the top-level `db_ids`
   mapping). `get_db_id` lets a `NOTION_<X>_DB_ID` env var override. Adding a

@@ -360,12 +360,26 @@ def log_job_outcome(
     if project_append:
         # Marks executions that appended a task/note to a project (filterable)
         props["Tags"] = _notion_multi_select(["project-append"])
+
+    def create(p):
+        get_notion().pages.create(parent={"database_id": log_id}, properties=keys_to_ids("logs", p))
+
     try:
-        get_notion().pages.create(
-            parent={"database_id": log_id}, properties=keys_to_ids("logs", props)
-        )
+        create(props)
     except Exception as e:
-        print(f"Log failed: {e}")
+        if "Created Item" not in props:
+            print(f"Log failed: {e}")
+            return
+        # Created Item is a url property, but a life-data reference is
+        # "movies/335984". Losing the whole execution row over it is worse than
+        # losing the link, so retry once with the ref moved into the text.
+        print(f"Log create failed ({e}) - retrying with Created Item as text")
+        ref = props.pop("Created Item")["url"]
+        props["AI Summary"] = _notion_rich_text(f"Created Item: {ref}\n{ai_summary_text}"[:2000])
+        try:
+            create(props)
+        except Exception as e2:
+            print(f"Log failed: {e2}")
 
 
 def fetch_existing_page(category, value, key="Name"):
