@@ -121,31 +121,33 @@ databases:
   #       virtual: true
 
   movies:
-    db_id: "d19641022be445f3977663c0ad388643"
+    # A life-data table, not a Notion DB: Synapse pushes {id, status, tags} to
+    # the hub, which derives title/year/genres/director/cast/poster from TMDB.
+    hub_table: "movies"
     description: "A movie title, genre, or film description to watch or rate. A bare 'need to watch X' with NO date is a movie (Status: Priority). But if there is a date/deadline, a 'task' context, or a request to edit the movies db (e.g. 'add X to my movies db'), it is a task, not a movie."
     properties:
       Title:
         type: "title"
         required: true
-        instruction: "The official movie title, EXACTLY as a movie database (TMDB/IMDb) would list it, so an automated metadata lookup finds the right film. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. Fix any typos, capitalization, or missing punctuation (e.g. 'the avengers' -> 'The Avengers'), DO NOT include the word 'movie' or 'film' unless it is part of the official name (e.g., 'The Lego Movie'). DISAMBIGUATE REMAKES: if the user clearly means a specific remake/version of a title with multiple films, append the release year in parentheses -> 'Ghostbusters (2016)'. Leave a bare title (no year) when they mean the original/most well-known version (e.g. 'Ghostbusters' = the 1984 original)."
-      Genres:
-        type: "multi_select"
-        required: true
-        instruction: "Select relevant genres."
-      Director:
-        type: "select"
-        # Open-world field: TMDB overrides it post-extraction, and enum-constraining
-        # 400+ distinct names 400s the Gemini call (grammar too complex).
-        create_new: true
-        instruction: "The director's name (if known)."
+        instruction: "The official movie title, EXACTLY as TMDB lists it, so an automated metadata lookup finds the right film. Try to extract from the user text if necessary -- like if user says 'led zeppelin documentary' the title is 'Becoming Led Zeppelin'. Fix any typos, capitalization, or missing punctuation (e.g. 'the avengers' -> 'The Avengers'), DO NOT include the word 'movie' or 'film' unless it is part of the official name (e.g., 'The Lego Movie'). DISAMBIGUATE REMAKES: if the user clearly means a specific remake/version of a title with multiple films, append the release year in parentheses -> 'Ghostbusters (2016)'. Leave a bare title (no year) when they mean the original/most well-known version (e.g. 'Ghostbusters' = the 1984 original)."
       Tags:
         type: "multi_select"
-        instruction: "If the user says the movie is an 'all time favorite' or 'all-time favorite' (or otherwise their favorite of all time), add the 'All-time Favorite' tag. Add 'Studio Ghibli' if the user says so OR if you know it is a Studio Ghibli film even when they don't say it. Leave empty if neither applies."
-        allowlist: ["All-time Favorite", "Studio Ghibli"]
-      Famous Cast Members:
-        type: "multi_select"
-        create_new: true # open-world, TMDB-overridden — see Director
-        instruction: "Famous actors in the movie."
+        instruction: "If the user says the movie is an 'all time favorite' or 'all-time favorite' (or otherwise their favorite of all time), add the 'All-time Favorite' tag. Add 'Studio Ghibli' if the user says so OR if you know it is a Studio Ghibli film even when they don't say it. Add a curated tag only when the user's words or a fact you are sure of calls for it -- these are the user's own labels, NOT genres (genres are filled in automatically). Leave empty if none applies."
+        allowlist:
+          [
+            "All-time Favorite",
+            "Studio Ghibli",
+            "LS477",
+            "Sad",
+            "Best Movies",
+            "Coming-of-age",
+            "Animé",
+            "Mocumentary",
+            "Spanish",
+            "Sport",
+            "Concert",
+            "Cult Classic",
+          ]
       Status:
         type: "status"
         required: true
@@ -163,16 +165,36 @@ databases:
           1. "Priority": If the user says "need to watch", "must watch", "priority movie", "priority", "dying to see", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [movie]" - THAT IS "Not Started".
           2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating. (This DB has no separate "Watched" status — a watched movie is "Finished".)
           3. "In Progress": If the user says "watching", "started", or "currently on".
-          4. "Gave Up": If the user stopped watching or disliked it.
-          5. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
+          4. "Watched Parts": If they mention having watched parts/some of it.
+          5. "Gave Up": If the user stopped watching or disliked it.
+          6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
   tv-shows:
-    db_id: "d9047a2b07e7411fa3f052e082a5baba"
+    # A life-data table - see the movies stanza above.
+    hub_table: "tv_shows"
     description: "A TV series title to start or track status of."
     properties:
       Title:
         type: "title"
         required: true
-        instruction: "The official TV show title, EXACTLY as a database (TMDB/IMDb) would list it, so an automated metadata lookup finds the right show. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Fix any typos, capitalization, or missing punctuation (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus'). If the user clearly means a specific remake/version of a title with multiple shows, append the release year in parentheses to disambiguate."
+        instruction: "The official TV show title, EXACTLY as TMDB lists it, so an automated metadata lookup finds the right show. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Fix any typos, capitalization, or missing punctuation (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus'). If the user clearly means a specific remake/version of a title with multiple shows, append the release year in parentheses to disambiguate."
+      Tags:
+        type: "multi_select"
+        instruction: "Add 'All-time Favorite' if the user says the show is an all-time favorite. Add a curated tag only when the user's words or a fact you are sure of calls for it -- these are the user's own labels, NOT genres (genres are filled in automatically). Leave empty if none applies."
+        allowlist:
+          [
+            "All-time Favorite",
+            "Animé",
+            "Dystopia",
+            "Classics",
+            "Mocumentary",
+            "Spanish",
+            "Sport",
+            "Game-Show",
+            "Medical",
+            "Video Game",
+            "Sitcom",
+            "Educational",
+          ]
       Status:
         type: "status"
         required: true
@@ -193,18 +215,6 @@ databases:
           4. "Gave Up": If the user stopped watching or disliked it.
           5. "Watched Some": If they mention having watched parts/some episodes of it.
           6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix"), or says "watch [title]" without urgency.
-      Genres:
-        type: "multi_select"
-        required: true
-        instruction: "Select relevant genres."
-      Director:
-        type: "select"
-        create_new: true # open-world, TMDB-overridden — see movies.Director
-        instruction: "The director's name (if known)."
-      Famous Cast Members:
-        type: "multi_select"
-        create_new: true # open-world, TMDB-overridden — see movies.Director
-        instruction: "Famous actors in the show."
 
   podcasts:
     db_id: "368344a44c9c40b3b9f9b35533e7f5cc"

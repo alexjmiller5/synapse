@@ -15,8 +15,15 @@ class TestGetDbId:
         assert get_db_id("tasks")  # non-empty
 
     def test_kebab_case_category(self, monkeypatch):
-        monkeypatch.delenv("NOTION_TV_SHOWS_DB_ID", raising=False)
-        assert get_db_id("tv-shows") == DATABASES["databases"]["tv-shows"]["db_id"]
+        monkeypatch.setenv("NOTION_FUN_ACTIVITIES_DB_ID", "env-override-id")
+        assert get_db_id("fun-activities") == "env-override-id"
+        monkeypatch.delenv("NOTION_FUN_ACTIVITIES_DB_ID", raising=False)
+        assert get_db_id("fun-activities") == DATABASES["databases"]["fun-activities"]["db_id"]
+
+    def test_hub_backed_category_has_no_db_id(self, monkeypatch):
+        """movies/tv-shows live in life-data - no Notion DB, so no id to find."""
+        monkeypatch.delenv("NOTION_MOVIES_DB_ID", raising=False)
+        assert get_db_id("movies") is None
 
     def test_non_category_id_from_top_level_mapping(self, monkeypatch):
         monkeypatch.delenv("NOTION_PROJECTS_DB_ID", raising=False)

@@ -1,7 +1,6 @@
 """Tests for business_logic.py — business rules, inventory, projects."""
 
 from core.timeutils import today_eastern
-from unittest.mock import patch
 
 from core.business_logic import (
     apply_business_logic,
@@ -88,65 +87,9 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("movies", data)
         assert result["Status"] == "Finished"
 
-    def test_movie_tmdb_overrides_ai_fields(self):
-        """A TMDB match overrides the AI-guessed Genres/Director/Famous Cast Members."""
-        meta = {
-            "genres": ["Science Fiction"],
-            "director": "Christopher Nolan",
-            "cast": ["Leonardo DiCaprio", "Ellen Page"],
-        }
-        data = {
-            "Title": "Inception",
-            "Genres": ["Thriller (AI guess)"],
-            "Director": "Wrong Guy",
-            "Famous Cast Members": ["AI Actor"],
-        }
-        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
-            result = apply_business_logic("movies", data)
-        assert result["Director"] == "Christopher Nolan"
-        assert result["Famous Cast Members"] == ["Leonardo DiCaprio", "Ellen Page"]
-        # Genres run through map_genres (no runtime options in test → passthrough)
-        assert result["Genres"] == ["Science Fiction"]
-
-    def test_movie_no_tmdb_match_keeps_ai_fields(self):
-        """No TMDB match (None) → the AI-extracted values are preserved."""
-        data = {
-            "Title": "Some Obscure Film",
-            "Genres": ["Drama"],
-            "Director": "AI Director",
-            "Famous Cast Members": ["AI Actor"],
-        }
-        with patch("core.business_logic.get_tmdb_metadata", return_value=None):
-            result = apply_business_logic("movies", data)
-        assert result["Genres"] == ["Drama"]
-        assert result["Director"] == "AI Director"
-        assert result["Famous Cast Members"] == ["AI Actor"]
-        # flags the pipeline to create a low-prior "fix metadata" chore
-        assert result["_tmdb_failed"] is True
-
-    def test_movie_tmdb_adopts_matched_title(self):
-        """TMDB's canonical title replaces the AI's guess so the page title matches
-        the metadata written for it ('Disclosure' → 'Disclosure Day')."""
-        meta = {
-            "genres": [],
-            "director": "",
-            "cast": [],
-            "matched_title": "Disclosure Day",
-            "year": "2026",
-        }
-        data = {"Title": "Disclosure"}
-        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
-            result = apply_business_logic("movies", data)
-        assert result["Title"] == "Disclosure Day"
-
-    def test_movie_year_disambiguated_title_kept(self):
-        """An AI title with '(YYYY)' is deliberate remake disambiguation — the bare
-        TMDB matched title must not overwrite it (dedupe would collide)."""
-        meta = {"genres": [], "director": "", "cast": [], "matched_title": "Ghostbusters"}
-        data = {"Title": "Ghostbusters (2016)"}
-        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
-            result = apply_business_logic("movies", data)
-        assert result["Title"] == "Ghostbusters (2016)"
+    def test_tv_show_default_status(self):
+        """TV shows default to Not Started too - life-data requires a status."""
+        assert apply_business_logic("tv-shows", {"Title": "Severance"})["Status"] == "Not Started"
 
     def test_tasks_empty_due_date_dropped(self):
         """Place-tagged tasks are dateless: the prompt returns '' for Due Date and
@@ -155,20 +98,6 @@ class TestApplyBusinessLogic:
             "tasks", {"Name": "fix the dock lines", "Tags": ["Lake House"], "Due Date": ""}
         )
         assert "Due Date" not in result
-
-    def test_tv_show_tmdb_override(self):
-        meta = {"genres": ["Drama"], "director": "Vince Gilligan", "cast": ["Bryan Cranston"]}
-        data = {"Title": "Breaking Bad", "Genres": ["Comedy"], "Director": "x"}
-        with patch("core.business_logic.get_tmdb_metadata", return_value=meta):
-            result = apply_business_logic("tv-shows", data)
-        assert result["Director"] == "Vince Gilligan"
-        assert result["Famous Cast Members"] == ["Bryan Cranston"]
-
-    def test_non_movie_category_never_tmdb_enriched(self):
-        """Categories other than movies/tv-shows never call TMDB."""
-        with patch("core.business_logic.get_tmdb_metadata") as mock_tmdb:
-            apply_business_logic("tasks", {"Name": "Watch Inception"})
-        mock_tmdb.assert_not_called()
 
     def test_podcasts_finished_sets_date(self):
         data = {"Episode Title": "Ep1", "Status": "Finished"}
@@ -358,12 +287,20 @@ class TestHydrateDynamicOptions:
                 for rules in details.get("properties", {}).values():
                     rules.pop("_runtime_options", None)
 
+    def test_hub_backed_categories_are_never_hydrated(self, mock_notion, monkeypatch):
+        """movies/tv-shows live in life-data - there is no Notion DB to read
+        options from, and their yaml allowlists ARE the catalog options. The
+        env override supplies a db_id, so only the hub_table guard can stop it."""
+        monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
+        hydrate_dynamic_options(only_category="movies")
+        mock_notion.databases.retrieve.assert_not_called()
+
     def test_fetch_options_matches_by_id_after_rename(self, mock_notion):
         """Rename-safety: the live schema property was RENAMED (name differs from
         databases.yaml) but kept its id — options are still found by id."""
         from core.notion_utils import prop_id
 
-        genres_id = prop_id("movies", "Genres")
+        genres_id = prop_id("podcasts", "Genres")
         mock_notion.databases.retrieve.return_value = {
             "properties": {
                 "Renamed Genres!!": {
@@ -373,7 +310,7 @@ class TestHydrateDynamicOptions:
                 }
             }
         }
-        opts = fetch_property_options("fake-movies-db", "Genres", "movies")
+        opts = fetch_property_options("fake-podcasts-db", "Genres", "podcasts")
         assert opts == ["Action", "Drama"]
 
     def test_warns_when_allowlist_option_missing_from_live_select(self, mock_notion, capsys):
@@ -501,6 +438,14 @@ class TestValidateConfig:
     def test_empty_schema_reports_issue(self):
         issues = validate_category(self.CAT, {"properties": {"Title": {"type": "title"}}}, {})
         assert issues and "could not fetch live schema" in issues[0]
+
+    def test_validate_all_skips_hub_backed_categories(self, mock_notion, monkeypatch):
+        """A life-data category has no live Notion schema to drift from."""
+        monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
+        mock_notion.databases.retrieve.return_value = {"properties": {}}
+        report = validate_all()
+        assert "movies" not in report
+        assert "tv-shows" not in report
 
     def test_validate_all_returns_dict(self, mock_notion):
         # every DB retrieve returns an empty schema -> every category reports drift

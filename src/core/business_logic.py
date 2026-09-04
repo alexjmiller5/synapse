@@ -1,11 +1,8 @@
-import re
-
 from core.config import DATABASES
 from core.secrets import get_db_id
 from core.clients import get_notion
 from core.timeutils import today_eastern
 from core.notion_utils import clean_text, prop_id
-from core.external_data import get_tmdb_metadata, map_genres
 from core.handlers import (
     handle_groceries_fun_logic,
     handle_youtube_logic,
@@ -143,8 +140,8 @@ def validate_all():
     Returns {category: [issues]} for categories with drift (empty dict = all good)."""
     report = {}
     for category, details in DATABASES.get("databases", {}).items():
-        if details.get("helper"):
-            continue
+        if details.get("helper") or details.get("hub_table"):
+            continue  # a life-data table has no live Notion schema to drift from
         db_id = get_db_id(category)
         if not db_id:
             report[category] = ["no db_id configured"]
@@ -166,8 +163,8 @@ def hydrate_dynamic_options(only_category=None):
     for category, details in DATABASES.get("databases", {}).items():
         if only_category and category != only_category:
             continue
-        if details.get("helper"):
-            continue
+        if details.get("helper") or details.get("hub_table"):
+            continue  # hub_table = a life-data table: no live Notion options to read
         db_id = get_db_id(category)
         if not db_id:
             print(f"   ⚠️ Skipping {category} (No DB ID)")
@@ -285,48 +282,6 @@ def fetch_active_projects():
     return prompt_list, id_map
 
 
-def _enrich_from_tmdb(category, data, kind):
-    """Override the AI's guessed Genres/Director/Famous Cast Members with
-    authoritative TMDB data for a movie/TV title.
-
-    On no key / no match / any error, get_tmdb_metadata returns None and we
-    flag `_tmdb_failed` so the pipeline creates a low-prior "fix metadata" chore
-    linked to the new page (instead of silently trusting the AI's guesses).
-    Each field is overridden only when TMDB actually supplies a value.
-    """
-    title = data.get("Title")
-    if not title:
-        return
-    meta = get_tmdb_metadata(title, kind)
-    if not meta:
-        data["_tmdb_failed"] = True  # non-schema flag; build_notion_properties ignores it
-        return
-
-    # Adopt TMDB's canonical title so the page matches the metadata written for it
-    # (the AI titled "disclosure day" as "Disclosure"; TMDB matched "Disclosure Day").
-    # Skip when the AI deliberately year-disambiguated ("Ghostbusters (2016)") —
-    # the bare matched title would collide with the original in dedupe.
-    if meta.get("matched_title") and not re.search(r"\(\d{4}\)", title):
-        data["Title"] = meta["matched_title"]
-
-    if meta["genres"]:
-        # Map to Alex's existing Notion 'Genres' options (hydrated onto the
-        # property as _runtime_options); unknown genres pass through and
-        # multi_select auto-creates them on write.
-        existing = (
-            DATABASES.get("databases", {})
-            .get(category, {})
-            .get("properties", {})
-            .get("Genres", {})
-            .get("_runtime_options", [])
-        )
-        data["Genres"] = map_genres(meta["genres"], existing)
-    if meta["director"]:
-        data["Director"] = meta["director"]
-    if meta["cast"]:
-        data["Famous Cast Members"] = meta["cast"]
-
-
 def apply_business_logic(category, data, related_project=None, source_text=None):
     today_str = today_eastern().isoformat()
 
@@ -351,13 +306,10 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 
-    elif category == "movies":
-        if "Status" not in data:
-            data["Status"] = "Not Started"
-        _enrich_from_tmdb(category, data, "movie")
-
-    elif category == "tv-shows":
-        _enrich_from_tmdb(category, data, "tv")
+    elif category in ("movies", "tv-shows"):
+        # life-data requires a status on every row; the rest of the metadata is
+        # derived on the hub from the TMDB id the handler resolves.
+        data.setdefault("Status", "Not Started")
 
     elif category == "podcasts":
         if data.get("Status") == "Finished":

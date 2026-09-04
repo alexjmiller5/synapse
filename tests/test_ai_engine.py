@@ -318,55 +318,45 @@ class TestEnumCap:
     be enum-constrained, and any hydrated option list past MAX_ENUM_OPTIONS must
     drop its enum instead of 400ing every capture in that category."""
 
-    def _movies_props(self):
+    def _podcast_props(self):
         from core.config import DATABASES
 
-        return DATABASES["databases"]["movies"]["properties"]
+        return DATABASES["databases"]["podcasts"]["properties"]
 
-    def test_movie_open_world_fields_have_no_enum(self, monkeypatch):
-        """Director / Famous Cast Members are create_new — no enum even when hydrated."""
-        props = self._movies_props()
-        monkeypatch.setitem(props["Director"], "_runtime_options", ["A Director"])
-        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", ["An Actor"])
-        schema = get_gemini_schema("movies")
-        assert "enum" not in schema["properties"]["Director"]
-        assert "enum" not in schema["properties"]["Famous Cast Members"]["items"]
-
-    def test_tv_open_world_fields_have_no_enum(self, monkeypatch):
-        from core.config import DATABASES
-
-        props = DATABASES["databases"]["tv-shows"]["properties"]
-        monkeypatch.setitem(props["Director"], "_runtime_options", ["A Director"])
-        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", ["An Actor"])
-        schema = get_gemini_schema("tv-shows")
-        assert "enum" not in schema["properties"]["Director"]
-        assert "enum" not in schema["properties"]["Famous Cast Members"]["items"]
+    def test_open_world_fields_have_no_enum(self, monkeypatch):
+        """Podcast Name / Producer are create_new - no enum even when hydrated."""
+        props = self._podcast_props()
+        monkeypatch.setitem(props["Podcast Name"], "_runtime_options", ["A Show"])
+        monkeypatch.setitem(props["Producer"], "_runtime_options", ["A Network"])
+        schema = get_gemini_schema("podcasts")
+        assert "enum" not in schema["properties"]["Podcast Name"]
+        assert "enum" not in schema["properties"]["Producer"]
 
     def test_enum_dropped_above_cap(self, monkeypatch):
         """A strict field whose live options outgrow the cap loses its enum."""
-        props = self._movies_props()
+        props = self._podcast_props()
         big = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
         monkeypatch.setitem(props["Genres"], "_runtime_options", big)
-        schema = get_gemini_schema("movies")
+        schema = get_gemini_schema("podcasts")
         assert "enum" not in schema["properties"]["Genres"]["items"]
 
     def test_enum_kept_at_cap(self, monkeypatch):
-        props = self._movies_props()
+        props = self._podcast_props()
         small = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS)]
         monkeypatch.setitem(props["Genres"], "_runtime_options", small)
-        schema = get_gemini_schema("movies")
+        schema = get_gemini_schema("podcasts")
         assert schema["properties"]["Genres"]["items"]["enum"] == small
 
     def test_prompt_omits_oversized_option_lists(self, monkeypatch):
         """The prompt's valid-options dump is capped too (2k names ≈ 30k wasted tokens)."""
-        props = self._movies_props()
-        big = [f"Actor Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
-        monkeypatch.setitem(props["Famous Cast Members"], "_runtime_options", big)
-        prompt = generate_extraction_prompt("movies", "some movie")
-        assert "Actor Number 5" not in prompt
+        props = self._podcast_props()
+        big = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
+        monkeypatch.setitem(props["Genres"], "_runtime_options", big)
+        prompt = generate_extraction_prompt("podcasts", "some podcast")
+        assert "Genre Number 5" not in prompt
 
     def test_prompt_keeps_small_option_lists(self, monkeypatch):
-        props = self._movies_props()
+        props = self._podcast_props()
         monkeypatch.setitem(props["Genres"], "_runtime_options", ["Sci-Fi", "Drama"])
-        prompt = generate_extraction_prompt("movies", "some movie")
+        prompt = generate_extraction_prompt("podcasts", "some podcast")
         assert "Sci-Fi" in prompt
