@@ -4,6 +4,7 @@ Each test sends realistic input through the full pipeline and verifies
 the correct Notion API calls are made with proper data.
 """
 
+import time
 from unittest.mock import patch
 
 from core.pipeline import run_pipeline, run
@@ -654,3 +655,56 @@ class TestProcessorEntryPoint:
             run({"raw_text": "Buy milk $ groceries @ Call John"})
 
             mock_parse.assert_called_once()
+
+
+# ======================================================================
+# Server-side dedupe (Receptor occasionally re-sends a thought)
+# ======================================================================
+class TestDedup:
+    def _run_with(self, seen, raw_text, mock_parse_holder):
+        with (
+            patch("core.pipeline.parse_raw_input", return_value=[]) as mock_parse,
+            patch("core.pipeline.fetch_active_projects", return_value=([], {})) as mock_fetch,
+            patch("core.pipeline.fetch_inventory_map", return_value={}),
+            patch("core.pipeline.fetch_trips_inventory", return_value=([], {})),
+        ):
+            run({"raw_text": raw_text}, seen=seen)
+            mock_parse_holder["parse"] = mock_parse
+            mock_parse_holder["fetch"] = mock_fetch
+
+    def test_exact_resend_is_skipped(self, mock_gemini, mock_notion):
+        seen, calls = {}, {}
+        self._run_with(seen, "Buy milk", calls)
+        assert calls["parse"].call_count == 1
+        assert len(seen) == 1
+
+        self._run_with(seen, "Buy milk", calls)
+        assert calls["parse"].call_count == 0
+        assert calls["fetch"].call_count == 0  # skipped before any Notion reads
+
+    def test_whitespace_variants_are_the_same_thought(self, mock_gemini, mock_notion):
+        seen, calls = {}, {}
+        self._run_with(seen, "Buy milk", calls)
+        self._run_with(seen, "  Buy milk\n", calls)
+        assert calls["parse"].call_count == 0
+
+    def test_different_text_is_processed(self, mock_gemini, mock_notion):
+        seen, calls = {}, {}
+        self._run_with(seen, "Buy milk", calls)
+        self._run_with(seen, "Buy eggs", calls)
+        assert calls["parse"].call_count == 1
+        assert len(seen) == 2
+
+    def test_old_entry_is_reprocessed(self, mock_gemini, mock_notion):
+        from core.pipeline import DEDUP_WINDOW_S, _dedup_key
+
+        seen, calls = {_dedup_key("Buy milk"): time.time() - DEDUP_WINDOW_S - 1}, {}
+        self._run_with(seen, "Buy milk", calls)
+        assert calls["parse"].call_count == 1
+        assert time.time() - seen[_dedup_key("Buy milk")] < 5  # timestamp refreshed
+
+    def test_no_store_means_no_dedup(self, mock_gemini, mock_notion):
+        calls = {}
+        self._run_with(None, "Buy milk", calls)
+        self._run_with(None, "Buy milk", calls)
+        assert calls["parse"].call_count == 1

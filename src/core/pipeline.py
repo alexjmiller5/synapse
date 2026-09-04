@@ -1,5 +1,7 @@
+import hashlib
 import json
 import re
+import time
 
 from google.genai import types
 
@@ -222,11 +224,36 @@ def payload_error(payload):
     return None
 
 
-def run(payload: dict):
+# Receptor's iOS background uploads occasionally re-send a thought whose success
+# callback got lost, so the same raw_text can arrive twice hours apart. The
+# window is long because a legitimately repeated verbatim capture within a day
+# is rarer than that failure mode.
+DEDUP_WINDOW_S = 24 * 60 * 60
+
+
+def _dedup_key(raw_text: str) -> str:
+    return hashlib.sha256(raw_text.strip().encode()).hexdigest()
+
+
+def run(payload: dict, seen=None):
+    """Process one webhook payload.
+
+    `seen` is any mapping (a modal.Dict in production) of dedup key -> epoch
+    seconds of the last time that exact raw_text was processed. A resend inside
+    DEDUP_WINDOW_S is skipped; the key is marked only after processing, so a
+    crashed run is retried rather than deduped away. None disables the check.
+    """
     print("🧠 Worker awake!")
     if not get_settings().gemini_api_key or not PROMPTS:
         print("❌ Critical: Missing API Key or Prompts")
         return
+
+    key = _dedup_key(payload["raw_text"])
+    if seen is not None:
+        last = seen.get(key)
+        if last is not None and time.time() - last < DEDUP_WINDOW_S:
+            print(f"⏭️ Duplicate: same raw_text processed {int(time.time() - last)}s ago — skipping")
+            return
 
     # Option hydration is deferred to run_pipeline (only the classified
     # category) — that alone cut ~40 upfront Notion calls per thought to ~2-3.
@@ -263,3 +290,6 @@ def run(payload: dict):
 
     except Exception as e:
         print(f"❌ Critical Event Error: {e}")
+
+    if seen is not None:
+        seen[key] = time.time()
