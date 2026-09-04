@@ -14,6 +14,12 @@ tests or on any future platform.
   queue. Do not add Pub/Sub/Redis/celery.
 - `process` runs with `max_containers=1`: Notion dedupe is query-then-create,
   not atomic, so runs must be serialized. Don't raise it.
+- Exact resends are dropped server-side: `run(payload, seen=...)` hashes the
+  stripped `raw_text` and skips it when the same hash was processed inside
+  `pipeline.DEDUP_WINDOW_S` (24h). The store is the `synapse-seen-inputs`
+  `modal.Dict` (app.py); the key is written only AFTER a run completes, so a
+  crashed run still gets its Modal retry. Receptor's iOS background uploads
+  re-send when a success callback is lost - this is the backstop for that.
 - Endpoints use `requires_proxy_auth=True` — callers send `Modal-Key` +
   `Modal-Secret` headers (mint tokens in the Modal dashboard → Settings →
   Proxy Auth Tokens). Never expose an unauthenticated endpoint.

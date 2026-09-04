@@ -22,6 +22,10 @@ image = (
 
 secrets = [modal.Secret.from_name(APP_NAME)]
 
+# raw_text hash -> epoch seconds last processed; the pipeline skips exact resends
+# inside its dedup window. Entries expire after 7 idle days on Modal's side.
+seen_inputs = modal.Dict.from_name(f"{APP_NAME}-seen-inputs", create_if_missing=True)
+
 
 @app.function(
     image=image,
@@ -37,7 +41,7 @@ def process(payload: dict):
     """Background worker — .spawn()ed from the webhook. spawn() IS the queue."""
     from core.pipeline import run
 
-    return run(payload)
+    return run(payload, seen=seen_inputs)
 
 
 @app.function(image=image, secrets=secrets)
