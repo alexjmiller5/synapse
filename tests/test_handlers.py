@@ -1,5 +1,6 @@
 """Tests for handlers.py — category-specific logic for all Notion DB categories."""
 
+import re
 from unittest.mock import patch
 
 import pytest
@@ -213,43 +214,87 @@ class TestHandleYoutube:
 
 
 # ======================================================================
-# handle_movies_tv_logic
+# handle_movies_tv_logic - movies/TV live in life-data, not Notion
 # ======================================================================
+ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+
+
 class TestHandleMoviesTv:
-    def test_new_movie(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {"Title": "Inception", "Status": "Not Started", "Genres": ["Sci-Fi"]}
+    def test_confident_match_pushes_one_row(self, mock_notion):
+        data = {"Title": "Inception", "Status": "Not Started", "Tags": ["All-time Favorite"]}
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="27205") as resolve,
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            ref = handle_movies_tv_logic("movies", data)
 
-        handle_movies_tv_logic("movies", data)
-        mock_notion.pages.create.assert_called_once()
-
-    def test_existing_movie_significant_status(self, mock_notion):
-        existing = make_notion_page("movie-id", "Title", "Inception")
-        # fetch_existing_page calls notion.request
-        mock_notion.request.return_value = {"results": [existing]}
-        data = {"Title": "Inception", "Status": "Finished"}
-
-        handle_movies_tv_logic("movies", data)
-        mock_notion.pages.update.assert_called()
+        resolve.assert_called_once_with("movie", "Inception")
+        push.assert_called_once()
+        table, rows = push.call_args.args
+        assert table == "movies"
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["id"] == "27205"
+        assert row["status"] == "Not Started"
+        assert row["tags"] == ["All-time Favorite"]
+        assert ISO_MS.match(row["updated_at"])
+        # Created Item is the life-data row reference, not a Notion URL
+        assert ref == "movies/27205"
+        # Nothing goes to Notion for these categories any more
         mock_notion.pages.create.assert_not_called()
-
-    def test_existing_movie_insignificant_status(self, mock_notion):
-        existing = make_notion_page("movie-id", "Title", "Inception")
-        mock_notion.request.return_value = {"results": [existing]}
-        data = {"Title": "Inception", "Status": "Not Started"}
-
-        url = handle_movies_tv_logic("movies", data)
-        # Should NOT update or create — just return URL
         mock_notion.pages.update.assert_not_called()
-        mock_notion.pages.create.assert_not_called()
-        assert "movieid" in (url or "").replace("-", "")
 
-    def test_tv_show_same_logic(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {"Title": "Severance", "Status": "Finished", "Genres": ["Drama"]}
+    def test_tags_omitted_when_not_extracted(self):
+        """Push only the columns you have - the hub upsert touches only those, so a
+        status update must not blank an existing row's tags."""
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="27205"),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Finished"})
+        assert set(push.call_args.args[1][0]) == {"id", "status", "updated_at"}
 
-        handle_movies_tv_logic("tv-shows", data)
+    def test_tv_shows_push_to_tv_shows_table(self):
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="1396") as resolve,
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            ref = handle_movies_tv_logic(
+                "tv-shows", {"Title": "Breaking Bad", "Status": "Finished"}
+            )
+        resolve.assert_called_once_with("tv", "Breaking Bad")
+        assert push.call_args.args[0] == "tv_shows"
+        assert ref == "tv_shows/1396"
+
+    def test_no_tmdb_match_files_cleanup_task_and_pushes_nothing(self, mock_notion):
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value=None),
+            patch("core.handlers.push_rows") as push,
+        ):
+            handle_movies_tv_logic("movies", {"Title": "Some Obscure Film", "Status": "Priority"})
+
+        push.assert_not_called()
         mock_notion.pages.create.assert_called_once()
+        props = sent_props(mock_notion.pages.create, "tasks")
+        assert "Some Obscure Film" in props["Name"]["title"][0]["text"]["content"]
+        assert "TMDB" in props["Name"]["title"][0]["text"]["content"]
+
+    def test_rejected_row_files_cleanup_task_with_the_rule_message(self, mock_notion):
+        rejected = {
+            "id": "27205",
+            "col": "status",
+            "rule": "options",
+            "message": "status is not one of the allowed options",
+        }
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="27205"),
+            patch("core.handlers.push_rows", return_value={"upserted": 0, "rejected": [rejected]}),
+        ):
+            handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Bogus"})
+
+        mock_notion.pages.create.assert_called_once()
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert rejected["message"] in name
 
 
 # ======================================================================

@@ -21,3 +21,8 @@ NOTION_FUN_ACTIVITIES_LOCATIONS=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5
 # personal places — joins the Tags allowlist; tasks tagged with one get no
 # fallback Due Date (done whenever the user is next at that place).
 NOTION_TASKS_PLACE_TAGS=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/NOTION_TASKS_PLACE_TAGS
+
+# life-data hub - movies and tv-shows are life-data tables, not Notion DBs.
+# The token is the hub's `synapse` client token (tables:write scope).
+LIFE_HUB_URL=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/LIFE_HUB_URL
+LIFE_HUB_TOKEN=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/LIFE_HUB_TOKEN

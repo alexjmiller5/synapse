@@ -172,10 +172,6 @@ def create_page(category, props):
     # --- ICON LOGIC ---
     if category == "podcasts":
         body_params["icon"] = {"type": "emoji", "emoji": "🎧"}
-    elif category == "movies":
-        body_params["icon"] = {"type": "emoji", "emoji": "🎬"}
-    elif category == "tv-shows":
-        body_params["icon"] = {"type": "emoji", "emoji": "📺"}
     elif category == "bookmarks":
         bookmark_url = props.get("URL", {}).get("url")
         if bookmark_url:

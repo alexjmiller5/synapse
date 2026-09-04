@@ -123,6 +123,51 @@ class TestYamlFixGuards:
             in DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
         )
 
+    def test_media_categories_are_hub_backed_not_notion(self):
+        """movies/tv-shows write to life-data: they carry a hub_table and NO db_id
+        (a db_id would put them back on the Notion hydrate/validate/write paths)."""
+        for cat, table in (("movies", "movies"), ("tv-shows", "tv_shows")):
+            stanza = DATABASES["databases"][cat]
+            assert stanza["hub_table"] == table
+            assert "db_id" not in stanza
+
+    def test_media_derived_properties_removed(self):
+        """Genres/Director/Famous Cast Members are TMDB-derived ON THE HUB now -
+        extracting AI guesses for them would be rejected as unprovenanced."""
+        for cat in ("movies", "tv-shows"):
+            props = DATABASES["databases"][cat]["properties"]
+            assert set(props) == {"Title", "Status", "Tags"}
+
+    def test_media_tags_allowlists_match_the_life_data_catalog(self):
+        assert set(DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]) == {
+            "All-time Favorite",
+            "Studio Ghibli",
+            "LS477",
+            "Sad",
+            "Best Movies",
+            "Coming-of-age",
+            "Animé",
+            "Mocumentary",
+            "Spanish",
+            "Sport",
+            "Concert",
+            "Cult Classic",
+        }
+        assert set(DATABASES["databases"]["tv-shows"]["properties"]["Tags"]["allowlist"]) == {
+            "All-time Favorite",
+            "Animé",
+            "Dystopia",
+            "Classics",
+            "Mocumentary",
+            "Spanish",
+            "Sport",
+            "Game-Show",
+            "Medical",
+            "Video Game",
+            "Sitcom",
+            "Educational",
+        }
+
     def test_movies_status_priority_keywords(self):
         instr = DATABASES["databases"]["movies"]["properties"]["Status"]["instruction"]
         assert "priority movie" in instr.lower()

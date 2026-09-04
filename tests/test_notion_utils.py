@@ -296,24 +296,24 @@ class TestBuildNotionProperties:
 class TestPropertyIdRefs:
     def test_prop_id_maps_and_falls_back(self):
         # a real property resolves to an opaque id (not the name)
-        assert prop_id("movies", "Director") != "Director"
+        assert prop_id("podcasts", "Producer") != "Producer"
         # unknown property / category -> falls back to the name (never crashes)
-        assert prop_id("movies", "Nonexistent") == "Nonexistent"
+        assert prop_id("podcasts", "Nonexistent") == "Nonexistent"
         assert prop_id("no-such-category", "Whatever") == "Whatever"
 
     def test_keys_to_ids_remaps_keys_not_values(self):
-        out = keys_to_ids("movies", {"Genres": {"multi_select": [{"name": "Action"}]}})
-        assert prop_id("movies", "Genres") in out
+        out = keys_to_ids("podcasts", {"Genres": {"multi_select": [{"name": "Comedy"}]}})
+        assert prop_id("podcasts", "Genres") in out
         assert "Genres" not in out  # re-keyed to the id
-        # the option VALUE ("Action") is untouched — stays a name
-        assert out[prop_id("movies", "Genres")]["multi_select"] == [{"name": "Action"}]
+        # the option VALUE ("Comedy") is untouched - stays a name
+        assert out[prop_id("podcasts", "Genres")]["multi_select"] == [{"name": "Comedy"}]
 
     def test_create_page_sends_id_keyed_payload(self, mock_notion):
-        create_page("movies", {"Director": _notion_select("Nolan")})
+        create_page("podcasts", {"Producer": _notion_select("NPR")})
         raw = mock_notion.pages.create.call_args.kwargs["properties"]
-        assert prop_id("movies", "Director") in raw
-        assert "Director" not in raw
-        assert raw[prop_id("movies", "Director")]["select"]["name"] == "Nolan"
+        assert prop_id("podcasts", "Producer") in raw
+        assert "Producer" not in raw
+        assert raw[prop_id("podcasts", "Producer")]["select"]["name"] == "NPR"
 
 
 # ======================================================================
@@ -333,16 +333,6 @@ class TestCreatePage:
         create_page("podcasts", props)
         call_kwargs = mock_notion.pages.create.call_args
         assert call_kwargs.kwargs["icon"]["emoji"] == "🎧"
-
-    def test_movie_icon(self, mock_notion):
-        create_page("movies", {"Title": _notion_title("Film")})
-        call_kwargs = mock_notion.pages.create.call_args
-        assert call_kwargs.kwargs["icon"]["emoji"] == "🎬"
-
-    def test_tv_show_icon(self, mock_notion):
-        create_page("tv-shows", {"Title": _notion_title("Show")})
-        call_kwargs = mock_notion.pages.create.call_args
-        assert call_kwargs.kwargs["icon"]["emoji"] == "📺"
 
     def test_no_icon_for_tasks(self, mock_notion):
         create_page("tasks", {"Name": _notion_title("Task")})
@@ -452,31 +442,31 @@ class TestCreateProjectTask:
 # ======================================================================
 class TestFetchExistingPage:
     def test_found(self, mock_notion):
-        page = make_notion_page("found-id", "Title", "Inception")
+        page = make_notion_page("found-id", "Title", "Kayaking")
         mock_notion.request.return_value = {"results": [page]}
 
-        result = fetch_existing_page("movies", "Inception", "Title")
+        result = fetch_existing_page("fun-activities", "Kayaking", "Title")
         assert result == "found-id"
 
     def test_not_found(self, mock_notion):
         mock_notion.request.return_value = {"results": []}
-        result = fetch_existing_page("movies", "NonExistent", "Title")
+        result = fetch_existing_page("fun-activities", "NonExistent", "Title")
         assert result is None
 
     def test_the_prefix_removal(self, mock_notion):
-        """'The Matrix' should search for 'Matrix' (smart search)."""
+        """'The Freedom Trail' should search for 'Freedom Trail' (smart search)."""
         mock_notion.request.return_value = {"results": []}
-        fetch_existing_page("movies", "The Matrix", "Title")
+        fetch_existing_page("fun-activities", "The Freedom Trail", "Title")
         call_body = mock_notion.request.call_args.kwargs["body"]
         assert call_body["filter"]["property"] == "Title"
-        assert call_body["filter"]["title"]["contains"] == "Matrix"
+        assert call_body["filter"]["title"]["contains"] == "Freedom Trail"
 
     def test_no_notion_client(self):
         with patch("core.notion_utils.get_notion", return_value=None):
-            result = fetch_existing_page("movies", "Test", "Title")
+            result = fetch_existing_page("fun-activities", "Test", "Title")
             assert result is None
 
     def test_no_db_id(self):
         with patch("core.notion_utils.get_db_id", return_value=None):
-            result = fetch_existing_page("movies", "Test", "Title")
+            result = fetch_existing_page("fun-activities", "Test", "Title")
             assert result is None
