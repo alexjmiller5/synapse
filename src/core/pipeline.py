@@ -24,6 +24,7 @@ from core.ai_engine import (
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 
 from core.external_data import enrich_context
+from core.handlers import Failed
 from core.business_logic import (
     hydrate_dynamic_options,
     fetch_active_projects,
@@ -181,12 +182,6 @@ def run_pipeline(
         else:
             url = execute_logic(category, extracted, inventory_map, trips_id_map)
 
-            # TMDB lookup failed for a movie/TV title — flag it for a manual fix
-            # instead of trusting the AI's guessed genres/director/cast.
-            if url and category in ("movies", "tv-shows") and extracted.get("_tmdb_failed"):
-                title = extracted.get("Title", raw_text)
-                create_cleanup_task(f"Fix metadata for: {title}", link_url=url)
-
             if url and url_context:
                 is_scrape_error = (
                     category == "bookmarks" and "Error fetching metadata" in url_context
@@ -199,10 +194,16 @@ def run_pipeline(
                     )
                     create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
+        # A handler that wrote nothing returns Failed - never log that as Success.
+        outcome, details = "Success", ""
+        if isinstance(url, Failed):
+            outcome, details, url = "Error(s)", url.detail, None
+
         log_job_outcome(
             full_str_for_log,
             category,
-            "Success",
+            outcome,
+            details=details,
             created_url=url,
             ai_data=log_payload,
             project_append=project_append,

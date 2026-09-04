@@ -15,8 +15,9 @@ from core.external_data import (
     resolve_final_url,
     get_tal_metadata,
     sanitize_youtube_url,
-    get_tmdb_metadata,
+    resolve_tmdb_id,
     map_genres,
+    TMDB_MIN_VOTES,
 )
 
 
@@ -363,160 +364,146 @@ class TestEnrichContext:
 
 
 # ======================================================================
-# get_tmdb_metadata
+# resolve_tmdb_id
 # ======================================================================
 MOVIE_SEARCH = "https://api.themoviedb.org/3/search/movie"
-MOVIE_DETAIL = "https://api.themoviedb.org/3/movie/603"
 TV_SEARCH = "https://api.themoviedb.org/3/search/tv"
-TV_DETAIL = "https://api.themoviedb.org/3/tv/1396"
 
 
-class TestGetTmdbMetadata:
+def _result(id_, title, year="1999", votes=5000):
+    return {"id": id_, "title": title, "release_date": f"{year}-03-30", "vote_count": votes}
+
+
+def _search(results, url=MOVIE_SEARCH):
+    responses.add(responses.GET, url, json={"results": results}, status=200)
+
+
+class TestResolveTmdbId:
     @responses.activate
-    def test_movie_happy_path(self):
-        responses.add(
-            responses.GET,
-            MOVIE_SEARCH,
-            json={
-                "results": [
-                    {
-                        "id": 603,
-                        "title": "The Matrix",
-                        "release_date": "1999-03-30",
-                        "vote_count": 26000,
-                    }
-                ]
-            },
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            MOVIE_DETAIL,
-            json={
-                "genres": [{"name": "Science Fiction"}, {"name": "Action"}],
-                "credits": {
-                    "crew": [
-                        {"job": "Writer", "name": "Nope"},
-                        {"job": "Director", "name": "Lana Wachowski"},
-                    ],
-                    "cast": [{"name": f"Actor {i}"} for i in range(10)],
-                },
-            },
-            status=200,
+    def test_single_exact_title_match_wins_over_a_more_popular_result(self):
+        """An exact (case-insensitive) title match beats TMDB's popularity order."""
+        _search(
+            [
+                _result(1, "The Matrix Resurrections", votes=90000),
+                _result(603, "the matrix", votes=26000),
+            ]
         )
         with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            meta = get_tmdb_metadata("The Matrix", "movie")
-
-        assert meta["genres"] == ["Science Fiction", "Action"]
-        assert meta["director"] == "Lana Wachowski"
-        assert meta["cast"] == [f"Actor {i}" for i in range(5)]  # top ~5
-        assert meta["matched_title"] == "The Matrix"
-        assert meta["year"] == "1999"
+            assert resolve_tmdb_id("movie", "The Matrix") == "603"
 
     @responses.activate
-    def test_tv_uses_created_by_for_director(self):
+    def test_year_suffix_pins_the_remake(self):
+        _search(
+            [
+                _result(620, "Ghostbusters", year="1984", votes=7000),
+                _result(43074, "Ghostbusters", year="2016", votes=4000),
+            ]
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Ghostbusters (2016)") == "43074"
+        # the year suffix is stripped from the query TMDB actually sees
+        assert "Ghostbusters (2016)" not in responses.calls[0].request.url
+
+    @responses.activate
+    def test_lone_result_is_taken_even_below_the_vote_floor(self):
+        _search([_result(9, "Some Obscure Doc", votes=3)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "A Title That Differs") == "9"
+
+    @responses.activate
+    def test_ambiguous_titles_fall_back_to_popularity_above_the_vote_floor(self):
+        """No exact match: take the most popular result clearing TMDB_MIN_VOTES -
+        a near-voteless top hit is fan content, not the film Alex means."""
+        _search(
+            [
+                _result(9, "Into the Backrooms", votes=TMDB_MIN_VOTES - 1),
+                _result(42, "Backrooms II", votes=3046),
+            ]
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Backrooms 2") == "42"
+
+    @responses.activate
+    def test_year_filters_the_popularity_fallback(self):
+        """No exact title match, but the capture pinned a year: the id IS row
+        identity, so the fallback must not hand back the other remake."""
+        _search(
+            [
+                _result(1, "Ghostbusters: Afterlife", year="1984", votes=9000),
+                _result(2, "Ghostbusters: Answer the Call", year="2016", votes=4000),
+            ]
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Ghostbusters (2016)") == "2"
+
+    @responses.activate
+    def test_year_fallback_is_unfiltered_when_no_result_matches_the_year(self):
+        _search([_result(1, "Some Film", year="1984", votes=9000)])
+        _search([_result(1, "Some Film", year="1984", votes=9000), _result(2, "Other", votes=10)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "A Different Title (2016)") == "1"
+
+    @responses.activate
+    def test_the_prefix_retry_finds_the_real_film(self):
+        """TMDB treats a leading 'The ' literally: one retry toggles it."""
+        _search([_result(9, "Into the Backrooms", votes=1), _result(10, "Backrooms Tape", votes=2)])
+        _search([_result(42, "Backrooms", year="2026", votes=3046)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "The Backrooms") == "42"
+        assert "Backrooms" in responses.calls[1].request.url
+        assert "The" not in responses.calls[1].request.url.split("query=")[1]
+
+    @responses.activate
+    def test_retry_adds_the_prefix_when_the_title_lacks_one(self):
+        _search([])
+        _search([_result(603, "The Matrix", votes=26000)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Matrix") == "603"
+
+    @responses.activate
+    def test_retry_drops_the_year(self):
+        """Nothing matched the pinned year - the retry searches without it."""
+        _search([_result(1, "Junk A", votes=1), _result(2, "Junk B", votes=2)])
+        _search([_result(3, "The Rare Film", year="1975", votes=9000)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Rare Film (1972)") == "3"
+        assert "1972" not in responses.calls[1].request.url
+
+    @responses.activate
+    def test_no_results_after_retry_returns_none(self):
+        _search([])
+        _search([])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Nonexistent Film") is None
+
+    @responses.activate
+    def test_all_results_below_the_vote_floor_returns_none(self):
+        junk = [_result(9, "Junk A", votes=1), _result(10, "Junk B", votes=2)]
+        _search(junk)
+        _search(junk)
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Backrooms 2") is None
+
+    @responses.activate
+    def test_tv_searches_the_tv_endpoint(self):
         responses.add(
             responses.GET,
             TV_SEARCH,
-            json={
-                "results": [
-                    {
-                        "id": 1396,
-                        "name": "Breaking Bad",
-                        "first_air_date": "2008-01-20",
-                        "vote_count": 15000,
-                    }
-                ]
-            },
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            TV_DETAIL,
-            json={
-                "genres": [{"name": "Drama"}],
-                "created_by": [{"name": "Vince Gilligan"}],
-                "credits": {"crew": [], "cast": [{"name": "Bryan Cranston"}]},
-            },
+            json={"results": [{"id": 1396, "name": "Breaking Bad", "vote_count": 15000}]},
             status=200,
         )
         with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            meta = get_tmdb_metadata("Breaking Bad", "tv")
-
-        assert meta["director"] == "Vince Gilligan"
-        assert meta["cast"] == ["Bryan Cranston"]
+            assert resolve_tmdb_id("tv", "Breaking Bad") == "1396"
 
     def test_no_key_returns_none(self):
         with patch.dict("os.environ", {"TMDB_API_KEY": ""}):
-            assert get_tmdb_metadata("The Matrix", "movie") is None
-
-    @responses.activate
-    def test_no_search_result_returns_none(self):
-        responses.add(responses.GET, MOVIE_SEARCH, json={"results": []}, status=200)
-        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            assert get_tmdb_metadata("Nonexistent Film", "movie") is None
+            assert resolve_tmdb_id("movie", "The Matrix") is None
 
     @responses.activate
     def test_http_error_returns_none(self):
         responses.add(responses.GET, MOVIE_SEARCH, status=500)
         with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            assert get_tmdb_metadata("The Matrix", "movie") is None
-
-    @responses.activate
-    def test_low_vote_junk_match_returns_none(self):
-        """A top hit with almost no votes is fan-content, not the film Alex means —
-        return None so the _tmdb_failed cleanup path runs instead of trusting it."""
-        responses.add(
-            responses.GET,
-            MOVIE_SEARCH,
-            json={"results": [{"id": 9, "title": "Into the Backrooms", "vote_count": 1}]},
-            status=200,
-        )
-        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            assert get_tmdb_metadata("Backrooms II", "movie") is None
-
-    @responses.activate
-    def test_the_prefix_retry_finds_real_film(self):
-        """'The Backrooms' search returns only junk; the stripped 'Backrooms' retry
-        finds the real film and its title/year are surfaced as the match."""
-        responses.add(
-            responses.GET,
-            MOVIE_SEARCH,
-            json={"results": [{"id": 9, "title": "Into the Backrooms", "vote_count": 1}]},
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            MOVIE_SEARCH,
-            json={
-                "results": [
-                    {
-                        "id": 42,
-                        "title": "Backrooms",
-                        "release_date": "2026-07-24",
-                        "vote_count": 3046,
-                    }
-                ]
-            },
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            "https://api.themoviedb.org/3/movie/42",
-            json={
-                "genres": [{"name": "Horror"}],
-                "credits": {
-                    "crew": [{"job": "Director", "name": "Kane Parsons"}],
-                    "cast": [{"name": "Chiwetel Ejiofor"}],
-                },
-            },
-            status=200,
-        )
-        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            meta = get_tmdb_metadata("The Backrooms", "movie")
-        assert meta["matched_title"] == "Backrooms"
-        assert meta["year"] == "2026"
-        assert meta["director"] == "Kane Parsons"
+            assert resolve_tmdb_id("movie", "The Matrix") is None
 
 
 # ======================================================================

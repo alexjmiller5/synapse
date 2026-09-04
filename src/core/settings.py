@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     google_places_api_key: str | None = None
     google_youtube_api_key: str | None = None
     tmdb_api_key: str | None = None
+    # life-data hub (movies / tv-shows rows). Optional like the rest: an
+    # unconfigured hub fails those two categories loudly, not the whole service.
+    life_hub_url: str | None = None
+    life_hub_token: str | None = None
 
 
 @lru_cache
