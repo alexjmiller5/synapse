@@ -445,6 +445,9 @@ class TestMovieTvPipeline:
             _run(_item("Some Obscure Film"))
 
         push.assert_not_called()
+        log = _log_props(mock_notion)
+        assert log["Code Execution"]["status"]["name"] == "Error(s)"
+        assert "Created Item" not in log
         names = [
             props_of(c, "tasks")["Name"]["title"][0]["text"]["content"]
             for c in mock_notion.pages.create.call_args_list

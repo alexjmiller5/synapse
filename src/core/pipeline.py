@@ -24,6 +24,7 @@ from core.ai_engine import (
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 
 from core.external_data import enrich_context
+from core.handlers import Failed
 from core.business_logic import (
     hydrate_dynamic_options,
     fetch_active_projects,
@@ -193,10 +194,16 @@ def run_pipeline(
                     )
                     create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
+        # A handler that wrote nothing returns Failed - never log that as Success.
+        outcome, details = "Success", ""
+        if isinstance(url, Failed):
+            outcome, details, url = "Error(s)", url.detail, None
+
         log_job_outcome(
             full_str_for_log,
             category,
-            "Success",
+            outcome,
+            details=details,
             created_url=url,
             ai_data=log_payload,
             project_append=project_append,

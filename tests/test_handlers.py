@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from core.handlers import (
+    Failed,
     handle_places_logic,
     handle_groceries_fun_logic,
     handle_youtube_logic,
@@ -254,6 +255,16 @@ class TestHandleMoviesTv:
             handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Finished"})
         assert set(push.call_args.args[1][0]) == {"id", "status", "updated_at"}
 
+    def test_empty_status_falls_back_to_the_default(self):
+        """The extractor emits "" for an absent field; a required column must
+        never go out empty."""
+        with (
+            patch("core.handlers.resolve_tmdb_id", return_value="27205"),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            handle_movies_tv_logic("movies", {"Title": "Inception", "Status": ""})
+        assert push.call_args.args[1][0]["status"] == "Not Started"
+
     def test_tv_shows_push_to_tv_shows_table(self):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="1396") as resolve,
@@ -271,9 +282,14 @@ class TestHandleMoviesTv:
             patch("core.handlers.resolve_tmdb_id", return_value=None),
             patch("core.handlers.push_rows") as push,
         ):
-            handle_movies_tv_logic("movies", {"Title": "Some Obscure Film", "Status": "Priority"})
+            out = handle_movies_tv_logic(
+                "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
+            )
 
         push.assert_not_called()
+        # nothing was written: the pipeline must not log this as a Success
+        assert isinstance(out, Failed)
+        assert "Some Obscure Film" in out.detail
         mock_notion.pages.create.assert_called_once()
         props = sent_props(mock_notion.pages.create, "tasks")
         assert "Some Obscure Film" in props["Name"]["title"][0]["text"]["content"]
@@ -290,8 +306,10 @@ class TestHandleMoviesTv:
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
             patch("core.handlers.push_rows", return_value={"upserted": 0, "rejected": [rejected]}),
         ):
-            handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Bogus"})
+            out = handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Bogus"})
 
+        assert isinstance(out, Failed)
+        assert rejected["message"] in out.detail
         mock_notion.pages.create.assert_called_once()
         name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
         assert rejected["message"] in name

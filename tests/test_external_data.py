@@ -424,6 +424,26 @@ class TestResolveTmdbId:
             assert resolve_tmdb_id("movie", "Backrooms 2") == "42"
 
     @responses.activate
+    def test_year_filters_the_popularity_fallback(self):
+        """No exact title match, but the capture pinned a year: the id IS row
+        identity, so the fallback must not hand back the other remake."""
+        _search(
+            [
+                _result(1, "Ghostbusters: Afterlife", year="1984", votes=9000),
+                _result(2, "Ghostbusters: Answer the Call", year="2016", votes=4000),
+            ]
+        )
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "Ghostbusters (2016)") == "2"
+
+    @responses.activate
+    def test_year_fallback_is_unfiltered_when_no_result_matches_the_year(self):
+        _search([_result(1, "Some Film", year="1984", votes=9000)])
+        _search([_result(1, "Some Film", year="1984", votes=9000), _result(2, "Other", votes=10)])
+        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
+            assert resolve_tmdb_id("movie", "A Different Title (2016)") == "1"
+
+    @responses.activate
     def test_the_prefix_retry_finds_the_real_film(self):
         """TMDB treats a leading 'The ' literally: one retry toggles it."""
         _search([_result(9, "Into the Backrooms", votes=1), _result(10, "Backrooms Tape", votes=2)])

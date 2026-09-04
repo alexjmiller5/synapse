@@ -374,6 +374,25 @@ class TestLogJobOutcome:
         assert props["Code Execution"]["status"]["name"] == "Success"
         assert props["Created Item"]["url"] == "https://notion.so/x"
 
+    def test_retries_without_created_item_when_notion_rejects_it(self, mock_notion):
+        """Created Item is a url property, but a life-data ref is "movies/335984".
+        If Notion 400s on it the row must still land, carrying the ref as text."""
+        mock_notion.pages.create.side_effect = [
+            Exception("400 Bad Request: Created Item is not a valid URL"),
+            {"id": "log-id", "url": "https://www.notion.so/logid"},
+        ]
+        log_job_outcome("watch Inception", "movies", "Success", created_url="movies/27205")
+
+        assert mock_notion.pages.create.call_count == 2
+        props = sent_props(mock_notion.pages.create, "logs")
+        assert "Created Item" not in props
+        assert "movies/27205" in props["AI Summary"]["rich_text"][0]["text"]["content"]
+
+    def test_no_retry_when_the_failure_is_not_about_created_item(self, mock_notion):
+        mock_notion.pages.create.side_effect = Exception("boom")
+        log_job_outcome("bad input", "Unknown", "Error(s)", details="Some error")
+        mock_notion.pages.create.assert_called_once()
+
     def test_error_log(self, mock_notion):
         log_job_outcome("bad input", "Unknown", "Error(s)", details="Some error")
         props = sent_props(mock_notion.pages.create, "logs")
