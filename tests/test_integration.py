@@ -481,19 +481,6 @@ class TestPeopleClassification:
 
 
 # ======================================================================
-# PLACES TESTS
-# ======================================================================
-class TestPlacesClassification:
-    def test_google_maps_url(self):
-        cat, _, _ = full_pipeline("https://maps.app.goo.gl/eVBrk4NxWUzTeAYR9")
-        assert cat == "places"
-
-    def test_place_without_url_is_not_places(self):
-        cat, _, _ = full_pipeline("Go to Central Park")
-        assert cat != "places"
-
-
-# ======================================================================
 # PARSER TESTS
 # ======================================================================
 class TestParser:
@@ -570,10 +557,6 @@ class TestFailedExtractionRegression:
     def test_add_ghostbusters_is_task(self):
         cat, _, _ = full_pipeline("Add ghostbusters movies to movies db to watch")
         assert cat == "tasks"
-
-    def test_google_maps_url_is_places(self):
-        cat, _, _ = full_pipeline("https://maps.app.goo.gl/KkxRGMgTDstVggj8A")
-        assert cat == "places"
 
     def test_swapped_context_core_text_regression(self):
         """Regression: AI swapped core_text and context for parenthetical input.

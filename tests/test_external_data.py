@@ -10,9 +10,7 @@ from core.external_data import (
     get_youtube_metadata,
     get_video_channel_details,
     get_spotify_metadata,
-    get_place_details,
     enrich_context,
-    resolve_final_url,
     get_tal_metadata,
     sanitize_youtube_url,
     resolve_tmdb_id,
@@ -239,97 +237,9 @@ class TestGetSpotifyMetadata:
 
 
 # ======================================================================
-# get_place_details
-# ======================================================================
-class TestGetPlaceDetails:
-    def test_success(self, mock_gmaps):
-        mock_gmaps.find_place.return_value = {
-            "status": "OK",
-            "candidates": [{"place_id": "place123"}],
-        }
-        mock_gmaps.place.return_value = {
-            "result": {
-                "name": "Central Park",
-                "formatted_address": "New York, NY, USA",
-                "address_components": [
-                    {"long_name": "New York", "types": ["locality"]},
-                    {"long_name": "United States", "types": ["country"]},
-                ],
-                "types": ["park"],
-                "url": "https://maps.google.com/?cid=123",
-            }
-        }
-
-        result = get_place_details("Central Park NYC")
-        assert result["Name"] == "Central Park"
-        assert result["City"] == "New York"
-        assert result["Country"] == "United States"
-        assert result["Raw Types"] == ["park"]
-
-    def test_no_results(self, mock_gmaps):
-        mock_gmaps.find_place.return_value = {"status": "ZERO_RESULTS", "candidates": []}
-        assert get_place_details("nonexistent place xyz") is None
-
-    def test_no_client(self):
-        with patch("core.external_data.get_gmaps", return_value=None):
-            assert get_place_details("test") is None
-
-    @responses.activate
-    def test_url_resolution(self, mock_gmaps):
-        """When query starts with http, resolve_final_url is called first."""
-        responses.add(responses.GET, "https://maps.app.goo.gl/abc", body="", status=200)
-        mock_gmaps.find_place.return_value = {"status": "ZERO_RESULTS", "candidates": []}
-
-        get_place_details("https://maps.app.goo.gl/abc")
-        # Should have been called with the resolved URL
-        mock_gmaps.find_place.assert_called_once()
-
-
-# ======================================================================
-# resolve_final_url
-# ======================================================================
-class TestResolveFinalUrl:
-    @responses.activate
-    def test_follows_redirects(self):
-        responses.add(
-            responses.GET,
-            "https://short.url/abc",
-            headers={"Location": "https://final.url/page"},
-            status=301,
-        )
-        responses.add(responses.GET, "https://final.url/page", body="", status=200)
-        result = resolve_final_url("https://short.url/abc")
-        assert "final.url" in result
-
-    @responses.activate
-    def test_failure_returns_original(self):
-        responses.add(responses.GET, "https://bad.url", body=Exception("fail"))
-        result = resolve_final_url("https://bad.url")
-        assert result == "https://bad.url"
-
-
-# ======================================================================
 # enrich_context
 # ======================================================================
 class TestEnrichContext:
-    def test_places_routing(self, mock_gmaps):
-        mock_gmaps.find_place.return_value = {
-            "status": "OK",
-            "candidates": [{"place_id": "p1"}],
-        }
-        mock_gmaps.place.return_value = {
-            "result": {
-                "name": "Test",
-                "formatted_address": "Addr",
-                "address_components": [],
-                "types": ["restaurant"],
-                "url": "https://maps.google.com/123",
-            }
-        }
-        result = enrich_context("places", "Some place text")
-        assert result is not None
-        assert "GOOGLE MAPS DATA" in result
-
     def test_bookmarks_routing(self):
         with patch(
             "core.external_data.fetch_web_metadata", return_value="HTML Title: Test\nContent..."

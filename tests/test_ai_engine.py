@@ -164,10 +164,14 @@ class TestGenerateClassificationPrompt:
         assert '"logs"' not in prompt
         assert '"youtube-channels"' not in prompt
 
-    def test_keeps_trip_related_classifiable_categories(self):
-        """'places' relates to trips but is itself a real classification target."""
+    def test_places_route_retired(self):
+        """Places moved to life-data (captured via Google Maps lists): the category
+        must be gone from the yaml and from the classifier's menu."""
+        from core.config import DATABASES
+
+        assert "places" not in DATABASES["databases"]
         prompt = generate_classification_prompt("None")
-        assert '"places"' in prompt
+        assert '"places"' not in prompt
         assert '"tasks"' in prompt
 
     def test_none_projects(self):
@@ -210,19 +214,6 @@ class TestGenerateExtractionPrompt:
         )
         assert "EXISTING INVENTORY" in prompt
         assert "Eggs" in prompt
-
-    def test_includes_trips_for_places(self):
-        prompt = generate_extraction_prompt(
-            "places", "some place", trips_inventory=["NYC Trip (Date: 2026-06-01)"]
-        )
-        assert "AVAILABLE TRIPS" in prompt
-        assert "NYC Trip" in prompt
-
-    def test_no_trips_for_non_places(self):
-        prompt = generate_extraction_prompt(
-            "tasks", "do something", trips_inventory=["NYC Trip (Date: 2026-06-01)"]
-        )
-        assert "AVAILABLE TRIPS" not in prompt
 
     def test_trips_dates_instruction_present(self):
         """trips.Dates must carry extraction guidance so the AI emits ISO 8601 (or omits)."""
@@ -296,12 +287,6 @@ class TestGetGeminiSchema:
         assert "Description" in schema["properties"]
         assert "URL" in schema["properties"]
         assert "Title" in schema["properties"]
-
-    def test_places_schema(self):
-        schema = get_gemini_schema("places")
-        assert "Name" in schema["properties"]
-        assert "Google Maps URL" in schema["properties"]
-        assert "City" in schema["properties"]
 
     def test_checkbox_maps_to_boolean(self):
         """A checkbox prop (tasks.'AI Ready') becomes a JSON-schema boolean field."""

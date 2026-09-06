@@ -9,8 +9,6 @@ from core.notion_utils import (
     create_cleanup_task,
     fetch_existing_page,
     build_notion_properties,
-    keys_to_ids,
-    prop_id,
 )
 from core.external_data import (
     get_video_channel_details,
@@ -31,95 +29,6 @@ class Failed(NamedTuple):
     """
 
     detail: str
-
-
-def handle_places_logic(category, data, trips_id_map):
-    print("   🏗️ Handling 'Places' logic...")
-
-    # 1. Resolve Trip ID (We do this early so we can use it for Update OR Create)
-    trip_name = data.get("Linked Trip")
-    trip_id = None
-    if trip_name and trips_id_map:
-        trip_id = trips_id_map.get(trip_name)
-        if not trip_id:
-            print(f"      🔸 Trip Name '{trip_name}' NOT found in loaded map.")
-
-    # Clean up data payload
-    if "Linked Trip" in data:
-        del data["Linked Trip"]
-
-    # 2. Check for Duplicates (Google Maps URL)
-    target_url = data.get("Google Maps URL")
-    existing_id = None
-
-    if target_url:
-        db_id = get_db_id("places")
-        try:
-            resp = get_notion().request(
-                path=f"databases/{db_id}/query",
-                method="POST",
-                body={
-                    "filter": {
-                        "property": "Google Maps URL",
-                        "url": {"equals": target_url},
-                    }
-                },
-            )
-            if resp.get("results"):
-                existing_id = resp["results"][0]["id"]
-                print(f"      ✅ Found existing place: {existing_id}")
-        except Exception as e:
-            print(f"      ⚠️ Duplicate check failed: {e}")
-
-    # 3. PATH A: UPDATE EXISTING
-    if existing_id:
-        print("      🔄 Updating existing Place...")
-
-        # Construct a mini-payload of just the fields we want to update
-        update_data = {}
-        if "Status" in data:
-            update_data["Status"] = data["Status"]
-        if "Notes" in data:
-            update_data["Notes"] = data["Notes"]
-
-        # Use the helper to format them correctly for Notion
-        update_props = build_notion_properties(category, update_data)
-
-        # Manually add the Relation (since we removed it from 'data' earlier)
-        if trip_id:
-            update_props["Linked Trip"] = {"relation": [{"id": trip_id}]}
-
-        if update_props:
-            try:
-                get_notion().pages.update(
-                    page_id=existing_id, properties=keys_to_ids(category, update_props)
-                )
-                print("      ✅ Place updated.")
-            except Exception as e:
-                print(f"      ❌ Failed to update place: {e}")
-
-        return f"https://www.notion.so/{existing_id.replace('-', '')}"
-
-    # 4. PATH B: CREATE NEW
-    print("      - Creating new Place page...")
-    resp = create_page(category, build_notion_properties(category, data))
-    created_url = resp.get("url")
-    new_page_id = resp.get("id")
-    print(f"      ✅ Page Created: {created_url}")
-
-    # Link Trip (Post-Creation)
-    if trip_id and new_page_id:
-        print(f"      - Linking trip: '{trip_name}'")
-        try:
-            get_notion().pages.update(
-                page_id=new_page_id,
-                properties={prop_id(category, "Linked Trip"): {"relation": [{"id": trip_id}]}},
-            )
-            print("      ✅ Trip linked successfully.")
-        except Exception as e:
-            print(f"      ❌ Failed to link trip via API: {e}")
-
-    return created_url
 
 
 def handle_groceries_fun_logic(category, data, inventory_map):

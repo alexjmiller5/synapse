@@ -29,7 +29,6 @@ from core.business_logic import (
     hydrate_dynamic_options,
     fetch_active_projects,
     fetch_inventory_map,
-    fetch_trips_inventory,
     apply_business_logic,
     execute_logic,
 )
@@ -82,8 +81,6 @@ def run_pipeline(
     project_id_map,
     inventory_map,
     inventory_list,
-    trips_list,
-    trips_id_map,
 ):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
@@ -134,11 +131,11 @@ def run_pipeline(
         # 3. Extract
         url_context = (
             enrich_context(category, raw_text) or "No URL"
-            if category in ["podcasts", "youtube-videos", "bookmarks", "places"]
+            if category in ["podcasts", "youtube-videos", "bookmarks"]
             else None
         )
         extract_prompt = generate_extraction_prompt(
-            category, raw_text, url_context, inventory_list, trips_list, user_context
+            category, raw_text, url_context, inventory_list, user_context
         )
 
         # DEBUG: Capture Raw AI Response before JSON Load
@@ -180,7 +177,7 @@ def run_pipeline(
             else:
                 url = execute_logic(category, extracted)
         else:
-            url = execute_logic(category, extracted, inventory_map, trips_id_map)
+            url = execute_logic(category, extracted, inventory_map)
 
             if url and url_context:
                 is_scrape_error = (
@@ -258,12 +255,10 @@ def run(payload: dict, seen=None):
 
     # Option hydration is deferred to run_pipeline (only the classified
     # category) — that alone cut ~40 upfront Notion calls per thought to ~2-3.
-    # Projects/inventory/trips are one query each, so they stay here.
+    # Projects/inventory are one query each, so they stay here.
     project_prompts, project_id_map = fetch_active_projects()
     inventory_map = fetch_inventory_map("groceries")
     inventory_list = list(inventory_map.keys())
-
-    trips_list, trips_id_map = fetch_trips_inventory()
 
     try:
         full_text = payload["raw_text"]
@@ -283,8 +278,6 @@ def run(payload: dict, seen=None):
                 project_id_map,
                 inventory_map,
                 inventory_list,
-                trips_list,
-                trips_id_map,
             )
 
         print("--- BATCH COMPLETE ---")
