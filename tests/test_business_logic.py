@@ -7,7 +7,6 @@ from core.business_logic import (
     execute_logic,
     fetch_inventory_map,
     fetch_active_projects,
-    fetch_trips_inventory,
     hydrate_dynamic_options,
     query_notion_db,
     fetch_property_options,
@@ -204,25 +203,6 @@ class TestFetchActiveProjects:
 
 
 # ======================================================================
-# fetch_trips_inventory
-# ======================================================================
-class TestFetchTripsInventory:
-    def test_returns_trips(self, mock_notion):
-        page = {
-            "id": "trip1",
-            "properties": {
-                "Name": {"title": [{"plain_text": "NYC Trip"}]},
-                "Dates": {"date": {"start": "2026-06-01"}},
-            },
-        }
-        mock_notion.request.return_value = {"results": [page]}
-
-        trips_list, trips_map = fetch_trips_inventory()
-        assert "NYC Trip (Date: 2026-06-01)" in trips_list
-        assert trips_map["NYC Trip"] == "trip1"
-
-
-# ======================================================================
 # execute_logic
 # ======================================================================
 class TestExecuteLogic:
@@ -236,11 +216,6 @@ class TestExecuteLogic:
     def test_groceries_routing(self, mock_notion):
         data = {"Name": "New Item", "Status": "On List"}
         execute_logic("groceries", data, inventory_map={})
-        mock_notion.pages.create.assert_called()
-
-    def test_places_routing(self, mock_notion):
-        data = {"Name": "Central Park", "Status": "Haven't Been"}
-        execute_logic("places", data, trips_id_map={})
         mock_notion.pages.create.assert_called()
 
 

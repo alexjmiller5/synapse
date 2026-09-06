@@ -51,8 +51,6 @@ DEFAULT_CTX = {
     "project_id_map": {"Synapse": "synapse-project-id"},
     "inventory_map": {"Eggs": "eggs-id", "Milk": "milk-id"},
     "inventory_list": ["Eggs", "Milk"],
-    "trips_list": ["NYC Trip (Date: 2026-06-01)"],
-    "trips_id_map": {"NYC Trip": "nyc-trip-id"},
 }
 
 
@@ -75,8 +73,6 @@ def _run(item_data, **overrides):
         ctx["project_id_map"],
         ctx["inventory_map"],
         ctx["inventory_list"],
-        ctx["trips_list"],
-        ctx["trips_id_map"],
     )
 
 
@@ -643,7 +639,6 @@ class TestProcessorEntryPoint:
                 "core.pipeline.fetch_active_projects", return_value=(["Synapse"], {"Synapse": "id"})
             ),
             patch("core.pipeline.fetch_inventory_map", return_value={}),
-            patch("core.pipeline.fetch_trips_inventory", return_value=([], {})),
         ):
             mock_parse.return_value = [
                 {"core_text": "Buy milk", "context_notes": "groceries"},
@@ -675,7 +670,6 @@ class TestDedup:
             patch("core.pipeline.parse_raw_input", return_value=[]) as mock_parse,
             patch("core.pipeline.fetch_active_projects", return_value=([], {})) as mock_fetch,
             patch("core.pipeline.fetch_inventory_map", return_value={}),
-            patch("core.pipeline.fetch_trips_inventory", return_value=([], {})),
         ):
             run({"raw_text": raw_text}, seen=seen)
             mock_parse_holder["parse"] = mock_parse

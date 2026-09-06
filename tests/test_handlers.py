@@ -7,7 +7,6 @@ import pytest
 
 from core.handlers import (
     Failed,
-    handle_places_logic,
     handle_groceries_fun_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
@@ -16,83 +15,7 @@ from core.handlers import (
     handle_bucket_list_logic,
     handle_default_logic,
 )
-from core.notion_utils import prop_id
-from helpers import make_notion_page, props_of, sent_props
-
-
-# ======================================================================
-# handle_places_logic
-# ======================================================================
-class TestHandlePlaces:
-    def test_new_place_creation(self, mock_notion):
-        data = {
-            "Name": "Central Park",
-            "Status": "Haven't Been",
-            "Address": "NYC",
-            "City": "New York",
-            "Country": "United States",
-            "Google Maps URL": "https://maps.google.com/123",
-        }
-        mock_notion.request.return_value = {"results": []}  # No duplicate
-
-        url = handle_places_logic("places", data, trips_id_map={})
-        mock_notion.pages.create.assert_called_once()
-        assert url is not None
-
-    def test_duplicate_update(self, mock_notion):
-        data = {
-            "Name": "Central Park",
-            "Status": "Been",
-            "Google Maps URL": "https://maps.google.com/123",
-        }
-        existing = make_notion_page("existing-place-id", "Name", "Central Park")
-        # The handler calls notion.request for the dedup query
-        mock_notion.request.return_value = {"results": [existing]}
-
-        url = handle_places_logic("places", data, trips_id_map={})
-        mock_notion.pages.update.assert_called()
-        assert "existingplaceid" in (url or "").replace("-", "")
-        # Should NOT create a new page
-        mock_notion.pages.create.assert_not_called()
-
-    def test_trip_linking_new_place(self, mock_notion):
-        data = {
-            "Name": "Restaurant",
-            "Status": "Haven't Been",
-            "Google Maps URL": "https://maps.google.com/456",
-            "Linked Trip": "NYC Trip",
-        }
-        mock_notion.request.return_value = {"results": []}
-        trips_map = {"NYC Trip": "trip-id-123"}
-
-        handle_places_logic("places", data, trips_id_map=trips_map)
-        # Should create place then link trip via update
-        assert mock_notion.pages.create.called
-        update_calls = mock_notion.pages.update.call_args_list
-        linked_trip_id = prop_id("places", "Linked Trip")
-        assert any(linked_trip_id in str(c) for c in update_calls)
-
-    def test_trip_linking_existing_place(self, mock_notion):
-        data = {
-            "Name": "Restaurant",
-            "Status": "Been",
-            "Google Maps URL": "https://maps.google.com/789",
-            "Linked Trip": "LA Trip",
-        }
-        existing = make_notion_page("existing-id", "Name", "Restaurant")
-        mock_notion.request.return_value = {"results": [existing]}
-        trips_map = {"LA Trip": "la-trip-id"}
-
-        handle_places_logic("places", data, trips_id_map=trips_map)
-        props = props_of(mock_notion.pages.update.call_args, "places")
-        assert "Linked Trip" in props
-
-    def test_no_google_maps_url(self, mock_notion):
-        data = {"Name": "Some Place", "Status": "Haven't Been"}
-        mock_notion.request.return_value = {"results": []}
-
-        handle_places_logic("places", data, trips_id_map={})
-        mock_notion.pages.create.assert_called_once()
+from helpers import make_notion_page, sent_props
 
 
 # ======================================================================

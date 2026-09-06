@@ -20,16 +20,12 @@ categorize_template: |
           movies db") — that is a task to EDIT the db, not an entry in it.
   3. URL HANDLING (highest priority UNLESS task precedence applies). If the input
      contains a URL or domain (`http...` or `example.com`):
-       a. Google Maps URL (`maps.google.com`, `goo.gl`, `maps.app.goo.gl`,
-          `googleusercontent.com/maps`, `https://www.google.com/maps`) -> "places".
-       b. YouTube URL -> "youtube-videos".
-       c. Spotify / ThisAmericanLife URL -> "podcasts".
-       d. Other URLs: just the URL/domain (or "bookmark example.com", "save this link:
+       a. YouTube URL -> "youtube-videos".
+       b. Spotify / ThisAmericanLife URL -> "podcasts".
+       c. Other URLs: just the URL/domain (or "bookmark example.com", "save this link:
           https://hhub.io") -> "bookmarks"; a URL inside an ACTION ("Buy this rice
           cooker [URL]", "Read this article [URL]") -> "tasks".
   4. CATEGORY REQUIREMENTS (strict):
-       - places: REQUIRE a Google Maps URL. "Go to Central Park" with no link -> "tasks"
-         (or "fun-activities" if context implies).
        - people: only for a "[Name] [Job/Context]" pattern ("Will Theo's friend"). An
          action ("Call Will") is a "task".
        - youtube-videos: only with a LINK. "watch youtube video" with no link -> "task".
@@ -71,7 +67,6 @@ extraction_template: |
 
   {inventory_section}
 
-  {trips_section}
 
   ## Hard rules
   {instructions_section}

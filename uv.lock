@@ -594,15 +594,6 @@ wheels = [
 ]
 
 [[package]]
-name = "googlemaps"
-version = "4.10.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/fe/26/bca4d737a9acea25e94c19940a780bbf0be64a691f7caf3a68467d3a5838/googlemaps-4.10.0.tar.gz", hash = "sha256:3055fcbb1aa262a9159b589b5e6af762b10e80634ae11c59495bd44867e47d88", size = 33056, upload-time = "2023-01-26T16:45:02.501Z" }
-
-[[package]]
 name = "grpclib"
 version = "0.4.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1390,7 +1381,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-api-python-client" },
     { name = "google-genai" },
-    { name = "googlemaps" },
     { name = "inscriptis" },
     { name = "notion-client" },
     { name = "pydantic-settings" },
@@ -1416,7 +1406,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-api-python-client", specifier = ">=2.187.0" },
     { name = "google-genai", specifier = "~=1.49.0" },
-    { name = "googlemaps", specifier = ">=4.10.0" },
     { name = "inscriptis", specifier = "~=2.7.0" },
     { name = "notion-client", specifier = "~=2.7.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },

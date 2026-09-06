@@ -8,7 +8,6 @@ at the right time. A missing key returns None, degrading just that integration.
 from functools import lru_cache
 
 import google.genai as genai
-import googlemaps
 import spotipy
 from googleapiclient.discovery import build
 from notion_client import Client
@@ -42,12 +41,6 @@ def get_spotify():
         )
     except Exception:
         return None
-
-
-@lru_cache
-def get_gmaps():
-    key = get_settings().google_places_api_key
-    return googlemaps.Client(key=key) if key else None
 
 
 @lru_cache

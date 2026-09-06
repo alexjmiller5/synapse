@@ -6,7 +6,6 @@ GEMINI_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GEMINI
 NOTION_INTEGRATION_TOKEN=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/NOTION_INTEGRATION_TOKEN
 SPOTIFY_CLIENT_ID=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/SPOTIFY_CLIENT_ID
 SPOTIFY_CLIENT_SECRET=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/SPOTIFY_CLIENT_SECRET
-GOOGLE_PLACES_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GOOGLE_PLACES_API_KEY
 GOOGLE_YOUTUBE_API_KEY=op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GOOGLE_YOUTUBE_API_KEY
 
 # Notion DB ids are committed config (see src/core/databases.yaml), not secrets.

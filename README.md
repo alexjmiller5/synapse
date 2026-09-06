@@ -12,14 +12,14 @@ Synapse eliminates the friction of manual data entry in Notion. It accepts unstr
 - **`webhook`** — a proxy-authed `fastapi_endpoint`. Callers send `Modal-Key` + `Modal-Secret` headers; unauthorized requests are rejected at Modal's edge for free. It validates the payload and `spawn()`s the worker — **spawn IS the queue** (no Pub/Sub).
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1` to serialize runs since Notion dedupe is query-then-create, retries with backoff). Runs `core.pipeline.run`.
 - **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
-- **Secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — just the 6 credentials. Notion DB ids are committed config in `databases.yaml`, not secrets (a `NOTION_<X>_DB_ID` env var still overrides).
+- **Secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — credentials only. Notion DB ids are committed config in `databases.yaml`, not secrets (a `NOTION_<X>_DB_ID` env var still overrides).
 
 ```mermaid
 flowchart LR
     R["Receptor<br/>(iOS/macOS Shortcut)"] -->|"POST {raw_text}<br/>Modal-Key / Modal-Secret"| W["webhook<br/>(Modal fastapi_endpoint,<br/>proxy auth)"]
     W -->|"process.spawn()"| P["process worker<br/>(core.pipeline.run)"]
     P -->|"parse / classify / extract"| G["Gemini"]
-    P -->|"enrichment"| X["Spotify · YouTube ·<br/>Google Places · web scrape"]
+    P -->|"enrichment"| X["Spotify · YouTube ·<br/>web scrape"]
     P -->|"create / update pages"| N["Notion databases"]
     P -->|"outcome logs"| L["Notion Logs DB"]
 ```
@@ -48,7 +48,7 @@ Everything else is code; these are one-time console/dashboard actions:
 
 1. **Modal auth (local):** `uv run modal token new`.
 2. **Modal Proxy Auth Token:** Modal dashboard → Settings → Proxy Auth Tokens → mint a token. Give the token ID/secret to the Receptor client (and store them on a 1Password item of your choosing). The webhook rejects requests without `Modal-Key`/`Modal-Secret` headers.
-3. **Google API keys:** mint a **Places API key** and a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the 1Password item that `.env.tpl` references.
+3. **Google API key:** mint a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the 1Password item that `.env.tpl` references.
 4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the project's vault (the one `.env.tpl` references).
 5. **Push secrets to Modal:** `just sync-secrets` (reads `.env.tpl`, injects via `op`, creates/updates the `synapse` Modal secret).
 6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value. The Fun Activities `Location` allowlist is personal config: the committed yaml carries generic example cities — set `NOTION_FUN_ACTIVITIES_LOCATIONS` (comma-separated, in the env item `.env.tpl` references) to your real city list.
@@ -88,7 +88,7 @@ The whole pipeline is YAML-driven. To add a new Notion database category:
 - **Category cheatsheet**
   - **Tasks (default):** `Update dating profile`
   - **Projects:** `Refactor code $ Synapse` (strict: must name the project in context; use "note"-flavored phrasing for project notes)
-  - **URLs:** auto-route to **Places** (Google Maps), **YouTube**, **Podcasts** (Spotify/TAL), or **Bookmarks**
+  - **URLs:** auto-route to **YouTube**, **Podcasts** (Spotify/TAL), or **Bookmarks**
   - **People:** `Will Barlow Theo's Friend`
   - **Dates/status:** `Cancel Uber One $ Jan 1` · `The Matrix $ movie priority`
 - **Batch example:** `Arun Vantage Senior Associate @ https://youtu.be/xyz @ Buy eggs $ groceries`

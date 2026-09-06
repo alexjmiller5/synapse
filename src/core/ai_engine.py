@@ -138,7 +138,6 @@ def generate_extraction_prompt(
     raw_text,
     url_context=None,
     inventory_list=None,
-    trips_inventory=None,
     user_context=None,
 ):
     """
@@ -169,12 +168,6 @@ def generate_extraction_prompt(
             f"--- EXISTING INVENTORY (PREFER THESE NAMES) ---\n{json.dumps(inventory_list)}"
         )
 
-    # NEW: Trips Section
-    trips_section = ""
-    if category == "places" and trips_inventory:
-        trips_section = (
-            f"--- AVAILABLE TRIPS (For 'Linked Trip' Logic) ---\n{json.dumps(trips_inventory)}"
-        )
     # 3. Context Section
     combined_context = ""
     if url_context:
@@ -205,7 +198,6 @@ def generate_extraction_prompt(
         context_section=combined_context.strip(),
         valid_options_section="\n\n".join(valid_opts_lines),
         inventory_section=inventory_section,
-        trips_section=trips_section,  # Added this
         instructions_section="\n".join(instr_lines),
     )
 

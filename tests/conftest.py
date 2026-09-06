@@ -5,7 +5,7 @@ Mocking strategy:
 - Fake secrets are seeded as env vars BEFORE core modules import
   (core.secrets reads env vars; DB ids fall back to databases.yaml, so the
   fake NOTION_*_DB_ID vars here act as overrides that keep tests off real ids)
-- core.clients module globals (notion, gemini_client, spotify, youtube, gmaps)
+- core.clients module globals (notion, gemini_client, spotify, youtube)
   are patched at the module level
 - All external API calls are intercepted before any real network I/O
 """
@@ -24,7 +24,6 @@ FAKE_SECRETS = {
     "notion-integration-token": "fake-notion-token",
     "spotify-client-id": "fake-spotify-id",
     "spotify-client-secret": "fake-spotify-secret",
-    "google-places-api-key": "fake-places-key",
     "google-youtube-api-key": "fake-youtube-key",
     # life-data hub (movies/tv-shows)
     "life-hub-url": "https://hub.test.invalid",
@@ -41,7 +40,6 @@ FAKE_SECRETS = {
     "notion-people-db-id": "fake-people-db-id",
     "notion-bookmarks-db-id": "fake-bookmarks-db-id",
     "notion-bucket-list-db-id": "fake-bucket-list-db-id",
-    "notion-places-db-id": "fake-places-db-id",
     "notion-logs-db-id": "fake-logs-db-id",
     "notion-trips-db-id": "fake-trips-db-id",
     "notion-projects-db-id": "fake-projects-db-id",
@@ -52,11 +50,9 @@ for _sid, _val in FAKE_SECRETS.items():
     os.environ.setdefault(_sid.upper().replace("-", "_"), _val)
 
 # Patch external client constructors BEFORE core.clients is imported
-# googlemaps.Client validates key format at __init__, so we must intercept it
 patch("google.genai.Client", return_value=MagicMock()).start()
 patch("notion_client.Client", return_value=MagicMock()).start()
 patch("spotipy.Spotify", return_value=MagicMock()).start()
-patch("googlemaps.Client", return_value=MagicMock()).start()
 patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 
 # Import the clients module — the external constructors are patched above, so the
@@ -79,7 +75,6 @@ _mock_notion.databases.retrieve.return_value = {"properties": {}}
 _mock_gemini = _clients_mod.get_gemini_client()
 _mock_spotify = _clients_mod.get_spotify()
 _mock_youtube = _clients_mod.get_youtube()
-_mock_gmaps = _clients_mod.get_gmaps()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -108,7 +103,6 @@ def _reset_all_mocks():
     _mock_gemini.models.generate_content.side_effect = None
     _mock_spotify.reset_mock()
     _mock_youtube.reset_mock()
-    _mock_gmaps.reset_mock()
     yield
 
 
@@ -144,10 +138,3 @@ def mock_youtube():
     """Provides the mock YouTube client."""
     _mock_youtube.reset_mock()
     return _mock_youtube
-
-
-@pytest.fixture
-def mock_gmaps():
-    """Provides the mock Google Maps client."""
-    _mock_gmaps.reset_mock()
-    return _mock_gmaps

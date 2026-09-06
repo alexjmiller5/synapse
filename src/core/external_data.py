@@ -1,11 +1,10 @@
 import re
-import json
 import requests
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 from inscriptis import get_text
 import os
 
-from core.clients import get_gmaps, get_spotify, get_youtube
+from core.clients import get_spotify, get_youtube
 from core.notion_utils import create_cleanup_task
 
 # Timestamp / tracking params to strip from YouTube URLs before storage
@@ -213,93 +212,6 @@ def get_youtube_metadata(url):
         return f"YT Error: {e}"
 
 
-def resolve_final_url(url):
-    """
-    Follows redirects to get the real Google Maps URL.
-    """
-    print(f"   🔍 Resolving URL: {url}")
-    try:
-        # We use a HEAD request to follow redirects without downloading body
-        response = requests.get(url, allow_redirects=True, timeout=5)
-        print(f"   ✅ Resolved URL to: {response.url}")
-        return response.url
-    except Exception as e:
-        print(f"   ⚠️ URL Resolution failed: {e}")
-        return url
-
-
-def get_place_details(query):
-    """
-    Fetches details from Google Places API.
-    Returns RAW types for the AI to map.
-    """
-    gmaps = get_gmaps()
-    if not gmaps:
-        print("   ❌ Google Maps Client is NOT initialized. Skipping.")
-        return None
-
-    # NEW: Resolve URL if it looks like a link
-    if query.startswith("http"):
-        query = resolve_final_url(query)
-
-    print(f"🗺️ Fetching Google Place Details for Query: '{query}'")
-    try:
-        # 1. Text Search to get Place ID
-        print("   -> Calling gmaps.find_place...")
-        resp = gmaps.find_place(input=query, input_type="textquery", fields=["place_id"])
-
-        if resp["status"] != "OK" or not resp["candidates"]:
-            print(f"   ⚠️ No place found. Response Status: {resp.get('status')}")
-            return None
-
-        place_id = resp["candidates"][0]["place_id"]
-        print(f"   -> Found Place ID: {place_id}")
-
-        # 2. Get Full Details
-        print(f"   -> Fetching full details for {place_id}...")
-        details = gmaps.place(
-            place_id=place_id,
-            fields=[
-                "name",
-                "formatted_address",
-                "address_component",
-                "type",
-                "url",
-                "website",
-            ],
-        )
-        result = details.get("result", {})
-
-        # 3. Extract City/Country
-        city = None
-        country = None
-        for comp in result.get("address_components", []):
-            types = comp.get("types", [])
-            if "locality" in types:
-                city = comp["long_name"]
-            elif "country" in types:
-                country = comp["long_name"]
-
-        print("   ✅ Google Maps Data Retrieved:")
-        print(f"      - Name: {result.get('name')}")
-        print(f"      - Address: {result.get('formatted_address')}")
-        print(f"      - City/Country: {city}, {country}")
-        print(f"      - Types: {result.get('types', [])}")
-
-        # 4. Return Raw Data for AI
-        return {
-            "Name": result.get("name"),
-            "Address": result.get("formatted_address"),
-            "City": city,
-            "Country": country,
-            "Google Maps URL": result.get("url"),
-            "Raw Types": result.get("types", []),  # AI will map these to Notion Tags
-        }
-    except Exception as e:
-        print(f"❌ Google Maps Error: {e}")
-        return None
-
-
 TMDB_BASE = "https://api.themoviedb.org/3"
 
 # TMDB genre names that DON'T match Alex's Notion options 1:1. Only genuine
@@ -467,21 +379,6 @@ def resolve_tmdb_id(kind, title):
 def enrich_context(category, raw_text):
     url = extract_url(raw_text)
 
-    # 1. Google Places (Prioritize URL, fallback to raw text if needed)
-    if category == "places":
-        print("   🔗 Enriched Context Triggered for Places")
-        query = url if url else raw_text
-        print(f"      - Using Query: {query}")
-
-        details = get_place_details(query)
-        if details:
-            print("      ✅ Context successfully retrieved from Google Maps.")
-            return f"--- GOOGLE MAPS DATA ---\n{json.dumps(details)}"
-
-        print("      ⚠️ No context returned from Google Maps.")
-        return None
-
-    # 2. Existing Logic
     if not url:
         return None
 

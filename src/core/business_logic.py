@@ -10,7 +10,6 @@ from core.handlers import (
     handle_bookmarks_logic,
     handle_people_logic,
     handle_bucket_list_logic,
-    handle_places_logic,
     handle_default_logic,
 )
 
@@ -193,46 +192,6 @@ def hydrate_dynamic_options(only_category=None):
     print("✅ Hydration complete.")
 
 
-def fetch_trips_inventory():
-    """
-    Fetches Trips sorted by date.
-    Returns:
-      - inventory_text: ["Trip Name (Date: 2025-01-01)", ...]
-      - id_map: {"Trip Name": "page-id"}
-    """
-    print("✈️ Fetching Trips Inventory...")
-
-    # Specific query: Sort by 'Dates' descending
-    query_body = {"sorts": [{"property": "Dates", "direction": "descending"}]}
-
-    results = query_notion_db("trips", query_body)
-
-    id_map = {}
-    inventory_text = []
-
-    for page in results:
-        try:
-            # Extract Name
-            title_prop = page["properties"].get("Name", {}).get("title", [])
-            name = title_prop[0]["plain_text"] if title_prop else "Untitled"
-
-            # Extract Date
-            date_prop = page["properties"].get("Dates", {}).get("date", {})
-            date_str = date_prop.get("start", "No Date") if date_prop else "No Date"
-
-            # 1. Map uses STRICT Name
-            id_map[name] = page["id"]
-
-            # 2. Prompt gets Name + Date (So AI can distinguish old vs new)
-            inventory_text.append(f"{name} (Date: {date_str})")
-
-        except Exception:
-            continue
-
-    print(f"   ✅ Loaded {len(inventory_text)} trips.")
-    return inventory_text, id_map
-
-
 def fetch_active_projects():
     """
     Fetches active projects from the dedicated Projects database.
@@ -330,7 +289,6 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
 
 
 LOGIC_HANDLERS = {
-    "places": handle_places_logic,
     "groceries": handle_groceries_fun_logic,
     "fun-activities": handle_groceries_fun_logic,
     "youtube-videos": handle_youtube_logic,
@@ -342,11 +300,8 @@ LOGIC_HANDLERS = {
 }
 
 
-def execute_logic(category, data, inventory_map=None, trips_id_map=None):
+def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
-
-    if category == "places":
-        return handle_places_logic(category, data, trips_id_map)
 
     if category in ["groceries", "fun-activities"]:
         return handle_groceries_fun_logic(category, data, inventory_map)
