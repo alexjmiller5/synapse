@@ -276,17 +276,9 @@ class TestBuildNotionProperties:
         assert props["URL"] == {"url": "https://cool.com"}
         assert props["Tags"] == {"multi_select": [{"name": "Github"}]}
 
-    def test_checkbox_true(self):
+    def test_ai_ready_dropped_even_if_model_emits_it(self):
+        """'AI Ready' is not in the tasks schema, so a stray model output is ignored."""
         props = build_notion_properties("tasks", {"Name": "Refactor", "AI Ready": True})
-        assert props["AI Ready"] == {"checkbox": True}
-
-    def test_checkbox_false(self):
-        props = build_notion_properties("tasks", {"Name": "Refactor", "AI Ready": False})
-        assert props["AI Ready"] == {"checkbox": False}
-
-    def test_checkbox_absent_omitted(self):
-        """No 'AI Ready' key → not written; Notion defaults the checkbox to false."""
-        props = build_notion_properties("tasks", {"Name": "Refactor"})
         assert "AI Ready" not in props
 
 
