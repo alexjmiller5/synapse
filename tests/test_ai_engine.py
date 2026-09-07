@@ -192,14 +192,9 @@ class TestGenerateExtractionPrompt:
         result = generate_extraction_prompt("nonexistent", "text")
         assert "Error" in result
 
-    def test_ai_ready_instruction_present(self):
-        """The 'AI Ready' checkbox instruction must carry the explicit-intent
-        guidance AND the project-name caveat so the model doesn't false-tick."""
+    def test_ai_ready_absent_from_prompt(self):
         prompt = generate_extraction_prompt("tasks", "have ai do this")
-        assert "AI Ready" in prompt
-        assert "for ai" in prompt.lower()
-        assert "DEFAULT is false" in prompt
-        assert "PROJECT NAME" in prompt
+        assert "AI Ready" not in prompt
 
     def test_includes_url_context(self):
         prompt = generate_extraction_prompt(
@@ -288,10 +283,10 @@ class TestGetGeminiSchema:
         assert "URL" in schema["properties"]
         assert "Title" in schema["properties"]
 
-    def test_checkbox_maps_to_boolean(self):
-        """A checkbox prop (tasks.'AI Ready') becomes a JSON-schema boolean field."""
+    def test_tasks_schema_has_no_ai_ready(self):
+        """Synapse must never tick 'AI Ready' - only Alex sets it, by hand."""
         schema = get_gemini_schema("tasks")
-        assert schema["properties"]["AI Ready"] == {"type": "boolean"}
+        assert "AI Ready" not in schema["properties"]
 
 
 # ======================================================================
