@@ -40,3 +40,27 @@ def push_rows(table, rows, *, settings=None, client=None):
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def pull_ids(table, *, settings=None, client=None):
+    """The set of non-deleted row ids currently in a life-data `table`.
+
+    Used to tell an already-known row (e.g. a channel) apart from a new one
+    against the hub's actual state, not an in-run cache.
+    """
+    settings = settings or get_settings()
+    if not settings.life_hub_url or not settings.life_hub_token:
+        raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
+
+    resp = (client or requests).post(
+        f"{settings.life_hub_url.rstrip('/')}/v1/rows/pull",
+        json={"table": table, "columns": ["id", "deleted_at"], "since": ""},
+        headers={
+            "Authorization": f"Bearer {settings.life_hub_token}",
+            "User-Agent": "synapse",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return {r["id"] for r in resp.json().get("rows", []) if not r.get("deleted_at")}

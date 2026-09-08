@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.life_hub import push_rows
+from core.life_hub import pull_ids, push_rows
 from core.settings import Settings
 
 
@@ -68,6 +68,44 @@ class TestPushRows:
             push_rows(
                 "movies",
                 [{"id": "1"}],
+                settings=Settings(life_hub_url=None, life_hub_token=None),
+                client=_client(),
+            )
+
+
+class TestPullIds:
+    def test_posts_table_columns_and_since(self):
+        client = _client(
+            payload={"rows": [{"id": "UC1", "deleted_at": None}, {"id": "UC2", "deleted_at": None}]}
+        )
+
+        out = pull_ids("youtube_channels", settings=_settings(), client=client)
+
+        assert out == {"UC1", "UC2"}
+        url = client.post.call_args.args[0]
+        assert url == "https://hub.example/v1/rows/pull"
+        body = client.post.call_args.kwargs["json"]
+        assert body == {"table": "youtube_channels", "columns": ["id", "deleted_at"], "since": ""}
+        headers = client.post.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer tok"
+        assert headers["User-Agent"] == "synapse"
+
+    def test_drops_deleted_rows(self):
+        client = _client(
+            payload={
+                "rows": [
+                    {"id": "UC1", "deleted_at": None},
+                    {"id": "UC2", "deleted_at": "2026-09-01T00:00:00.000Z"},
+                ]
+            }
+        )
+        out = pull_ids("youtube_channels", settings=_settings(), client=client)
+        assert out == {"UC1"}
+
+    def test_unconfigured_hub_raises(self):
+        with pytest.raises(RuntimeError, match="LIFE_HUB_URL"):
+            pull_ids(
+                "youtube_channels",
                 settings=Settings(life_hub_url=None, life_hub_token=None),
                 client=_client(),
             )
