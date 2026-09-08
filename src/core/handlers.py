@@ -19,7 +19,7 @@ from core.external_data import (
 from core.life_hub import pull_ids, push_rows
 from core.timeutils import now_utc_iso_ms
 
-# Same regex as media-center's core/youtube.py — kept in sync by hand, not shared,
+# Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
 # because the two services don't share a dependency.
 _ISO8601_DURATION = re.compile(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
 
@@ -92,17 +92,30 @@ def handle_youtube_logic(category, data):
     if not vid:
         raise ValueError(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
 
-    item = get_youtube().videos().list(part="snippet,contentDetails", id=vid).execute()["items"][0]
+    yt = get_youtube()
+    if not yt:
+        create_cleanup_task(f"No YouTube client configured for video {vid}")
+        return Failed(f"No YouTube client configured for video {vid}")
+
+    video_items = (
+        yt.videos().list(part="snippet,contentDetails", id=vid).execute().get("items") or []
+    )
+    if not video_items:
+        create_cleanup_task(f"YouTube video not found: {vid}")
+        return Failed(f"YouTube video not found: {vid}")
+    item = video_items[0]
     snippet = item["snippet"]
     channel_id = snippet["channelId"]
 
     if channel_id not in known_channel_ids():
-        ch = (
-            get_youtube()
-            .channels()
-            .list(part="snippet,contentDetails", id=channel_id)
-            .execute()["items"][0]
+        channel_items = (
+            yt.channels().list(part="snippet,contentDetails", id=channel_id).execute().get("items")
+            or []
         )
+        if not channel_items:
+            create_cleanup_task(f"YouTube channel not found: {channel_id}")
+            return Failed(f"YouTube channel not found: {channel_id}")
+        ch = channel_items[0]
         title = ch["snippet"]["title"]
         channel_row = {
             "id": channel_id,
@@ -118,7 +131,10 @@ def handle_youtube_logic(category, data):
         push_rows("youtube_channels", [channel_row])
         create_cleanup_task(f"Classify new Channel: {title}")
 
-    duration_s = _parse_duration_s(item["contentDetails"]["duration"])
+    # A live/premiere video has no fixed duration yet - the row is still valid
+    # without it, just not resolvable as a short.
+    duration = item["contentDetails"].get("duration")
+    duration_s = _parse_duration_s(duration) if duration else None
     status = {"To Watch": "Not Started", "Watched": "Finished"}.get(
         data.get("Status"), data.get("Status")
     ) or "Not Started"
@@ -129,7 +145,7 @@ def handle_youtube_logic(category, data):
         "published_at": snippet.get("publishedAt"),
         "duration_s": duration_s,
         "thumbnail_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
-        "is_short": 1 if duration_s <= 180 else 0,
+        "is_short": 1 if duration_s is not None and duration_s <= 180 else 0,
         "status": status,
         "updated_at": now_utc_iso_ms(),
     }
