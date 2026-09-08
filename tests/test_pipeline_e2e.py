@@ -359,7 +359,7 @@ class TestGroceryPipeline:
 
 
 # ======================================================================
-# YouTube Tests — life-data, not Notion (see handlers.TestYouTubeToLifeData)
+# YouTube Tests - life-data, not Notion (see handlers.TestYouTubeToLifeData)
 # ======================================================================
 class TestYouTubePipeline:
     SNIPPET = {

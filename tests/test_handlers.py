@@ -63,7 +63,7 @@ class TestHandleGroceriesFun:
 
 
 # ======================================================================
-# handle_youtube_logic — YouTube captures live in life-data, not Notion
+# handle_youtube_logic - YouTube captures live in life-data, not Notion
 # ======================================================================
 class TestYouTubeToLifeData:
     SNIPPET = {
@@ -165,6 +165,43 @@ class TestYouTubeToLifeData:
                 {"Video URL": "https://youtu.be/dQw4w9WgXcQ", "Status": "Not Started"},
             )
         assert isinstance(out, Failed) and "bad" in out.detail
+
+    def test_no_youtube_client_files_cleanup_task_and_fails(self, mock_notion):
+        with patch("core.handlers.get_youtube", return_value=None):
+            out = handle_youtube_logic(
+                "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
+            )
+        assert isinstance(out, Failed)
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert "dQw4w9WgXcQ" in name
+
+    def test_video_not_found_files_cleanup_task_and_fails(self, mock_notion):
+        yt = MagicMock()
+        yt.videos().list().execute.return_value = {"items": []}
+        with patch("core.handlers.get_youtube", return_value=yt):
+            out = handle_youtube_logic(
+                "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
+            )
+        assert isinstance(out, Failed)
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert "dQw4w9WgXcQ" in name
+
+    def test_missing_duration_pushes_row_with_no_short_flag(self):
+        yt = self._yt(True)
+        yt.videos().list().execute.return_value = {
+            "items": [{**self.SNIPPET["items"][0], "contentDetails": {}}]
+        }
+        with (
+            patch("core.handlers.get_youtube", return_value=yt),
+            patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            handle_youtube_logic(
+                "youtube-videos",
+                {"Video URL": "https://youtu.be/dQw4w9WgXcQ", "Status": "Not Started"},
+            )
+        vid = push.call_args.args[1][0]
+        assert vid["duration_s"] is None and vid["is_short"] == 0
 
 
 # ======================================================================
