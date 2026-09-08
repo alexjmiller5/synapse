@@ -128,7 +128,7 @@ class TestYouTubeToLifeData:
                 "youtube-videos",
                 {
                     "Video URL": "https://youtu.be/dQw4w9WgXcQ?si=abc",
-                    "Status": "To Watch",
+                    "Status": "Not Started",
                     "Tags": ["Classic"],
                 },
             )
@@ -157,7 +157,7 @@ class TestYouTubeToLifeData:
         ):
             handle_youtube_logic(
                 "youtube-videos",
-                {"Video URL": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "Status": "Watched"},
+                {"Video URL": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "Status": "Finished"},
             )
         assert [c.args[0] for c in push.call_args_list] == ["youtube_videos"]
         assert push.call_args.args[1][0]["status"] == "Finished"
@@ -207,6 +207,22 @@ class TestYouTubeToLifeData:
         assert isinstance(out, Failed)
         name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
         assert "dQw4w9WgXcQ" in name
+
+    def test_channel_not_found_files_cleanup_task_and_fails(self, mock_notion):
+        yt = self._yt(False)
+        yt.channels().list().execute.return_value = {"items": []}
+        with (
+            patch("core.handlers.get_youtube", return_value=yt),
+            patch("core.handlers.known_channel_ids", return_value=set()),
+            patch("core.handlers.push_rows") as push,
+        ):
+            out = handle_youtube_logic(
+                "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
+            )
+        assert isinstance(out, Failed)
+        assert push.call_count == 0  # no half-written video row without its channel
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert "UCuAXFkgsw1L7xaCfnd5JJOw" in name
 
     def test_missing_duration_pushes_row_with_no_short_flag(self):
         yt = self._yt(True)

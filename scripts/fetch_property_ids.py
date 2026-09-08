@@ -25,7 +25,7 @@ HEADERS = {
     "Notion-Version": "2026-03-11",
 }
 # Non-category DBs Synapse also writes to (mirror _prefetch_db_ids in secrets.py).
-HELPER_CATEGORIES = ["logs", "projects", "trips", "notes", "youtube-channels"]
+HELPER_CATEGORIES = ["logs", "projects", "trips", "notes"]
 OUT = os.path.join(os.path.dirname(__file__), "..", "src", "core", "property_ids.yaml")
 
 

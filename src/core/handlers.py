@@ -149,9 +149,7 @@ def handle_youtube_logic(category, data):
     # without it, just not resolvable as a short.
     duration = item["contentDetails"].get("duration")
     duration_s = _parse_duration_s(duration) if duration else None
-    status = {"To Watch": "Not Started", "Watched": "Finished"}.get(
-        data.get("Status"), data.get("Status")
-    ) or "Not Started"
+    status = data.get("Status") or "Not Started"
     video_row = {
         "id": vid,
         "channel_id": channel_id,

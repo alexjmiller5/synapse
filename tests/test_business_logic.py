@@ -108,15 +108,9 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("podcasts", data)
         assert "Date Listened To" not in result
 
-    def test_youtube_watched_sets_date(self):
-        data = {"Title": "Video", "Status": "Watched"}
-        result = apply_business_logic("youtube-videos", data)
-        assert result["Date Watched"] == today_eastern().isoformat()
-
-    def test_youtube_not_watched_no_date(self):
-        data = {"Title": "Video", "Status": "Not Started"}
-        result = apply_business_logic("youtube-videos", data)
-        assert "Date Watched" not in result
+    def test_youtube_status_never_gets_a_date(self):
+        data = {"Title": "Video", "Status": "Finished"}
+        assert "Date Watched" not in apply_business_logic("youtube-videos", data)
 
     def test_bookmarks_github_tagging(self):
         data = {"URL": "https://github.com/owner/repo", "Tags": []}

@@ -33,7 +33,6 @@ def _prefetch_db_ids():
     ids = {}
     for cat in list(DATABASES.get("databases", {}).keys()) + [
         "logs",
-        "youtube-channels",
         "trips",
         "projects",
         "notes",
