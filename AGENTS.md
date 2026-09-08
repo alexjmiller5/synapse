@@ -54,15 +54,24 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   key is absent) — nothing is instantiated at import. `core/secrets.py`'s
   `get_secret`/`get_db_id` remain only for the yaml/env DB-id lookup.
 - **Not every category is a Notion DB.** A stanza with `hub_table` (movies,
-  tv-shows) is a life-data table instead: `core/life_hub.py: push_rows` POSTs
-  `{table, columns, rows}` to the hub's `/v1/rows/push` with the `LIFE_HUB_URL`
-  / `LIFE_HUB_TOKEN` settings, and the row id is the TMDB id resolved by
-  `external_data.resolve_tmdb_id` (no confident match = a cleanup task and no
-  write, because a wrong id silently merges two films). Push ONLY the columns
-  you know - the hub's upsert touches exactly the columns sent, so a status
-  capture never blanks tags. Everything else on those rows (title, year,
-  genres, director, cast, poster) is DERIVED on the hub from the id; sending a
-  guessed value gets the row rejected for missing provenance. A `hub_table`
+  tv-shows, youtube-videos, youtube-channels) is a life-data table instead:
+  `core/life_hub.py: push_rows` POSTs `{table, columns, rows}` to the hub's
+  `/v1/rows/push` with the `LIFE_HUB_URL` / `LIFE_HUB_TOKEN` settings, and the
+  row id is the TMDB id resolved by `external_data.resolve_tmdb_id` (no
+  confident match = a cleanup task and no write, because a wrong id silently
+  merges two films). Push ONLY the columns you know - the hub's upsert
+  touches exactly the columns sent, so a status capture never blanks tags.
+  Everything else on those rows (title, year, genres, director, cast, poster)
+  is DERIVED on the hub from the id; sending a guessed value gets the row
+  rejected for missing provenance. YouTube captures follow the same shape
+  with the YouTube Data API standing in for TMDB: `handle_youtube_logic`
+  resolves the video via `get_youtube()`, and the row id is the video/channel
+  id the API returns (no resolution step needed - the id is already exact).
+  A channel is pushed once, gated by `known_channel_ids()`
+  (`core/life_hub.py: pull_ids` against the hub's actual `youtube_channels`
+  state, not an in-run cache), with a "Classify new Channel" cleanup task so
+  Alex sets follow/subscription by hand; every later video from that channel
+  just links `channel_id`. A `hub_table`
   stanza carries no `db_id` and is skipped by `hydrate_dynamic_options`,
   `validate_all`, and `scripts/fetch_property_ids.py`, so its yaml allowlists
   ARE the catalog's options - keep them in step with life-data's catalog.

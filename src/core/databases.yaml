@@ -248,7 +248,8 @@ databases:
         virtual: true
 
   youtube-videos:
-    db_id: "45e59935dc574e15a86ab8c3a70a0e51"
+    # A life-data table, not a Notion DB - see the movies stanza above.
+    hub_table: "youtube_videos"
     description: "A YouTube video. MUST contain a valid 'youtube.com' or 'youtu.be' or m.youtube.com link. If the user just describes a video without a link, classify as a TASK (Chore)."
     properties:
       Title:
@@ -266,10 +267,26 @@ databases:
       Status:
         type: "status"
         required: true
-        allowlist: ["Priority", "To Watch", "In Progress", "Watched"]
-        instruction: "Default to 'To Watch' (adding a video usually means Alex wants to watch it, not that he has). If the user says 'need to watch' (or 'must watch'/'priority'), use 'Priority'. Use 'In Progress' if the user says they're 'watching' it, or 'To Watch' if they merely mention wanting to watch it later without urgency."
+        allowlist:
+          [
+            "Priority",
+            "Not Started",
+            "In Progress",
+            "Finished",
+            "Watched Parts",
+            "Gave Up",
+          ]
+        instruction: |
+          Determine the status based on the user's specific phrasing. FOLLOW THIS ORDER:
+          1. "Priority": If the user says "need to watch", "must watch", "priority", "dying to watch", "really want to see", or uses exclamation marks. NOT JUST if they say "watch [video]" - THAT IS "Not Started".
+          2. "Finished": If the user says "watched", "seen", "finished", "completed", or gives a review/rating.
+          3. "In Progress": If the user says "watching", "started", or "currently on".
+          4. "Watched Parts": If they mention having watched parts/some of it.
+          5. "Gave Up": If the user stopped watching or disliked it.
+          6. "Not Started": (DEFAULT) If the user simply mentions the video neutrally, or says "watch [video]" without urgency.
       Tags:
         type: "multi_select"
+        allowlist: ["Favorite", "Classic"]
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
 
   fun-activities:
@@ -355,7 +372,8 @@ databases:
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
 
   youtube-channels:
-    db_id: "cd8d57e29f7e44d2b2c7a25e08a7723f"
+    # A life-data table, not a Notion DB - see the movies stanza above.
+    hub_table: "youtube_channels"
     description: "YouTube Channels"
     helper: true
     properties:

@@ -1,8 +1,9 @@
+import re
 from typing import NamedTuple
 
 from core.config import DATABASES
 from core.secrets import get_db_id
-from core.clients import get_notion
+from core.clients import get_notion, get_youtube
 from core.notion_utils import (
     create_page,
     update_status,
@@ -11,13 +12,25 @@ from core.notion_utils import (
     build_notion_properties,
 )
 from core.external_data import (
-    get_video_channel_details,
     get_youtube_video_id,
     resolve_tmdb_id,
     sanitize_youtube_url,
 )
-from core.life_hub import push_rows
+from core.life_hub import pull_ids, push_rows
 from core.timeutils import now_utc_iso_ms
+
+# Same regex as media-center's core/youtube.py — kept in sync by hand, not shared,
+# because the two services don't share a dependency.
+_ISO8601_DURATION = re.compile(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
+
+
+def _parse_duration_s(iso):
+    d, h, m, s = (int(x or 0) for x in _ISO8601_DURATION.fullmatch(iso).groups())
+    return d * 86400 + h * 3600 + m * 60 + s
+
+
+def known_channel_ids():
+    return pull_ids("youtube_channels")
 
 
 class Failed(NamedTuple):
@@ -66,103 +79,71 @@ def handle_groceries_fun_logic(category, data, inventory_map):
 
 
 def handle_youtube_logic(category, data):
-    # Strip timestamp/tracking params BEFORE dedupe + storage so the same video
-    # shared with different ?t=/?si= values maps to one page.
-    if data.get("Video URL"):
-        data["Video URL"] = sanitize_youtube_url(data["Video URL"])
+    """YouTube captures are a life-data table, not a Notion DB.
 
-    # A YouTube URL with no video id (bare youtube.com/, a channel page) has no
-    # video to store — fail loudly so the pipeline's error path logs it and creates
-    # a triage task, instead of creating a junk "Could not extract Video ID" page.
-    if not data.get("Video URL") or not get_youtube_video_id(data["Video URL"]):
+    A channel is pushed once (on first sight of a video from it), with a
+    "Classify new Channel" cleanup task so Alex sets follow/subscription by
+    hand; every later video from that channel just links channel_id. Channel
+    membership is checked against the hub's actual state (known_channel_ids),
+    never an in-run cache.
+    """
+    url = sanitize_youtube_url(data["Video URL"]) if data.get("Video URL") else None
+    vid = get_youtube_video_id(url) if url else None
+    if not vid:
         raise ValueError(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
 
-    props = build_notion_properties(category, data)
-    target_url = data.get("Video URL")
-    video_url = target_url
+    item = get_youtube().videos().list(part="snippet,contentDetails", id=vid).execute()["items"][0]
+    snippet = item["snippet"]
+    channel_id = snippet["channelId"]
 
-    # A. DEDUPLICATION CHECK (Exact URL Match)
-    if target_url:
-        db_id = get_db_id("youtube-videos")
-        try:
-            resp = get_notion().request(
-                path=f"databases/{db_id}/query",
-                method="POST",
-                body={
-                    "filter": {
-                        "property": "Video URL",
-                        "url": {"equals": target_url},
-                    }
-                },
-            )
+    if channel_id not in known_channel_ids():
+        ch = (
+            get_youtube()
+            .channels()
+            .list(part="snippet,contentDetails", id=channel_id)
+            .execute()["items"][0]
+        )
+        title = ch["snippet"]["title"]
+        channel_row = {
+            "id": channel_id,
+            "title": title,
+            "handle": ch["snippet"].get("customUrl"),
+            "channel_url": f"https://www.youtube.com/channel/{channel_id}",
+            "uploads_playlist_id": ch["contentDetails"]["relatedPlaylists"]["uploads"],
+            "follow": 0,
+            "backfilled": 0,
+            "subscription": "Never Subscribed",
+            "updated_at": now_utc_iso_ms(),
+        }
+        push_rows("youtube_channels", [channel_row])
+        create_cleanup_task(f"Classify new Channel: {title}")
 
-            if resp.get("results"):
-                existing_page = resp["results"][0]
-                eid = existing_page["id"]
-                print(f"   ✅ Video already exists: {target_url} (ID: {eid})")
-                return update_status(eid, data.get("Status", "Watched"), category).get("url")
+    duration_s = _parse_duration_s(item["contentDetails"]["duration"])
+    status = {"To Watch": "Not Started", "Watched": "Finished"}.get(
+        data.get("Status"), data.get("Status")
+    ) or "Not Started"
+    video_row = {
+        "id": vid,
+        "channel_id": channel_id,
+        "title": snippet["title"],
+        "published_at": snippet.get("publishedAt"),
+        "duration_s": duration_s,
+        "thumbnail_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+        "is_short": 1 if duration_s <= 180 else 0,
+        "status": status,
+        "updated_at": now_utc_iso_ms(),
+    }
+    if data.get("Tags"):
+        video_row["tags"] = data["Tags"]
 
-        except Exception as e:
-            print(f"   ⚠️ YouTube duplicate check failed: {e}")
+    rejected = push_rows("youtube_videos", [video_row]).get("rejected") or []
+    if rejected:
+        message = rejected[0].get("message")
+        create_cleanup_task(f"life-data rejected {snippet['title']!r}: {message}")
+        return Failed(f"life-data rejected youtube_videos/{vid}: {message}")
 
-    # B. CHANNEL RESOLUTION & LINKING
-    channel_id = None
-
-    # 1. Fetch Official Details from API
-    api_channel = get_video_channel_details(video_url) if video_url else None
-
-    if api_channel:
-        official_name = api_channel["title"]
-        print(f"   📺 Resolved Channel via API: {official_name}")
-
-        # Check if exists in DB using fetch_existing_page
-        channel_id = fetch_existing_page("youtube-channels", official_name, "Name")
-
-        # If NOT found, Create it
-        if not channel_id:
-            print(f"   ✨ Creating new Channel: {official_name}")
-
-            # Use the paradigm: Build a raw data dict, then pass through builder
-            new_channel_data = {
-                "Name": official_name,
-                "Channel URL": api_channel["url"],
-                "Status": "Never Subscribed",
-            }
-
-            # This handles the formatting correctly via your YAML config
-            resp = create_page(
-                "youtube-channels",
-                build_notion_properties("youtube-channels", new_channel_data),
-            )
-
-            if resp:
-                channel_id = resp["id"]
-                channel_page_url = resp["url"]
-
-                # Create Cleanup Task
-                print("   🧹 Creating cleanup task to classify new channel...")
-                create_cleanup_task(
-                    f"Classify new Channel: {official_name}", link_url=channel_page_url
-                )
-
-    # Fallback: If API failed, try using the AI-extracted handle
-    elif "channel_handle" in data:
-        handle = data["channel_handle"].replace("@", "").strip()
-        channel_id = fetch_existing_page("youtube-channels", handle, "Name")
-
-    # 3. Link Channel to Video
-    if channel_id:
-        props["Channel"] = {"relation": [{"id": channel_id}]}
-
-    # Remove helper fields
-    if "channel_handle" in props:
-        del props["channel_handle"]
-
-    # C. CREATE VIDEO PAGE
-    resp = create_page(category, props)
-    created_url = resp.get("url")
-
-    return created_url
+    print(f"   ✅ Pushed youtube_videos/{vid}")
+    return f"youtube_videos/{vid}"
 
 
 def handle_movies_tv_logic(category, data):

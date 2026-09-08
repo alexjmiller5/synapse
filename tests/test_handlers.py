@@ -1,7 +1,7 @@
 """Tests for handlers.py — category-specific logic for all Notion DB categories."""
 
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -63,78 +63,108 @@ class TestHandleGroceriesFun:
 
 
 # ======================================================================
-# handle_youtube_logic
+# handle_youtube_logic — YouTube captures live in life-data, not Notion
 # ======================================================================
-class TestHandleYoutube:
-    def test_new_video_with_channel(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}  # No duplicate video or channel
-
-        with patch("core.handlers.get_video_channel_details") as mock_channel:
-            mock_channel.return_value = {
-                "title": "MKBHD",
-                "id": "ch1",
-                "url": "https://youtube.com/channel/ch1",
+class TestYouTubeToLifeData:
+    SNIPPET = {
+        "items": [
+            {
+                "id": "dQw4w9WgXcQ",
+                "snippet": {
+                    "title": "Never Gonna Give You Up",
+                    "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                    "channelTitle": "Rick Astley",
+                    "publishedAt": "2009-10-25T06:57:33Z",
+                },
+                "contentDetails": {"duration": "PT3M33S"},
             }
-            data = {"Title": "Review", "Video URL": "https://youtu.be/abc", "Status": "Watched"}
-            handle_youtube_logic("youtube-videos", data)
-
-            assert mock_notion.pages.create.called
-            # Should have created channel + video + cleanup = 3 creates
-            assert mock_notion.pages.create.call_count >= 2
-
-    def test_no_video_id_raises(self, mock_notion):
-        """A YouTube URL with no video id (homepage/channel page) must fail loudly —
-        never create a junk 'Could not extract Video ID' page."""
-        data = {"Title": "Could not extract Video ID", "Video URL": "https://youtube.com/"}
-        with pytest.raises(ValueError, match="No YouTube video ID"):
-            handle_youtube_logic("youtube-videos", data)
-        mock_notion.pages.create.assert_not_called()
-
-    def test_missing_video_url_raises(self, mock_notion):
-        with pytest.raises(ValueError, match="No YouTube video ID"):
-            handle_youtube_logic("youtube-videos", {"Title": "No URL at all"})
-        mock_notion.pages.create.assert_not_called()
-
-    def test_duplicate_video_update(self, mock_notion):
-        existing = make_notion_page("vid-id", "Title", "Old Video")
-        # The dedup query finds the existing video
-        mock_notion.request.return_value = {"results": [existing]}
-
-        data = {"Title": "Old Video", "Video URL": "https://youtu.be/abc", "Status": "Watched"}
-        handle_youtube_logic("youtube-videos", data)
-        mock_notion.pages.update.assert_called()
-
-    def test_no_channel_api_uses_handle(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-
-        with patch("core.handlers.get_video_channel_details", return_value=None):
-            data = {
-                "Title": "Video",
-                "Video URL": "https://youtu.be/abc",
-                "Status": "Watched",
-                "channel_handle": "@TestChannel",
+        ]
+    }
+    CHANNEL = {
+        "items": [
+            {
+                "id": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                "snippet": {"title": "Rick Astley", "customUrl": "@rickastleyyt"},
+                "contentDetails": {"relatedPlaylists": {"uploads": "UUuAXFkgsw1L7xaCfnd5JJOw"}},
             }
-            handle_youtube_logic("youtube-videos", data)
-            # Should still create the video
-            mock_notion.pages.create.assert_called()
+        ]
+    }
 
-    def test_video_url_sanitized_before_storage(self, mock_notion):
-        """Timestamp/tracking params are stripped before dedupe + storage."""
-        mock_notion.request.return_value = {"results": []}
+    def _yt(self, channel_known):
+        yt = MagicMock()
+        yt.videos().list().execute.return_value = self.SNIPPET
+        yt.channels().list().execute.return_value = self.CHANNEL
+        return yt
 
-        with patch("core.handlers.get_video_channel_details", return_value=None):
-            data = {
-                "Title": "Video",
-                "Video URL": "https://youtu.be/abc?si=XyZ123&t=1m2s",
-                "Status": "Watched",
-            }
-            handle_youtube_logic("youtube-videos", data)
+    def test_new_channel_and_video_are_pushed(self, mock_notion):
+        with (
+            patch("core.handlers.get_youtube", return_value=self._yt(False)),
+            patch("core.handlers.known_channel_ids", return_value=set()),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            ref = handle_youtube_logic(
+                "youtube-videos",
+                {
+                    "Video URL": "https://youtu.be/dQw4w9WgXcQ?si=abc",
+                    "Status": "To Watch",
+                    "Tags": ["Classic"],
+                },
+            )
+        assert ref == "youtube_videos/dQw4w9WgXcQ"
+        tables = [c.args[0] for c in push.call_args_list]
+        assert tables == ["youtube_channels", "youtube_videos"]
+        chan = push.call_args_list[0].args[1][0]
+        assert chan["id"] == "UCuAXFkgsw1L7xaCfnd5JJOw" and chan["follow"] == 0
+        assert chan["backfilled"] == 0
+        assert chan["uploads_playlist_id"] == "UUuAXFkgsw1L7xaCfnd5JJOw"
+        assert chan["subscription"] == "Never Subscribed"
+        vid = push.call_args_list[1].args[1][0]
+        assert vid["id"] == "dQw4w9WgXcQ" and vid["channel_id"] == chan["id"]
+        assert vid["status"] == "Not Started" and vid["tags"] == ["Classic"]
+        assert vid["duration_s"] == 213 and vid["is_short"] == 0
+        assert vid["published_at"] == "2009-10-25T06:57:33Z"
+        mock_notion.pages.create.assert_called_once()  # the "Classify new Channel" cleanup task
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert "Rick Astley" in name
 
-        props = sent_props(mock_notion.pages.create, "youtube-videos")
-        assert props["Video URL"]["url"] == "https://youtu.be/abc"
-        # The dedupe query used the sanitized URL too
-        dedupe_body = mock_notion.request.call_args.kwargs["body"]
-        assert dedupe_body["filter"]["url"]["equals"] == "https://youtu.be/abc"
+    def test_known_channel_pushes_only_the_video(self):
+        with (
+            patch("core.handlers.get_youtube", return_value=self._yt(True)),
+            patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            handle_youtube_logic(
+                "youtube-videos",
+                {"Video URL": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "Status": "Watched"},
+            )
+        assert [c.args[0] for c in push.call_args_list] == ["youtube_videos"]
+        assert push.call_args.args[1][0]["status"] == "Finished"
+
+    def test_no_video_id_raises(self):
+        with pytest.raises(ValueError):
+            handle_youtube_logic(
+                "youtube-videos", {"Video URL": "https://www.youtube.com/@fireship"}
+            )
+
+    def test_rejected_push_files_cleanup_task_and_fails(self, mock_notion):
+        with (
+            patch("core.handlers.get_youtube", return_value=self._yt(True)),
+            patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
+            patch(
+                "core.handlers.push_rows",
+                return_value={
+                    "upserted": 0,
+                    "rejected": [
+                        {"id": "dQw4w9WgXcQ", "col": "status", "rule": "select", "message": "bad"}
+                    ],
+                },
+            ),
+        ):
+            out = handle_youtube_logic(
+                "youtube-videos",
+                {"Video URL": "https://youtu.be/dQw4w9WgXcQ", "Status": "Not Started"},
+            )
+        assert isinstance(out, Failed) and "bad" in out.detail
 
 
 # ======================================================================

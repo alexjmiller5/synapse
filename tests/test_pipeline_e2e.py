@@ -5,7 +5,7 @@ the correct Notion API calls are made with proper data.
 """
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from core.pipeline import run_pipeline, run
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
@@ -359,10 +359,40 @@ class TestGroceryPipeline:
 
 
 # ======================================================================
-# YouTube Tests
+# YouTube Tests — life-data, not Notion (see handlers.TestYouTubeToLifeData)
 # ======================================================================
 class TestYouTubePipeline:
-    def test_new_video(self, mock_gemini, mock_notion):
+    SNIPPET = {
+        "items": [
+            {
+                "id": "abc123",
+                "snippet": {
+                    "title": "Great Video",
+                    "channelId": "UCabc",
+                    "channelTitle": "Test Channel",
+                    "publishedAt": "2020-01-01T00:00:00Z",
+                },
+                "contentDetails": {"duration": "PT10M"},
+            }
+        ]
+    }
+    CHANNEL = {
+        "items": [
+            {
+                "id": "UCabc",
+                "snippet": {"title": "Test Channel", "customUrl": "@testchannel"},
+                "contentDetails": {"relatedPlaylists": {"uploads": "UUabc"}},
+            }
+        ]
+    }
+
+    def _yt(self):
+        yt = MagicMock()
+        yt.videos().list().execute.return_value = self.SNIPPET
+        yt.channels().list().execute.return_value = self.CHANNEL
+        return yt
+
+    def test_new_video_pushed_to_life_data(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
             "youtube-videos",
@@ -370,14 +400,21 @@ class TestYouTubePipeline:
                 "Title": "Great Video",
                 "Video URL": "https://youtu.be/abc123",
                 "Status": "Watched",
-                "channel_handle": "@TestChannel",
             },
         )
-        mock_notion.request.return_value = {"results": []}
-
-        with patch("core.handlers.get_video_channel_details", return_value=None):
+        with (
+            patch("core.handlers.get_youtube", return_value=self._yt()),
+            patch("core.handlers.known_channel_ids", return_value=set()),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
             _run(_item("https://youtu.be/abc123"))
-        assert mock_notion.pages.create.called
+
+        tables = [c.args[0] for c in push.call_args_list]
+        assert tables == ["youtube_channels", "youtube_videos"]
+        assert push.call_args_list[1].args[1][0]["id"] == "abc123"
+        log_props = _log_props(mock_notion)
+        assert log_props["Created Item"]["url"] == "youtube_videos/abc123"
+        assert log_props["Category"]["select"]["name"] == "youtube-videos"
 
     def test_youtube_homepage_url_fails_loudly(self, mock_gemini, mock_notion):
         """A videoless YouTube URL (bare youtube.com/) creates NO video page — the
