@@ -801,6 +801,11 @@ wheels = [
 ]
 
 [[package]]
+name = "media-fields"
+version = "0.1.0"
+source = { git = "https://github.com/alexjmiller5/media-fields?rev=v0.1.0#8715741950cb71320b7493d7742e9adacbe40892" }
+
+[[package]]
 name = "modal"
 version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1382,6 +1387,7 @@ dependencies = [
     { name = "google-api-python-client" },
     { name = "google-genai" },
     { name = "inscriptis" },
+    { name = "media-fields" },
     { name = "notion-client" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
@@ -1407,6 +1413,7 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.187.0" },
     { name = "google-genai", specifier = "~=1.49.0" },
     { name = "inscriptis", specifier = "~=2.7.0" },
+    { name = "media-fields", git = "https://github.com/alexjmiller5/media-fields?rev=v0.1.0" },
     { name = "notion-client", specifier = "~=2.7.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "pyyaml", specifier = "~=6.0.3" },
