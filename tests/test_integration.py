@@ -390,7 +390,7 @@ class TestYoutubeClassification:
     def test_youtube_url(self):
         cat, data, _ = full_pipeline("https://www.youtube.com/watch?v=gODZzSOelss")
         assert cat == "youtube-videos"
-        assert data.get("Status") == "Watched"
+        assert data.get("Status") == "Not Started"
 
     def test_youtube_no_link_is_task(self):
         cat, _, _ = full_pipeline(

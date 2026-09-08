@@ -8,7 +8,6 @@ from core.external_data import (
     fetch_web_metadata,
     get_youtube_video_id,
     get_youtube_metadata,
-    get_video_channel_details,
     get_spotify_metadata,
     enrich_context,
     get_tal_metadata,
@@ -185,30 +184,6 @@ class TestGetYoutubeMetadata:
 
         result = get_youtube_metadata("https://youtu.be/abc123")
         assert "YT Error" in result
-
-
-# ======================================================================
-# get_video_channel_details
-# ======================================================================
-class TestGetVideoChannelDetails:
-    def test_success(self, mock_youtube):
-        mock_req = MagicMock()
-        mock_req.execute.return_value = {
-            "items": [{"snippet": {"channelTitle": "MKBHD", "channelId": "ch123"}}]
-        }
-        mock_youtube.videos.return_value.list.return_value = mock_req
-
-        result = get_video_channel_details("https://youtu.be/abc123")
-        assert result["title"] == "MKBHD"
-        assert result["id"] == "ch123"
-        assert "youtube.com/channel/ch123" in result["url"]
-
-    def test_no_client(self):
-        with patch("core.external_data.get_youtube", return_value=None):
-            assert get_video_channel_details("https://youtu.be/abc") is None
-
-    def test_invalid_url(self, mock_youtube):
-        assert get_video_channel_details("https://example.com") is None
 
 
 # ======================================================================

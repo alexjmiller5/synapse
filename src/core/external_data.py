@@ -130,41 +130,6 @@ def get_spotify_metadata(url):
         return f"Spotify Error: {e}"
 
 
-def get_video_channel_details(url):
-    """
-    Fetches official Channel Title and Channel ID from a Video URL.
-    """
-    youtube = get_youtube()
-    if not youtube:
-        return None
-
-    video_id = get_youtube_video_id(url)
-    if not video_id:
-        return None
-
-    try:
-        # Get Video Details (which includes Channel ID)
-        request = youtube.videos().list(part="snippet", id=video_id)
-        response = request.execute()
-
-        if not response.get("items"):
-            return None
-
-        snippet = response["items"][0]["snippet"]
-        channel_title = snippet.get("channelTitle")
-        channel_id = snippet.get("channelId")
-
-        return {
-            "title": channel_title,
-            "id": channel_id,
-            "url": f"https://www.youtube.com/channel/{channel_id}",
-        }
-
-    except Exception as e:
-        print(f"   ⚠️ Failed to fetch channel details: {e}")
-        return None
-
-
 def get_youtube_video_id(url):
     """Parses Video ID from various YouTube URL formats."""
     parsed = urlparse(url)

@@ -399,7 +399,7 @@ class TestYouTubePipeline:
             {
                 "Title": "Great Video",
                 "Video URL": "https://youtu.be/abc123",
-                "Status": "Watched",
+                "Status": "Finished",
             },
         )
         with (
@@ -425,7 +425,7 @@ class TestYouTubePipeline:
             {
                 "Title": "Could not extract Video ID",
                 "Video URL": "https://youtube.com/",
-                "Status": "To Watch",
+                "Status": "Not Started",
             },
         )
         mock_notion.request.return_value = {"results": []}

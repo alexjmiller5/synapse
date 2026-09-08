@@ -274,10 +274,6 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if data.get("Status") == "Finished":
             data["Date Listened To"] = today_str
 
-    elif category == "youtube-videos":
-        if data.get("Status") == "Watched":
-            data["Date Watched"] = today_str
-
     elif category == "bookmarks":
         if "github.com" in data.get("URL", ""):
             tags = data.get("Tags", [])
