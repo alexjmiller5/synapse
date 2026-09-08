@@ -71,7 +71,10 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   (`core/life_hub.py: pull_ids` against the hub's actual `youtube_channels`
   state, not an in-run cache), with a "Classify new Channel" cleanup task so
   Alex sets follow/subscription by hand; every later video from that channel
-  just links `channel_id`. A `hub_table`
+  just links `channel_id`. The derived video columns (duration seconds,
+  `published_at` in the hub's millisecond-UTC shape, `is_short`,
+  `thumbnail_url`) come from the shared `media_fields` package, which
+  media-center imports too - never re-implement them here. A `hub_table`
   stanza carries no `db_id` and is skipped by `hydrate_dynamic_options`,
   `validate_all`, and `scripts/fetch_property_ids.py`, so its yaml allowlists
   ARE the catalog's options - keep them in step with life-data's catalog.

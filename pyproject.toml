@@ -16,6 +16,7 @@ dependencies = [
     "google-api-python-client>=2.187.0",
     "tenacity>=9.1.2",
     "pydantic-settings>=2.14.2",
+    "media-fields",
 ]
 
 [dependency-groups]
@@ -39,6 +40,9 @@ markers = [
 [tool.ruff]
 src = ["src", "tests"]
 line-length = 100
+
+[tool.uv.sources]
+media-fields = { git = "https://github.com/alexjmiller5/media-fields", rev = "v0.1.0" }
 
 [project.urls]
 "Homepage" = "https://github.com/alexjmiller5/synapse"
