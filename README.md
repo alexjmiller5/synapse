@@ -108,3 +108,14 @@ scripts/          # one-off clients for the deployed webhook
 ## Deployment
 
 Push to `main` → GitHub Actions runs `pytest -m "not integration"` and `modal deploy app.py` (Modal tokens loaded from 1Password). Manual: `just deploy`.
+
+## Gemini credentials
+
+Synapse uses a dedicated Google Cloud project and a dedicated API key restricted
+to `generativelanguage.googleapis.com`. Enable that API, attach the project
+to the intended billing account, and store the key as `GEMINI_API_KEY` in
+this project's environment. Never copy an API key from another application.
+Gemini request quotas are per project, so separate keys in one project do
+not isolate quota ([Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)).
+Verify a small `generateContent` request with the configured model before
+syncing a replacement key; listing models does not verify billing credits.

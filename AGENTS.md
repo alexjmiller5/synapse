@@ -147,3 +147,11 @@ clients (`core.clients` globals) for MagicMocks — no test touches the network.
 
 The iOS/macOS companion app lives at https://github.com/alexjmiller5/receptor.
 It POSTs `{"raw_text": ...}` with Modal proxy-auth headers and expects 200.
+
+## Gemini isolation
+
+Use a dedicated Google Cloud project and API key restricted to
+`generativelanguage.googleapis.com`. Request quota is per project, not per
+key; billing account credit or spending controls may still be shared.
+A credential cutover requires a successful `generateContent` request with
+the configured model before deployment. Never reuse another app's key.
