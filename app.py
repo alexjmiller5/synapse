@@ -13,9 +13,6 @@ app = modal.App(APP_NAME)
 
 image = (
     modal.Image.debian_slim(python_version="3.13")
-    # media-fields is a git dependency and uv shells out to the git binary to
-    # fetch it; debian_slim ships none, so uv_sync fails without this.
-    .apt_install("git")
     .uv_sync(extra_options="--no-dev")  # reads pyproject.toml + uv.lock; skip dev group
     # add_local_python_source("core") can't resolve src/core (the package is never
     # installed and src/ is only on sys.path under pytest) — mount the dir instead.
