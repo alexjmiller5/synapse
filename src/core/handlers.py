@@ -1,6 +1,6 @@
+import re
+from datetime import datetime, timezone
 from typing import NamedTuple
-
-from media_fields import is_short, parse_iso8601_duration, thumbnail_url, to_hub_datetime
 
 from core.config import DATABASES
 from core.secrets import get_db_id
@@ -19,6 +19,28 @@ from core.external_data import (
 )
 from core.life_hub import pull_ids, push_rows
 from core.timeutils import now_utc_iso_ms
+
+# Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
+# because the two services don't share a dependency.
+_ISO8601_DURATION = re.compile(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
+
+
+def _parse_duration_s(iso):
+    d, h, m, s = (int(x or 0) for x in _ISO8601_DURATION.fullmatch(iso).groups())
+    return d * 86400 + h * 3600 + m * 60 + s
+
+
+def _to_hub_datetime(value):
+    """Normalize a YouTube ISO-8601 UTC timestamp to the hub's required shape.
+
+    The hub validates `datetime` columns as ISO-8601 UTC WITH milliseconds;
+    YouTube's `snippet.publishedAt` comes back as e.g. `...Z` with no
+    fractional seconds, which the hub rejects outright.
+    """
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def known_channel_ids():
@@ -126,16 +148,16 @@ def handle_youtube_logic(category, data):
     # A live/premiere video has no fixed duration yet - the row is still valid
     # without it, just not resolvable as a short.
     duration = item["contentDetails"].get("duration")
-    duration_s = parse_iso8601_duration(duration) if duration else None
+    duration_s = _parse_duration_s(duration) if duration else None
     status = data.get("Status") or "Not Started"
     video_row = {
         "id": vid,
         "channel_id": channel_id,
         "title": snippet["title"],
-        "published_at": to_hub_datetime(snippet.get("publishedAt")),
+        "published_at": _to_hub_datetime(snippet.get("publishedAt")),
         "duration_s": duration_s,
-        "thumbnail_url": thumbnail_url(vid),
-        "is_short": is_short(duration_s),
+        "thumbnail_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+        "is_short": 1 if duration_s is not None and duration_s <= 180 else 0,
         "status": status,
         "updated_at": now_utc_iso_ms(),
     }

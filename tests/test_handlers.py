@@ -7,6 +7,7 @@ import pytest
 
 from core.handlers import (
     Failed,
+    _to_hub_datetime,
     handle_groceries_fun_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
@@ -60,6 +61,27 @@ class TestHandleGroceriesFun:
 
         handle_groceries_fun_logic("fun-activities", data, inventory_map=None)
         mock_notion.pages.update.assert_called()
+
+
+# ======================================================================
+# _to_hub_datetime - normalizes YouTube's ISO-8601 timestamps to the hub's
+# required ISO-8601-UTC-with-milliseconds shape
+# ======================================================================
+class TestToHubDatetime:
+    def test_z_no_fraction(self):
+        assert _to_hub_datetime("2009-10-25T06:57:33Z") == "2009-10-25T06:57:33.000Z"
+
+    def test_z_with_fraction(self):
+        assert _to_hub_datetime("2026-09-07T17:24:51.5Z") == "2026-09-07T17:24:51.500Z"
+
+    def test_explicit_utc_offset(self):
+        assert _to_hub_datetime("2026-09-07T17:24:51+00:00") == "2026-09-07T17:24:51.000Z"
+
+    def test_none_passthrough(self):
+        assert _to_hub_datetime(None) is None
+
+    def test_empty_passthrough(self):
+        assert _to_hub_datetime("") is None
 
 
 # ======================================================================
