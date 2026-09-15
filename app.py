@@ -57,5 +57,5 @@ def webhook(payload: dict) -> dict:
     if error:
         raise HTTPException(status_code=422, detail=error)
 
-    call = process.spawn({"raw_text": payload["raw_text"]})
+    call = process.spawn({"raw_text": payload["raw_text"], "source": payload.get("source")})
     return {"status": "accepted", "call_id": call.object_id}

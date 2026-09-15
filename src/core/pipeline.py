@@ -75,16 +75,31 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
     return json.loads(response.text)
 
 
+# `pj` anywhere in the capture (text or context) = "this is a project task": the
+# category is forced to tasks and a project is always linked. The token itself
+# is stripped so it never lands in the task name.
+PJ_KEYWORD = re.compile(r"\bpj\b", re.IGNORECASE)
+
+
+def _strip_pj(text):
+    return re.sub(r"\s{2,}", " ", PJ_KEYWORD.sub("", text or "")).strip()
+
+
 def run_pipeline(
     item_data,
     project_prompts,
     project_id_map,
     inventory_map,
     inventory_list,
+    source=None,
 ):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
     full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
+    force_project = bool(PJ_KEYWORD.search(f"{raw_text} {user_context}"))
+    if force_project:
+        print("⚡ 'pj' keyword — forcing a project task")
+        raw_text, user_context = _strip_pj(raw_text), _strip_pj(user_context)
 
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
@@ -95,14 +110,17 @@ def run_pipeline(
         # Deterministic pre-check: if the user's context says "task", it IS a task —
         # skip the classifier entirely so a movie/venue name can't hijack the category.
         # ponytail: word-match on 'task' only; widen if the prompt fix doesn't hold
-        if re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
+        if force_project or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
             print("⚡ Context mentions 'task' — deterministic classification: tasks")
             category = "tasks"
             # Still link a referenced project so the deterministic path doesn't drop
             # it. ponytail: case-insensitive contains match on active project names —
             # simplest correct approach; the classifier path relies on exact map keys too.
             project = _match_project(f"{raw_text} {user_context}", project_prompts)
-            if not project and re.search(r"\bproj\w*", f"{raw_text} {user_context}", re.IGNORECASE):
+            if not project and (
+                force_project
+                or re.search(r"\bproj\w*", f"{raw_text} {user_context}", re.IGNORECASE)
+            ):
                 # The text names a project the contains-match couldn't find (typo
                 # "burdown", paraphrase "file renaming convention proj") — ask the
                 # classifier just for the project: it sees the exact active-project
@@ -204,11 +222,19 @@ def run_pipeline(
             created_url=url,
             ai_data=log_payload,
             project_append=project_append,
+            source=source,
         )
 
     except Exception as e:
         print(f"❌ Pipeline Error: {e}")
-        log_job_outcome(full_str_for_log, "Unknown", "Error(s)", details=e, ai_data=log_payload)
+        log_job_outcome(
+            full_str_for_log,
+            "Unknown",
+            "Error(s)",
+            details=e,
+            ai_data=log_payload,
+            source=source,
+        )
         create_high_priority_task(full_str_for_log)
 
 
@@ -219,7 +245,15 @@ def payload_error(payload):
     raw_text = payload.get("raw_text")
     if not isinstance(raw_text, str) or not raw_text.strip():
         return "Request must include a non-empty 'raw_text' field."
+    source = payload.get("source")
+    if source is not None and (not isinstance(source, str) or len(source) > MAX_SOURCE_LEN):
+        return f"'source' must be a string of at most {MAX_SOURCE_LEN} characters."
     return None
+
+
+# Where a capture came from (an app, a named shortcut, a hotkey, an agent) — a
+# free-form caller-chosen label logged on the execution; never parsed.
+MAX_SOURCE_LEN = 64
 
 
 # Receptor's iOS background uploads occasionally re-send a thought whose success
@@ -278,6 +312,7 @@ def run(payload: dict, seen=None):
                 project_id_map,
                 inventory_map,
                 inventory_list,
+                source=payload.get("source"),
             )
 
         print("--- BATCH COMPLETE ---")

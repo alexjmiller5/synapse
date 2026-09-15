@@ -399,6 +399,8 @@ databases:
         type: "rich_text"
       Created Item:
         type: "url"
+      Source:
+        type: "select"
   trips:
     db_id: "19603953a8af80c2818cd6135757f4c2"
     description: "Internal inventory of trips."

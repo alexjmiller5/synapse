@@ -34,3 +34,12 @@ class TestPayloadError:
 
     def test_unicode_ok(self):
         assert payload_error({"raw_text": "Café résumé naïve"}) is None
+
+    def test_source_optional_string(self):
+        assert payload_error({"raw_text": "Buy eggs", "source": "ios-app"}) is None
+
+    def test_source_must_be_string(self):
+        assert "source" in payload_error({"raw_text": "Buy eggs", "source": 3})
+
+    def test_source_too_long(self):
+        assert "source" in payload_error({"raw_text": "Buy eggs", "source": "x" * 65})
