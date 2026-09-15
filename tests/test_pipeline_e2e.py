@@ -73,6 +73,7 @@ def _run(item_data, **overrides):
         ctx["project_id_map"],
         ctx["inventory_map"],
         ctx["inventory_list"],
+        source=ctx.get("source"),
     )
 
 
@@ -748,3 +749,57 @@ class TestDedup:
         self._run_with(None, "Buy milk", calls)
         self._run_with(None, "Buy milk", calls)
         assert calls["parse"].call_count == 1
+
+
+# ======================================================================
+# Source stamp + `pj` keyword
+# ======================================================================
+class TestSourceAndPjKeyword:
+    def _task_extraction(self, mock_gemini, name):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03"}),
+        ]
+
+    def test_source_is_logged_on_the_execution(self, mock_gemini, mock_notion):
+        self._task_extraction(mock_gemini, "clean the desk")
+        _run(_item("clean the desk", "task"), source="ios-app")
+        assert _log_props(mock_notion)["Source"] == {"select": {"name": "ios-app"}}
+
+    def test_missing_source_leaves_the_property_unset(self, mock_gemini, mock_notion):
+        self._task_extraction(mock_gemini, "clean the desk")
+        _run(_item("clean the desk", "task"))
+        assert "Source" not in _log_props(mock_notion)
+
+    def test_pj_forces_a_project_task_and_is_stripped(self, mock_gemini, mock_notion):
+        """`pj` anywhere in the capture = project task: no classifier call, the
+        project comes from the contains-match, and the keyword never reaches the
+        task name."""
+        self._task_extraction(mock_gemini, "fix the url bug synapse")
+        _run(_item("fix the url bug pj synapse"))
+        assert mock_gemini.models.generate_content.call_count == 1
+        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
+        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
+        assert props["Name"]["title"][0]["text"]["content"] == "fix the url bug synapse"
+        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
+
+    def test_pj_in_context_without_name_match_uses_classifier_rescue(
+        self, mock_gemini, mock_notion
+    ):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks", "related_project": "Synapse"}),
+            make_gemini_response(
+                {"Name": "fix the url bug", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
+        ]
+        _run(_item("fix the url bug", "pj the thought app"))
+        assert mock_gemini.models.generate_content.call_count == 2
+        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
+        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
+
+    def test_pj_inside_a_word_is_not_the_keyword(self, mock_gemini, mock_notion):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "groceries"}),
+            make_gemini_response({"Name": "pjs"}),
+        ]
+        _run(_item("buy new pjs"))
+        assert mock_gemini.models.generate_content.call_count == 2

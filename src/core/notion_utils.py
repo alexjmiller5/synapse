@@ -335,6 +335,7 @@ def log_job_outcome(
     created_url=None,
     ai_data=None,
     project_append=False,
+    source=None,
 ):
     print(f"--- Logging: {status} ---")
     log_id = get_db_id("logs")
@@ -360,6 +361,8 @@ def log_job_outcome(
     if project_append:
         # Marks executions that appended a task/note to a project (filterable)
         props["Tags"] = _notion_multi_select(["project-append"])
+    if source:
+        props["Source"] = _notion_select(source)
 
     def create(p):
         get_notion().pages.create(parent={"database_id": log_id}, properties=keys_to_ids("logs", p))

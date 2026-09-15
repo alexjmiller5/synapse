@@ -31,8 +31,9 @@ categorize_template: |
        - youtube-videos: only with a LINK. "watch youtube video" with no link -> "task".
        - fun-activities: must imply a location or a "fun thing to do".
   5. PROJECT RULE (strict): only set a `related_project` if the Context names it
-     ("Fix bug [Context: Synapse]"). Empty/unrelated context -> no project, just a
-     normal "task". A matched project is ALWAYS an actionable task linked to it —
+     ("Fix bug [Context: Synapse]") or the text/context carries the keyword `pj`
+     (then it IS a project task: pick the best-matching active project). Otherwise
+     an empty/unrelated context -> no project, just a normal "task". A matched project is ALWAYS an actionable task linked to it —
      there is no separate "note" action.
   6. Classify into exactly one of these categories:
      {category_list}

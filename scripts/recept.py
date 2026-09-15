@@ -27,7 +27,9 @@ def send_event(input_text):
 
     print(f"🚀 Sending: '{input_text}'...")
     try:
-        response = requests.post(url, json={"raw_text": input_text}, headers=headers)
+        response = requests.post(
+            url, json={"raw_text": input_text, "source": "cli"}, headers=headers
+        )
         response.raise_for_status()
         print(f"✅ Success: {response.status_code}")
         print(response.text)
