@@ -28,9 +28,8 @@ tests or on any future platform.
 ## The pipeline (`core/pipeline.py: run`)
 
 Payload: `{"raw_text": str, "source": str | null}`. `source` is a free-form
-caller label (`ios-app`, `macos-app`, `shortcut:<name>`, `hammerspoon`,
-`agent`, `cli`) logged as the execution's `Source` select; Synapse never
-parses it. A standalone `pj` token in text or context forces a project task
+caller label (`ios-app`, `macos-app`, `share-sheet`, `hammerspoon`, `agent`,
+`cli`) logged as the execution's `Source` select; Synapse never parses it. A standalone `pj` token in text or context forces a project task
 (`PJ_KEYWORD`): category tasks, project linked (contains-match, else one
 classifier call), token stripped from the task name.
 
