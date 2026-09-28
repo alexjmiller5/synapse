@@ -8,59 +8,96 @@ import pytest
 from core.handlers import (
     Failed,
     _to_hub_datetime,
-    handle_groceries_fun_logic,
+    handle_hub_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
-    handle_bookmarks_logic,
     handle_people_logic,
-    handle_bucket_list_logic,
     handle_default_logic,
 )
-from helpers import make_notion_page, sent_props
+from helpers import sent_props
 
 
 # ======================================================================
-# handle_groceries_fun_logic
+# handle_hub_logic - every yaml stanza with hub_table + columns
 # ======================================================================
-class TestHandleGroceriesFun:
-    def test_groceries_existing_item_update(self, mock_notion):
-        data = {"Name": "Eggs", "Status": "On List"}
-        inventory = {"Eggs": "eggs-page-id"}
+class TestHubHandler:
+    def _push(self):
+        return patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []})
 
-        handle_groceries_fun_logic("groceries", data, inventory)
-        mock_notion.pages.update.assert_called_once()
-        # Should NOT create new
-        mock_notion.pages.create.assert_not_called()
+    def test_new_grocery_gets_a_fresh_id_and_only_known_columns(self):
+        with (
+            patch("core.handlers.pull_rows", return_value=[]),
+            self._push() as push,
+        ):
+            ref = handle_hub_logic(
+                "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
+            )
+        table, rows = push.call_args.args
+        row = rows[0]
+        assert table == "groceries" and ref == f"groceries/{row['id']}"
+        assert len(row["id"]) == 32
+        assert row["name"] == "Quinoa" and row["category"] == "Grains"
+        assert row["status"] == "On List" and row["updated_at"].endswith("Z")
+        assert "notes" not in row  # never sends a column it does not know
 
-    def test_groceries_new_item(self, mock_notion):
-        data = {"Name": "Quinoa", "Status": "On List", "Category": "Grains"}
+    def test_existing_grocery_is_updated_by_name_case_insensitively(self):
+        with (
+            patch("core.handlers.pull_rows", return_value=[{"id": "abc", "name": "Eggs"}]) as pull,
+            self._push() as push,
+        ):
+            ref = handle_hub_logic("groceries", {"Name": "eggs", "Status": "Have"})
+        assert ref == "groceries/abc"
+        assert pull.call_args.args == ("groceries", ["name"])
+        row = push.call_args.args[1][0]
+        assert row["id"] == "abc" and row["status"] == "Have"
+        assert "category" not in row  # a status capture never clobbers the rest
 
-        handle_groceries_fun_logic("groceries", data, inventory_map={})
+    def test_constants_and_review_reason(self):
+        with patch("core.handlers.pull_rows") as pull, self._push() as push:
+            handle_hub_logic("fun-activities", {"Title": "Go Kayaking", "Status": "Someday"})
+        pull.assert_not_called()  # no match_on -> no lookup
+        row = push.call_args.args[1][0]
+        assert push.call_args.args[0] == "things_to_do"
+        assert row["kind"] == "Activity" and row["title"] == "Go Kayaking"
+        assert "City" in row["needs_review"]
+
+    def test_bucket_list_is_an_ambition(self):
+        with self._push() as push:
+            handle_hub_logic("bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]})
+        row = push.call_args.args[1][0]
+        assert row["kind"] == "Ambition" and row["tags"] == ["Adventure"]
+
+    def test_rejected_row_files_a_cleanup_task_and_fails(self, mock_notion):
+        with (
+            patch("core.handlers.pull_rows", return_value=[]),
+            patch(
+                "core.handlers.push_rows",
+                return_value={
+                    "rejected": [{"col": "category", "message": "category is required."}]
+                },
+            ),
+        ):
+            out = handle_hub_logic("groceries", {"Name": "Quinoa", "Status": "On List"})
+        assert isinstance(out, Failed) and "category is required" in out.detail
         mock_notion.pages.create.assert_called_once()
+        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        assert "Quinoa" in name and "rejected" in name
 
-    def test_fun_activities_new_with_location(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}  # No duplicate
-        data = {"Title": "Walk Seaport", "Status": "To Do", "Location": "Boston"}
-
-        handle_groceries_fun_logic("fun-activities", data, inventory_map=None)
-        mock_notion.pages.create.assert_called_once()
-
-    def test_fun_activities_no_location_creates_cleanup(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {"Title": "Go Kayaking", "Status": "To Do"}
-
-        handle_groceries_fun_logic("fun-activities", data, inventory_map=None)
-        # Should create page + cleanup task = 2 create calls
-        assert mock_notion.pages.create.call_count == 2
-
-    def test_fun_activities_existing_update(self, mock_notion):
-        existing = make_notion_page("fun-id", "Title", "Walk Seaport")
-        # fetch_existing_page calls notion.request
-        mock_notion.request.return_value = {"results": [existing]}
-        data = {"Title": "Walk Seaport", "Status": "Done"}
-
-        handle_groceries_fun_logic("fun-activities", data, inventory_map=None)
-        mock_notion.pages.update.assert_called()
+    def test_bookmark_matches_on_url(self):
+        with (
+            patch(
+                "core.handlers.pull_rows",
+                return_value=[{"id": "bm1", "url": "https://example.com"}],
+            ),
+            self._push() as push,
+        ):
+            ref = handle_hub_logic(
+                "bookmarks", {"Description": "A site", "URL": "https://example.com", "Tags": []}
+            )
+        assert ref == "bookmarks/bm1"
+        row = push.call_args.args[1][0]
+        assert row["id"] == "bm1" and row["description"] == "A site"
+        assert "tags" not in row  # empty lists are not sent
 
 
 # ======================================================================
@@ -344,73 +381,6 @@ class TestHandleMoviesTv:
 
 
 # ======================================================================
-# handle_bookmarks_logic
-# ======================================================================
-class TestHandleBookmarks:
-    def test_new_bookmark(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {
-            "Description": "A site",
-            "Title": "Example",
-            "URL": "https://example.com",
-            "Tags": [],
-        }
-
-        handle_bookmarks_logic("bookmarks", data)
-        mock_notion.pages.create.assert_called_once()
-
-    def test_duplicate_bookmark(self, mock_notion):
-        existing = make_notion_page("bm-id", "Description", "Old bookmark")
-        mock_notion.request.return_value = {"results": [existing]}
-        data = {"Description": "A site", "URL": "https://example.com"}
-
-        url = handle_bookmarks_logic("bookmarks", data)
-        mock_notion.pages.create.assert_not_called()
-        assert "bmid" in (url or "").replace("-", "")
-
-    def test_github_tagging(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {"Description": "Repo", "URL": "https://github.com/owner/repo", "Tags": []}
-
-        handle_bookmarks_logic("bookmarks", data)
-        create_call = mock_notion.pages.create.call_args
-        create_call.kwargs["properties"]
-        # Tags should include Github (added by handler)
-        # The tags come through build_notion_properties so check the raw data was modified
-        assert "Github" in data["Tags"]
-
-    def test_description_trailing_period_stripped(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {
-            "Description": "A tool for secure dependency management.",
-            "Title": "Example",
-            "URL": "https://example.com",
-            "Tags": [],
-        }
-
-        handle_bookmarks_logic("bookmarks", data)
-        props = sent_props(mock_notion.pages.create, "bookmarks")
-        desc = props["Description"]["title"][0]["text"]["content"]
-        assert desc == "A tool for secure dependency management"
-
-    def test_description_without_period_untouched(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        data = {
-            "Description": "A tool for secure dependency management",
-            "Title": "Example",
-            "URL": "https://example.com",
-            "Tags": [],
-        }
-
-        handle_bookmarks_logic("bookmarks", data)
-        props = sent_props(mock_notion.pages.create, "bookmarks")
-        assert (
-            props["Description"]["title"][0]["text"]["content"]
-            == "A tool for secure dependency management"
-        )
-
-
-# ======================================================================
 # handle_people_logic
 # ======================================================================
 class TestHandlePeople:
@@ -419,16 +389,6 @@ class TestHandlePeople:
         url = handle_people_logic("people", data)
         mock_notion.pages.create.assert_called_once()
         assert url is not None
-
-
-# ======================================================================
-# handle_bucket_list_logic
-# ======================================================================
-class TestHandleBucketList:
-    def test_creates_item(self, mock_notion):
-        data = {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
-        handle_bucket_list_logic("bucket-list", data)
-        mock_notion.pages.create.assert_called_once()
 
 
 # ======================================================================

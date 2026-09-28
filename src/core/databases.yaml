@@ -63,7 +63,12 @@ databases:
         virtual: true
 
   groceries:
-    db_id: "24f03953a8af81c98537c5643996ec32"
+    # A life-data table: the catalog enforces required fields, the category
+    # and status vocabularies and the one-item-per-name rule; a capture that
+    # matches an existing name updates that row.
+    hub_table: "groceries"
+    match_on: "name"
+    columns: { Name: name, Category: category, Status: status }
     description: "A food item or household consumable (ONLY food/drink. Non-food items go to Shopping). Sometimes if a food is included, but the prompt is very specific, it will be a task. For example 'Buy a 10 pound bag of rice if the 2 pound is too small`` is a task because of the specific instructions. But 'Buy rice' is groceries."
     properties:
       Name:
@@ -73,6 +78,7 @@ databases:
       Category:
         type: "select"
         required: true
+        allowlist: ["Baking", "Beverages", "Bread & Bakery", "Condiments & Spices", "Dairy", "Dietary Supplement", "Fruits", "Grains", "Meat", "Pre-prepared", "Sauces & Oils", "Seafood", "Snacks", "Sweets", "Vegetables"]
         instruction: "Select the most appropriate category from the list."
       Status:
         type: "status"
@@ -81,7 +87,9 @@ databases:
         instruction: "Determine status based on text (e.g. 'need'/'buy' -> 'On List', 'out of'/'empty' -> 'Don't Have', 'got'/'bought' -> 'Have'). Default to 'On List'."
 
   ideas:
-    db_id: "f6b3969cd6674f88aaf2c0117aa9caa0"
+    # A life-data table (see groceries).
+    hub_table: "ideas"
+    columns: { Description: description, Tags: tags, Status: status }
     description: "A random thought, invention idea, app concept, or project idea. Specifically has to have the word idea in it. The user will specify that this is an idea they just had, most of thoughts are tasks. These are likes ideas for a business, idea for a tv show -- something to create. NOT an idea for a gift for somebody or something like that. Usually this has the word idea in it, but sometimes it does. For example, if the user input is 'Idea for a name: call it quick test (Context: mcat availability project)', the context is clearly specifying that this is an idea for a name a related project, not a standalone idea. Standalone ideas for this categorization won't usually have any context unless it's specifying the status of the idea or that it's an idea. The context might just be 'new idea' or 'great idea' or something like that but wouldn't specify a specific project - if it did specify a project it would be a task related to that project, not an idea."
     properties:
       Description:
@@ -90,13 +98,13 @@ databases:
         instruction: "The user's full original text."
       Tags:
         type: "multi_select"
-        required: true
+        allowlist: ["Animation", "Business", "Coding", "Counting Apps", "Dating Apps", "Desktop Applications", "Educational", "Embedded", "Games", "Google Workspace", "LLM-Related", "Music", "Product", "Productivity", "Social Media", "Tech Consulting", "Web Scrapers"]
         instruction: "Select relevant tags from the list."
       Status:
         type: "status"
         required: true
-        allowlist: ["Ideated", "Good Idea"]
-        instruction: "Determine status based on confidence/progress - but generally default to Ideated. If the user specifies good idea specifically or something along the lines of how great they think it is, use Good Idea"
+        allowlist: ["Someday", "Priority"]
+        instruction: "Default to Someday (an idea, not a commitment). Use Priority only if the user says it is a good/great idea or otherwise signals they want to pursue it."
 
   # quotes: DISABLED 2026-07-07 (Alex adds quotes manually). Commented out so
   # it's excluded from the classifier enum — quote inputs now become tasks.
@@ -214,7 +222,9 @@ databases:
           6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix"), or says "watch [title]" without urgency.
 
   podcasts:
-    db_id: "368344a44c9c40b3b9f9b35533e7f5cc"
+    # A life-data table: manually curated episodes (podcasts are not a Media Center source).
+    hub_table: "podcast_episodes"
+    columns: { "Episode Title": title, "Podcast Name": podcast, Producer: producer, Genres: genres, Status: status, URL: url, "Date Listened To": date_listened }
     description: "A podcast episode or series (MUST contains a Spotify or 'thisamericanlife.org' link). If the user just describes a podcast without a link, classify as a TASK (Chore). Or if they say add these podcasts to my db for example, that is also a task."
     properties:
       Episode Title:
@@ -232,20 +242,17 @@ databases:
         instruction: "The network/producer."
       Genres:
         type: "multi_select"
-        required: true
+        allowlist: ["Classics", "Comedy", "Crime", "Documentary", "Drama", "Economics", "Health", "History", "Medical", "Memoirs", "Political Science", "Psychology", "Science Fiction", "Self-help", "Sociology", "Spirituality", "Talk-Show", "Technology", "Thriller", "Young Adult"]
         instruction: "Relevant genres."
       Status:
         type: "status"
         required: true
-        allowlist: ["Not Started", "In Progress", "Finished"]
-        instruction: "Finished if listened, In Progress if listening, Not Started otherwise."
+        allowlist: ["Priority", "Not Started", "In Progress", "Finished"]
+        instruction: "Finished if listened, In Progress if listening, Priority if the user says they must/need to listen, Not Started otherwise."
       URL:
         type: "url"
         required: true
         instruction: "The valid URL found in the text."
-      Date Listened To:
-        type: "date"
-        virtual: true
 
   youtube-videos:
     # A life-data table, not a Notion DB - see the movies stanza above.
@@ -290,7 +297,11 @@ databases:
         instruction: "Select 'Favorite' if the user praises it highly. Select 'Classic' if implied."
 
   fun-activities:
-    db_id: "19d03953a8af80b8b4c0ec37be230e8e"
+    # A life-data table: things_to_do rows of kind Activity (repeatable outings).
+    hub_table: "things_to_do"
+    constants: { kind: "Activity" }
+    columns: { Title: title, Location: city, Tags: tags, Status: status }
+    review_if_missing: { Location: "City could not be inferred from the capture." }
     description: "A fun activity, event, or place to visit — an UNDATED wishlist entry only. User usually specifies a location or implies 'fun thing to do'. If there is a date, a social-planning context, or the user is still deciding/planning (e.g. 'consider going to gov ball'), it is a task."
     properties:
       Title:
@@ -299,10 +310,9 @@ databases:
         instruction: "The specific name of the activity or place (e.g. 'Walk around Union Square', 'Visit Seaport')."
       Location:
         type: "select"
-        required: true
         # Example cities — override with YOUR list via the NOTION_FUN_ACTIVITIES_LOCATIONS
-        # env var (comma-separated; see core/config.py). Values must exist as options on
-        # the live Notion select (hydration intersects with live options).
+        # env var (comma-separated; see core/config.py). Values must be options of
+        # the things_to_do.city catalog column.
         allowlist: ["Boston", "Dallas", "NYC", "Lakeport"]
         instruction: |
           Infer the city from the text/landmarks:
@@ -310,15 +320,16 @@ databases:
           - "Boston": Seaport, Fenway, Cambridge, The Charles.
           - "Dallas": Deep Ellum, Bishop Arts, Katy Trail.
           - "Lakeport": Crescent Beach, Bayview Park, Main Street Lakeport.
-          - If the location is totally ambiguous, leave empty (the system will create a manual cleanup task).
+          - If the location is totally ambiguous, leave empty (the row is flagged for review).
       Tags:
         type: "multi_select"
+        allowlist: ["Show", "Nightlife", "Cultural", "Social", "Food"]
         instruction: "Select relevant tags (Food, Nightlife, Social, Cultural, Show). Use 'Food' for restaurants, 'Nightlife' for bars/clubs. Isn't necessary if an item doesn't fit any of these categories or if you're unsue -- it's okay to leave empty. Also cultural really ahs to mean cultural - The Edge in nyc is more of a touristy cool thing but it's not cultural"
       Status:
         type: "status"
         required: true
-        allowlist: ["To Do", "Planned", "Done"]
-        instruction: "Default to 'To Do'. Use 'Done' if the user implies they already did it."
+        allowlist: ["Someday", "Planned", "Completed"]
+        instruction: "Default to 'Someday'. Use 'Planned' if the user has a concrete plan or date, 'Completed' if the user implies they already did it."
 
   # people: DISABLED 2026-07-07 (Alex commented out like quotes — adds people manually).
   # Commented out so it's excluded from the classifier enum; people inputs become tasks.
@@ -336,7 +347,11 @@ databases:
 #         instruction: "Extract the context, relationship, or job title provided. (e.g. input: 'Arun Vantage senior associate' -> Company: 'Vantage Senior Associate'. input: 'Will Barlow Theo's camp friend' -> Company: 'Theo's Camp Friend')."
 
   bookmarks:
-    db_id: "2a803953a8af8060b9c4e1d94bfab2e0"
+    # A life-data table: one bookmark per url (a capture of a known url updates it);
+    # the catalog requires the Github tag on github.com urls and no trailing period.
+    hub_table: "bookmarks"
+    match_on: "url"
+    columns: { Description: description, Title: title, URL: url, Tags: tags }
     description: "A web bookmark. Triggers if input is a URL (that is NOT YouTube, Spotify, 'thisamericanlife.org', or Google Maps URL). If there is more context than just the url, this should NOT be categorized as a bookmarks - bookmarks are ONLY urls. For example, if the user input is 'Check out this website: www.test.com for more info', that is a task (chore) to check out the website, not a bookmark. Bookmarks are ONLY when the user input is JUST a url or something very close to just a url with minimal extra text."
     properties:
       Description:
@@ -357,10 +372,14 @@ databases:
         instruction: "The URL. If the user provides a domain without a protocol (e.g. 'test.com' or 'www.google.com'), you MUST prepend 'https://' to ensure it is a valid link."
       Tags:
         type: "multi_select"
+        allowlist: ["Github", "Videogame", "Discord Mod", "List", "Browser Extension", "Learning Material", "Money", "Royalty-free Music"]
         instruction: "Select 'Github' if the URL contains github.com. Otherwise select relevant tags based on content."
 
   bucket-list:
-    db_id: "bd075f6b39584d07929cbaeeafc15299"
+    # A life-data table: things_to_do rows of kind Ambition (one-off goals).
+    hub_table: "things_to_do"
+    constants: { kind: "Ambition" }
+    columns: { Item: title, Tags: tags }
     description: "Items to do before dying. Context usually contains 'bucket list'."
     properties:
       Item:
@@ -369,6 +388,7 @@ databases:
         instruction: "The specific item to do. Use the user's original phrasing. DO NOT remove URLs/Links. DO NOT remove details (e.g. 'with someone'). DO NOT add a period at the end."
       Tags:
         type: "multi_select"
+        allowlist: ["Adventure", "Altruism", "Concert", "Cooking", "Culture", "Drug", "Education", "Event", "Experience", "Fitness", "Food", "Fun", "Goals", "Learning", "Nature", "Personal", "Personal Care", "Skills", "Sports", "Technology", "Travel"]
         instruction: "Select relevant tags (Travel, Skills, Adventure, etc)."
 
   youtube-channels:

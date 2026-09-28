@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Synapse: AI middleware that captures natural-language text and routes it to Notion
-(most categories) or to life-data (movies, tv-shows).
+Synapse: AI middleware that captures natural-language text and routes it to
+life-data (most categories) or to Notion (tasks, plus the Executions log).
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
 ## Architecture rule (the one that matters)
@@ -59,33 +59,42 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   `get_gemini_client()`, etc. (lru_cached, built on first use, `None` if the
   key is absent) — nothing is instantiated at import. `core/secrets.py`'s
   `get_secret`/`get_db_id` remain only for the yaml/env DB-id lookup.
-- **Not every category is a Notion DB.** A stanza with `hub_table` (movies,
-  tv-shows, youtube-videos, youtube-channels) is a life-data table instead:
-  `core/life_hub.py: push_rows` POSTs `{table, columns, rows}` to the hub's
-  `/v1/rows/push` with the `LIFE_HUB_URL` / `LIFE_HUB_TOKEN` settings, and the
-  row id is the TMDB id resolved by `external_data.resolve_tmdb_id` (no
-  confident match = a cleanup task and no write, because a wrong id silently
-  merges two films). Push ONLY the columns you know - the hub's upsert
-  touches exactly the columns sent, so a status capture never blanks tags.
-  Everything else on those rows (title, year, genres, director, cast, poster)
-  is DERIVED on the hub from the id; sending a guessed value gets the row
-  rejected for missing provenance. YouTube captures follow the same shape
-  with the YouTube Data API standing in for TMDB: `handle_youtube_logic`
-  resolves the video via `get_youtube()`, and the row id is the video/channel
-  id the API returns (no resolution step needed - the id is already exact).
-  A channel is pushed once, gated by `known_channel_ids()`
-  (`core/life_hub.py: pull_ids` against the hub's actual `youtube_channels`
-  state, not an in-run cache), with a "Classify new Channel" cleanup task so
-  Alex sets follow/subscription by hand; every later video from that channel
-  just links `channel_id`. A `hub_table`
-  stanza carries no `db_id` and is skipped by `hydrate_dynamic_options`,
-  `validate_all`, and `scripts/fetch_property_ids.py`, so its yaml allowlists
-  ARE the catalog's options - keep them in step with life-data's catalog.
-  `Created Item` on the Executions log holds `<table>/<id>`, not a URL - it is
-  a Notion url property, so `log_job_outcome` retries once without it (ref moved
-  into `AI Summary`) rather than lose the whole row. A handler that wrote
-  nothing returns `handlers.Failed(detail)`, which the pipeline logs as
-  `Error(s)`; returning None there would log a Success over an empty result.
+- **Most categories are life-data tables, not Notion DBs.** A stanza with
+  `hub_table` is one: `core/life_hub.py: push_rows` POSTs `{table, columns,
+  rows}` to the hub's `/v1/rows/push` with the `LIFE_HUB_URL` /
+  `LIFE_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
+  also pull rows). Push ONLY the columns you know - the hub's upsert touches
+  exactly the columns sent, so a status capture never blanks tags. The
+  CATALOG enforces what this yaml used to (required fields, option
+  vocabularies, uniqueness, defaults); a rejected row files a cleanup task
+  and writes nothing. Two handler shapes:
+  - `handle_hub_logic` (groceries, ideas, fun-activities, bucket-list,
+    podcasts, bookmarks): driven entirely by the stanza - `columns` maps
+    extracted property names to catalog columns, `constants` adds fixed
+    columns (`things_to_do.kind`), `match_on` names the natural key (a
+    grocery by `name`, a bookmark by `url`) so a repeat capture updates the
+    existing row instead of duplicating it, `review_if_missing` turns an
+    unfillable property into a `needs_review` reason. New rows get a random
+    32-hex id.
+  - Resolved-id handlers (movies, tv-shows, youtube-videos): the row id is an
+    external id (TMDB, YouTube) that `external_data` resolves first - no
+    confident match = a cleanup task and no write, because a wrong id
+    silently merges two films. Everything else on those rows (title, year,
+    genres, cast, poster) is DERIVED on the hub from the id; sending a
+    guessed value gets the row rejected for missing provenance. A YouTube
+    channel is pushed once, gated by `known_channel_ids()` against the hub's
+    actual state, with a "Classify new Channel" cleanup task.
+  A `hub_table` stanza carries no `db_id` and is skipped by
+  `hydrate_dynamic_options`, `validate_all`, and
+  `scripts/fetch_property_ids.py`, so its yaml allowlists ARE the prompt's
+  options - keep them in step with life-data's catalog (`life property list
+  <table>`). The grocery inventory the extraction prompt sees comes from the
+  hub too (`fetch_inventory_map`). `Created Item` on the Executions log holds
+  `<table>/<id>`, not a URL - it is a Notion url property, so `log_job_outcome`
+  retries once without it (ref moved into `AI Summary`) rather than lose the
+  whole row. A handler that wrote nothing returns `handlers.Failed(detail)`,
+  which the pipeline logs as `Error(s)`; returning None there would log a
+  Success over an empty result.
 - Notion DB ids are committed config, NOT secrets: each Notion-backed category
   stanza in `databases.yaml` has a `db_id` (non-category ids in the top-level `db_ids`
   mapping). `get_db_id` lets a `NOTION_<X>_DB_ID` env var override. Adding a

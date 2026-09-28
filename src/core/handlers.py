@@ -1,15 +1,13 @@
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import NamedTuple
 
 from core.config import DATABASES
-from core.secrets import get_db_id
-from core.clients import get_notion, get_youtube
+from core.clients import get_youtube
 from core.notion_utils import (
     create_page,
-    update_status,
     create_cleanup_task,
-    fetch_existing_page,
     build_notion_properties,
 )
 from core.external_data import (
@@ -17,7 +15,7 @@ from core.external_data import (
     resolve_tmdb_id,
     sanitize_youtube_url,
 )
-from core.life_hub import pull_ids, push_rows
+from core.life_hub import pull_ids, pull_rows, push_rows
 from core.timeutils import now_utc_iso_ms
 
 # Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
@@ -58,38 +56,54 @@ class Failed(NamedTuple):
     detail: str
 
 
-def handle_groceries_fun_logic(category, data, inventory_map):
-    # Map 'Name' vs 'Title' depending on DB
-    search_key = "Name" if category == "groceries" else "Title"
-    search_val = data.get(search_key)
+def handle_hub_logic(category, data):
+    """A capture for any category whose stanza names a life-data `hub_table`.
 
-    if category == "groceries" and inventory_map and search_val in inventory_map:
-        page_id = inventory_map[search_val]
-        print(f"   ✅ Groceries: Matched '{search_val}' (ID: {page_id}). Updating...")
-        return update_status(page_id, data.get("Status"), category).get("url")
+    The stanza's `columns` map extracted Notion-style property names to catalog
+    columns; `constants` are fixed columns (things_to_do.kind); `match_on` names
+    the natural key - a row already holding that value is UPDATED (only the
+    columns we know are sent, so a status capture never clobbers the rest)
+    instead of duplicated; `review_if_missing` turns an unfillable property into
+    a `needs_review` reason rather than a Notion cleanup task. Everything the
+    yaml used to enforce (required, allowlists, defaults) is the catalog's job
+    now: a rejected row files a cleanup task and writes nothing.
+    """
+    stanza = DATABASES["databases"][category]
+    table = stanza["hub_table"]
+    row = {
+        col: data[prop]
+        for prop, col in stanza.get("columns", {}).items()
+        if data.get(prop) not in (None, "", [])
+    }
+    row.update(stanza.get("constants") or {})
+    for prop, reason in (stanza.get("review_if_missing") or {}).items():
+        if data.get(prop) in (None, "", []):
+            row["needs_review"] = reason
 
-    # For Fun Activities, perform a smart search
-    if category == "fun-activities":
-        # Check for duplicates first
-        existing_id = fetch_existing_page(category, search_val, key="Title")
-        if existing_id:
-            print(f"   ✅ Fun Activities: Matched '{search_val}'. Updating Status...")
-            return update_status(existing_id, data.get("Status"), category).get("url")
+    match = stanza.get("match_on")
+    row_id = None
+    if match and row.get(match):
+        key = str(row[match]).strip().lower()
+        row_id = next(
+            (
+                r["id"]
+                for r in pull_rows(table, [match])
+                if str(r.get(match) or "").strip().lower() == key
+            ),
+            None,
+        )
+    row["id"] = row_id or secrets.token_hex(16)
+    row["updated_at"] = now_utc_iso_ms()
 
-        # Create new
-        print(f"   ✨ Creating new {category} page.")
-        resp = create_page(category, build_notion_properties(category, data))
-        created_url = resp.get("url")
+    rejected = push_rows(table, [row]).get("rejected") or []
+    if rejected:
+        message = rejected[0].get("message")
+        label = row.get(match) if match else next(iter(row.values()))
+        create_cleanup_task(f"life-data rejected {label!r}: {message}")
+        return Failed(f"life-data rejected {table}/{row['id']}: {message}")
 
-        # Check for Location Ambiguity (After creation, so we have a link)
-        if not data.get("Location"):
-            print("   ⚠️ Fun Activity Location Unknown. Creating cleanup task.")
-            create_cleanup_task(f"Classify Location for: {search_val}", link_url=created_url)
-
-        return created_url
-
-    print(f"   ✨ Creating new {category} page.")
-    return create_page(category, build_notion_properties(category, data)).get("url")
+    print(f"   ✅ Pushed {table}/{row['id']}")
+    return f"{table}/{row['id']}"
 
 
 def handle_youtube_logic(category, data):
@@ -208,45 +222,7 @@ def handle_movies_tv_logic(category, data):
     return f"{table}/{tmdb_id}"
 
 
-def handle_bookmarks_logic(category, data):
-    target_url = data.get("URL")
-
-    # House style: bookmark descriptions never end with a period (the prompt
-    # says so too, but never trust the AI to comply).
-    if isinstance(data.get("Description"), str):
-        data["Description"] = data["Description"].rstrip(".")
-
-    # A. Check for Duplicates (Exact URL Match)
-    if target_url:
-        db_id = get_db_id("bookmarks")
-        try:
-            # Specific query for URL property type
-            resp = get_notion().request(
-                path=f"databases/{db_id}/query",
-                method="POST",
-                body={"filter": {"property": "URL", "url": {"equals": target_url}}},
-            )
-            if resp.get("results"):
-                print(f"   ✅ Bookmark already exists: {target_url}")
-                return f"https://www.notion.so/{resp['results'][0]['id'].replace('-', '')}"
-        except Exception as e:
-            print(f"   ⚠️ Bookmark duplicate check failed: {e}")
-
-    # B. Apply Logic (GitHub Tags)
-    if "github.com" in target_url:
-        tags = data.get("Tags", [])
-        if isinstance(tags, list) and "Github" not in tags:
-            tags.append("Github")
-            data["Tags"] = tags
-
-    return create_page(category, build_notion_properties(category, data)).get("url")
-
-
 def handle_people_logic(category, data):
-    return create_page(category, build_notion_properties(category, data)).get("url")
-
-
-def handle_bucket_list_logic(category, data):
     return create_page(category, build_notion_properties(category, data)).get("url")
 
 

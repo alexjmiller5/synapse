@@ -4,14 +4,13 @@ from core.clients import get_notion
 from core.timeutils import today_eastern
 from core.notion_utils import clean_text, prop_id
 from core.handlers import (
-    handle_groceries_fun_logic,
+    handle_hub_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
-    handle_bookmarks_logic,
     handle_people_logic,
-    handle_bucket_list_logic,
     handle_default_logic,
 )
+from core.life_hub import pull_rows
 
 
 def query_notion_db(category_key, query_body=None):
@@ -32,23 +31,20 @@ def query_notion_db(category_key, query_body=None):
 
 
 def fetch_inventory_map(category):
-    """
-    Fetches ALL pages from a DB and returns a dict: {'Item Name': 'Page ID'}
-    Uses raw .request() to bypass missing SDK methods.
+    """{item name: row id} for a hub-backed category, from the hub's live rows.
+
+    The names go into the extraction prompt so a capture reuses an existing
+    spelling; the handler matches on the same column when it writes.
     """
     print(f"📚 Fetching full inventory for {category}...")
-    results = query_notion_db(category)
-
-    inventory = {}
-    for page in results:
-        try:
-            title_prop = page["properties"].get("Name", {}).get("title", [])
-            if title_prop:
-                name = title_prop[0]["plain_text"]
-                inventory[name] = page["id"]
-        except Exception:
-            continue
-
+    stanza = DATABASES["databases"][category]
+    key = stanza["match_on"]
+    try:
+        rows = pull_rows(stanza["hub_table"], [key])
+    except Exception as e:
+        print(f"   ⚠️ Inventory unavailable: {e}")
+        return {}
+    inventory = {r[key]: r["id"] for r in rows if r.get(key)}
     print(f"   ✅ Loaded {len(inventory)} items.")
     return inventory
 
@@ -275,6 +271,10 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
             data["Date Listened To"] = today_str
 
     elif category == "bookmarks":
+        # House style the catalog enforces: no trailing period, Github tag on
+        # github.com urls - applied here so the row is valid before the push.
+        if isinstance(data.get("Description"), str):
+            data["Description"] = data["Description"].rstrip(".")
         if "github.com" in data.get("URL", ""):
             tags = data.get("Tags", [])
             if isinstance(tags, list) and "Github" not in tags:
@@ -285,22 +285,17 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
 
 
 LOGIC_HANDLERS = {
-    "groceries": handle_groceries_fun_logic,
-    "fun-activities": handle_groceries_fun_logic,
     "youtube-videos": handle_youtube_logic,
     "movies": handle_movies_tv_logic,
     "tv-shows": handle_movies_tv_logic,
-    "bookmarks": handle_bookmarks_logic,
     "people": handle_people_logic,
-    "bucket-list": handle_bucket_list_logic,
 }
 
 
 def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
-
-    if category in ["groceries", "fun-activities"]:
-        return handle_groceries_fun_logic(category, data, inventory_map)
-
+    stanza = DATABASES["databases"].get(category, {})
+    if stanza.get("hub_table") and "columns" in stanza:
+        return handle_hub_logic(category, data)
     handler = LOGIC_HANDLERS.get(category, handle_default_logic)
     return handler(category, data)

@@ -18,7 +18,7 @@ class TestGetDbId:
         monkeypatch.setenv("NOTION_FUN_ACTIVITIES_DB_ID", "env-override-id")
         assert get_db_id("fun-activities") == "env-override-id"
         monkeypatch.delenv("NOTION_FUN_ACTIVITIES_DB_ID", raising=False)
-        assert get_db_id("fun-activities") == DATABASES["databases"]["fun-activities"]["db_id"]
+        assert get_db_id("fun-activities") is None  # a hub table has no Notion DB
 
     def test_hub_backed_category_has_no_db_id(self, monkeypatch):
         """movies/tv-shows live in life-data - no Notion DB, so no id to find."""
