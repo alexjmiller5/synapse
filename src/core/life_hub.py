@@ -42,19 +42,20 @@ def push_rows(table, rows, *, settings=None, client=None):
     return resp.json()
 
 
-def pull_ids(table, *, settings=None, client=None):
-    """The set of non-deleted row ids currently in a life-data `table`.
+def pull_rows(table, columns, *, settings=None, client=None):
+    """The non-deleted rows of a life-data `table`, restricted to `columns`.
 
-    Used to tell an already-known row (e.g. a channel) apart from a new one
-    against the hub's actual state, not an in-run cache.
+    Read against the hub's actual state (never an in-run cache) so a capture
+    can find the row it should update - a grocery by name, a bookmark by url.
     """
     settings = settings or get_settings()
     if not settings.life_hub_url or not settings.life_hub_token:
         raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
 
+    cols = ["id", "deleted_at"] + [c for c in columns if c not in ("id", "deleted_at")]
     resp = (client or requests).post(
         f"{settings.life_hub_url.rstrip('/')}/v1/rows/pull",
-        json={"table": table, "columns": ["id", "deleted_at"], "since": ""},
+        json={"table": table, "columns": cols, "since": ""},
         headers={
             "Authorization": f"Bearer {settings.life_hub_token}",
             "User-Agent": "synapse",
@@ -63,4 +64,9 @@ def pull_ids(table, *, settings=None, client=None):
         timeout=30,
     )
     resp.raise_for_status()
-    return {r["id"] for r in resp.json().get("rows", []) if not r.get("deleted_at")}
+    return [r for r in resp.json().get("rows", []) if not r.get("deleted_at")]
+
+
+def pull_ids(table, *, settings=None, client=None):
+    """The set of non-deleted row ids currently in a life-data `table`."""
+    return {r["id"] for r in pull_rows(table, [], settings=settings, client=client)}

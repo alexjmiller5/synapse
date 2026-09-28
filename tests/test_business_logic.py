@@ -1,5 +1,7 @@
 """Tests for business_logic.py — business rules, inventory, projects."""
 
+from unittest.mock import patch
+
 from core.timeutils import today_eastern
 
 from core.business_logic import (
@@ -156,19 +158,16 @@ class TestQueryNotionDb:
 # fetch_inventory_map
 # ======================================================================
 class TestFetchInventoryMap:
-    def test_builds_map(self, mock_notion):
-        pages = [
-            make_notion_page("id-1", "Name", "Eggs"),
-            make_notion_page("id-2", "Name", "Milk"),
-        ]
-        mock_notion.request.return_value = {"results": pages}
-
-        inventory = fetch_inventory_map("groceries")
+    def test_builds_map_from_hub_rows(self):
+        rows = [{"id": "id-1", "name": "Eggs"}, {"id": "id-2", "name": "Milk"}]
+        with patch("core.business_logic.pull_rows", return_value=rows) as pull:
+            inventory = fetch_inventory_map("groceries")
         assert inventory == {"Eggs": "id-1", "Milk": "id-2"}
+        assert pull.call_args.args == ("groceries", ["name"])
 
-    def test_empty_db(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        assert fetch_inventory_map("groceries") == {}
+    def test_hub_unavailable_is_an_empty_inventory(self):
+        with patch("core.business_logic.pull_rows", side_effect=RuntimeError("no hub")):
+            assert fetch_inventory_map("groceries") == {}
 
 
 # ======================================================================
@@ -207,10 +206,12 @@ class TestExecuteLogic:
         # Should have called create_page via handle_default_logic
         assert mock_notion.pages.create.called
 
-    def test_groceries_routing(self, mock_notion):
+    def test_hub_backed_category_routes_to_the_hub_handler(self, mock_notion):
         data = {"Name": "New Item", "Status": "On List"}
-        execute_logic("groceries", data, inventory_map={})
-        mock_notion.pages.create.assert_called()
+        with patch("core.business_logic.handle_hub_logic", return_value="groceries/x") as hub:
+            assert execute_logic("groceries", data, inventory_map={}) == "groceries/x"
+        hub.assert_called_once_with("groceries", data)
+        mock_notion.pages.create.assert_not_called()
 
 
 # ======================================================================
@@ -287,23 +288,21 @@ class TestHydrateDynamicOptions:
         of the AI enum — hydration must warn loudly instead of silently no-oping."""
         from core.config import DATABASES
 
-        # Live fun-activities Location select without the 'Lakeport' option
+        # Live tasks Priority select without the 'Low' option
         mock_notion.databases.retrieve.return_value = {
             "properties": {
-                "Location": {
+                "Priority": {
                     "type": "select",
-                    "select": {
-                        "options": [{"name": "Boston"}, {"name": "Dallas"}, {"name": "NYC"}]
-                    },
+                    "select": {"options": [{"name": "Medium"}, {"name": "High"}]},
                 }
             }
         }
         try:
             hydrate_dynamic_options()
             out = capsys.readouterr().out
-            assert "Lakeport" in out and "not in Notion" in out
-            location = DATABASES["databases"]["fun-activities"]["properties"]["Location"]
-            assert "Lakeport" not in location["_runtime_options"]
+            assert "Low" in out and "not in Notion" in out
+            priority = DATABASES["databases"]["tasks"]["properties"]["Priority"]
+            assert "Low" not in priority["_runtime_options"]
         finally:
             # Undo the in-place DATABASES mutation so schema tests keep seeing allowlists
             for details in DATABASES["databases"].values():

@@ -330,33 +330,27 @@ class TestProjectPipeline:
 # Grocery Tests
 # ======================================================================
 class TestGroceryPipeline:
-    def test_new_grocery(self, mock_gemini, mock_notion):
+    def test_new_grocery_is_pushed_to_the_hub(self, mock_gemini, mock_notion):
         _setup_classify_extract(
-            mock_gemini,
-            "groceries",
-            {
-                "Name": "Quinoa",
-                "Category": "Grains",
-                "Status": "On List",
-            },
+            mock_gemini, "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
         )
+        with (
+            patch("core.handlers.pull_rows", return_value=[]),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            _run(_item("Buy quinoa", "groceries"))
+        assert push.call_args.args[0] == "groceries"
+        assert push.call_args.args[1][0]["name"] == "Quinoa"
+        mock_notion.pages.create.assert_called_once()  # the Executions log only
 
-        _run(_item("Buy quinoa", "groceries"))
-        assert mock_notion.pages.create.called
-
-    def test_existing_grocery_update(self, mock_gemini, mock_notion):
-        _setup_classify_extract(
-            mock_gemini,
-            "groceries",
-            {
-                "Name": "Eggs",
-                "Status": "On List",
-            },
-        )
-
-        _run(_item("Buy eggs", "groceries"))
-        # Existing item → update status
-        mock_notion.pages.update.assert_called()
+    def test_existing_grocery_updates_that_row(self, mock_gemini, mock_notion):
+        _setup_classify_extract(mock_gemini, "groceries", {"Name": "Eggs", "Status": "On List"})
+        with (
+            patch("core.handlers.pull_rows", return_value=[{"id": "egg-id", "name": "Eggs"}]),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+        ):
+            _run(_item("Buy eggs", "groceries"))
+        assert push.call_args.args[1][0]["id"] == "egg-id"
 
 
 # ======================================================================
@@ -494,6 +488,9 @@ class TestMovieTvPipeline:
 # Bookmark Tests
 # ======================================================================
 class TestBookmarkPipeline:
+    def _push(self):
+        return patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []})
+
     def test_new_bookmark(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
@@ -505,32 +502,39 @@ class TestBookmarkPipeline:
                 "Tags": [],
             },
         )
-        mock_notion.request.return_value = {"results": []}
-
-        with patch(
-            "core.external_data.fetch_web_metadata", return_value="HTML Title: DevTool\nContent..."
+        with (
+            patch(
+                "core.external_data.fetch_web_metadata",
+                return_value="HTML Title: DevTool\nContent...",
+            ),
+            patch("core.handlers.pull_rows", return_value=[]),
+            self._push() as push,
         ):
             _run(_item("https://devtool.io"))
-        assert mock_notion.pages.create.called
+        row = push.call_args.args[1][0]
+        assert push.call_args.args[0] == "bookmarks" and row["url"] == "https://devtool.io"
 
     def test_github_bookmark_auto_tagged(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
             "bookmarks",
             {
-                "Description": "A repo",
+                "Description": "A repo.",
                 "Title": "owner/repo",
                 "URL": "https://github.com/owner/repo",
                 "Tags": [],
             },
         )
-        mock_notion.request.return_value = {"results": []}
-
-        with patch(
-            "core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."
+        with (
+            patch(
+                "core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."
+            ),
+            patch("core.handlers.pull_rows", return_value=[]),
+            self._push() as push,
         ):
             _run(_item("https://github.com/owner/repo"))
-        assert mock_notion.pages.create.called
+        row = push.call_args.args[1][0]
+        assert row["tags"] == ["Github"] and row["description"] == "A repo"
 
 
 # ======================================================================
@@ -578,13 +582,14 @@ class TestIdeaPipeline:
             "ideas",
             {
                 "Description": "App that tracks sleep patterns",
-                "Tags": ["Tech"],
-                "Status": "Ideated",
+                "Tags": ["Coding"],
+                "Status": "Someday",
             },
         )
-
-        _run(_item("Idea for an app that tracks sleep patterns"))
-        mock_notion.pages.create.assert_called()
+        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
+            _run(_item("Idea for an app that tracks sleep patterns"))
+        assert push.call_args.args[0] == "ideas"
+        assert push.call_args.args[1][0]["status"] == "Someday"
 
 
 # ======================================================================
@@ -595,16 +600,14 @@ class TestFunActivitiesPipeline:
         _setup_classify_extract(
             mock_gemini,
             "fun-activities",
-            {
-                "Title": "Walk around Seaport",
-                "Status": "To Do",
-                "Location": "Boston",
-            },
+            {"Title": "Walk around Seaport", "Status": "Someday", "Location": "Boston"},
         )
-        mock_notion.request.return_value = {"results": []}
-
-        _run(_item("Walk around Seaport", "fun"))
-        mock_notion.pages.create.assert_called()
+        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
+            _run(_item("Walk around Seaport", "fun"))
+        row = push.call_args.args[1][0]
+        assert push.call_args.args[0] == "things_to_do"
+        assert row["kind"] == "Activity" and row["city"] == "Boston"
+        assert "needs_review" not in row
 
 
 # ======================================================================
@@ -623,13 +626,17 @@ class TestPodcastPipeline:
                 "URL": "https://open.spotify.com/episode/abc",
             },
         )
-
-        with patch(
-            "core.external_data.get_spotify_metadata",
-            return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
+        with (
+            patch(
+                "core.external_data.get_spotify_metadata",
+                return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
+            ),
+            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
         ):
             _run(_item("https://open.spotify.com/episode/abc"))
-        mock_notion.pages.create.assert_called()
+        row = push.call_args.args[1][0]
+        assert push.call_args.args[0] == "podcast_episodes"
+        assert row["podcast"] == "My Show" and row["url"].startswith("https://open.spotify.com")
 
 
 # ======================================================================
@@ -638,16 +645,12 @@ class TestPodcastPipeline:
 class TestBucketListPipeline:
     def test_new_item(self, mock_gemini, mock_notion):
         _setup_classify_extract(
-            mock_gemini,
-            "bucket-list",
-            {
-                "Item": "Skydive in Dubai",
-                "Tags": ["Adventure"],
-            },
+            mock_gemini, "bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
         )
-
-        _run(_item("Skydive in Dubai", "bucket list"))
-        mock_notion.pages.create.assert_called()
+        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
+            _run(_item("Skydive in Dubai", "bucket list"))
+        row = push.call_args.args[1][0]
+        assert push.call_args.args[0] == "things_to_do" and row["kind"] == "Ambition"
 
 
 # ======================================================================
