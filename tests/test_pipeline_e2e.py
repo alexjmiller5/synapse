@@ -446,7 +446,7 @@ class TestMovieTvPipeline:
         _setup_classify_extract(
             mock_gemini,
             "movies",
-            {"Title": "Inception", "Status": "Not Started", "Tags": ["All-time Favorite"]},
+            {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]},
         )
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
