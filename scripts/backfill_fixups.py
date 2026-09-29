@@ -26,6 +26,8 @@ NOTION = "https://api.notion.com/v1"
 def _opt(name):
     """Notion select/multi_select option names can't contain commas (API 400)."""
     return str(name).replace(",", "")
+
+
 HEADERS = {
     "Authorization": f"Bearer {os.environ['NOTION_INTEGRATION_TOKEN']}",
     "Notion-Version": "2026-03-11",
@@ -43,11 +45,16 @@ FIXUPS = [
     ("Mohallen Drive", "Mulholland Drive", "Mulholland Drive"),
     ("Final Destination Bloodines", "Final Destination Bloodlines", "Final Destination Bloodlines"),
     ("Jurrqsic World Rebirth", "Jurassic World Rebirth", "Jurassic World Rebirth"),
-    ("Pirates of the Carribean: Dead Man’s Chest", "Pirates of the Caribbean Dead Man's Chest",
-     "Pirates of the Caribbean: Dead Man's Chest"),
-    ("Pirates of the Carribean: The Curse of the Black Pearl",
-     "Pirates of the Caribbean The Curse of the Black Pearl",
-     "Pirates of the Caribbean: The Curse of the Black Pearl"),
+    (
+        "Pirates of the Carribean: Dead Man’s Chest",
+        "Pirates of the Caribbean Dead Man's Chest",
+        "Pirates of the Caribbean: Dead Man's Chest",
+    ),
+    (
+        "Pirates of the Carribean: The Curse of the Black Pearl",
+        "Pirates of the Caribbean The Curse of the Black Pearl",
+        "Pirates of the Caribbean: The Curse of the Black Pearl",
+    ),
     ("King of Staton Island", "The King of Staten Island", "The King of Staten Island"),
     ("Chappanquiddick", "Chappaquiddick", "Chappaquiddick"),
     ("In the Line or Fire", "In the Line of Fire", "In the Line of Fire"),
@@ -76,8 +83,11 @@ FIXUPS = [
     ("Thelma and Louise", "Thelma & Louise", "Thelma & Louise"),
     ("Minions: Rise of Gru", "Minions: The Rise of Gru", "Minions: The Rise of Gru"),
     ("Zombieland 2", "Zombieland: Double Tap", "Zombieland: Double Tap"),
-    ("Operation Varsity Blues: College Admissions Scandal",
-     "Operation Varsity Blues", "Operation Varsity Blues: The College Admissions Scandal"),
+    (
+        "Operation Varsity Blues: College Admissions Scandal",
+        "Operation Varsity Blues",
+        "Operation Varsity Blues: The College Admissions Scandal",
+    ),
     # --- subtitle expansions / correct matches: keep Alex's title, apply metadata ---
     ("Pirates of the Caribbean", "Pirates of the Caribbean The Curse of the Black Pearl", None),
     ("Dear Zachary", "Dear Zachary A Letter to a Son About His Father", None),
@@ -145,7 +155,9 @@ def main():
         if meta["director"]:
             props["Director"] = {"select": {"name": _opt(meta["director"])}}
         if meta["cast"]:
-            props["Famous Cast Members"] = {"multi_select": [{"name": _opt(c)} for c in meta["cast"]]}
+            props["Famous Cast Members"] = {
+                "multi_select": [{"name": _opt(c)} for c in meta["cast"]]
+            }
         if rename_to:
             props["Title"] = {"title": [{"text": {"content": rename_to}}]}
 
@@ -163,8 +175,10 @@ def main():
                 continue
         ok += 1
 
-    print(f"\n=== {'applied' if apply else 'would apply'}: {ok} | "
-          f"page-not-found: {missing_page} | no-tmdb: {no_tmdb}")
+    print(
+        f"\n=== {'applied' if apply else 'would apply'}: {ok} | "
+        f"page-not-found: {missing_page} | no-tmdb: {no_tmdb}"
+    )
 
 
 if __name__ == "__main__":
