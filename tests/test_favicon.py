@@ -108,7 +108,10 @@ class TestCreatePageBookmarkIcon:
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_with_github_url_gets_custom_emoji(self, mock_db_id, mock_notion):
         """When creating a bookmark with a GitHub URL, the icon should be the github-light custom emoji."""
-        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {
+            "id": "test-id",
+            "url": "https://notion.so/test",
+        }
 
         from core.notion_utils import create_page
 
@@ -128,7 +131,10 @@ class TestCreatePageBookmarkIcon:
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_with_non_github_url_gets_favicon(self, mock_db_id, mock_notion):
         """When creating a bookmark with a non-GitHub URL, the icon should be the site's favicon."""
-        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {
+            "id": "test-id",
+            "url": "https://notion.so/test",
+        }
 
         from core.notion_utils import create_page
 
@@ -151,7 +157,10 @@ class TestCreatePageBookmarkIcon:
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_bookmark_without_url_gets_no_icon(self, mock_db_id, mock_notion):
         """When creating a bookmark without a URL, no icon should be set."""
-        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {
+            "id": "test-id",
+            "url": "https://notion.so/test",
+        }
 
         from core.notion_utils import create_page
 
@@ -168,7 +177,10 @@ class TestCreatePageBookmarkIcon:
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_podcasts_still_get_emoji_icon(self, mock_db_id, mock_notion):
         """Ensure existing emoji icon logic for podcasts is unchanged."""
-        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {
+            "id": "test-id",
+            "url": "https://notion.so/test",
+        }
 
         from core.notion_utils import create_page
 
@@ -183,7 +195,10 @@ class TestCreatePageBookmarkIcon:
     @patch("core.notion_utils.get_db_id", return_value="fake-db-id")
     def test_other_category_gets_no_icon(self, mock_db_id, mock_notion):
         """Categories without icon logic should not have an icon set."""
-        mock_notion.return_value.pages.create.return_value = {"id": "test-id", "url": "https://notion.so/test"}
+        mock_notion.return_value.pages.create.return_value = {
+            "id": "test-id",
+            "url": "https://notion.so/test",
+        }
 
         from core.notion_utils import create_page
 

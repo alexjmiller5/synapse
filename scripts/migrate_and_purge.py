@@ -82,7 +82,11 @@ def main():
             print(f"  ? not in Movies DB: {movie_title!r}")
             continue
         results = tmdb_search("tv", query, key)
-        meta = tmdb_details("tv", results[0]["id"], key) if results else {"genres": [], "director": "", "cast": []}
+        meta = (
+            tmdb_details("tv", results[0]["id"], key)
+            if results
+            else {"genres": [], "director": "", "cast": []}
+        )
 
         props = {"Title": {"title": [{"text": {"content": movie_title}}]}}
         # carry over the watched-state fields that safely transfer
@@ -90,10 +94,14 @@ def main():
         if src.get("Date Watched", {}).get("date"):
             props["Date Watched"] = {"date": src["Date Watched"]["date"]}
         if src.get("Tags", {}).get("multi_select"):
-            props["Tags"] = {"multi_select": [{"name": t["name"]} for t in src["Tags"]["multi_select"]]}
+            props["Tags"] = {
+                "multi_select": [{"name": t["name"]} for t in src["Tags"]["multi_select"]]
+            }
         if meta["genres"]:
             props["Genres"] = {
-                "multi_select": [{"name": o.replace(",", "")} for o in map_genres(meta["genres"], options)]
+                "multi_select": [
+                    {"name": o.replace(",", "")} for o in map_genres(meta["genres"], options)
+                ]
             }
         if meta["director"]:
             props["Director"] = {"select": {"name": meta["director"].replace(",", "")}}
@@ -102,13 +110,18 @@ def main():
                 "multi_select": [{"name": c.replace(",", "")} for c in meta["cast"]]
             }
 
-        print(f"  ✓ {movie_title!r} -> TV | creator={meta['director'] or '—'} | "
-              f"genres=[{', '.join(map_genres(meta['genres'], options)) if meta['genres'] else '—'}]")
+        print(
+            f"  ✓ {movie_title!r} -> TV | creator={meta['director'] or '—'} | "
+            f"genres=[{', '.join(map_genres(meta['genres'], options)) if meta['genres'] else '—'}]"
+        )
         if apply:
             resp = requests.post(
                 f"{NOTION}/pages",
                 headers=HEADERS,
-                json={"parent": {"type": "data_source_id", "data_source_id": TV_DS}, "properties": props},
+                json={
+                    "parent": {"type": "data_source_id", "data_source_id": TV_DS},
+                    "properties": props,
+                },
                 timeout=30,
             )
             if resp.status_code >= 300:
@@ -129,8 +142,10 @@ def main():
             trash(page["id"])
         deleted += 1
 
-    print(f"\n=== {'migrated' if apply else 'would migrate'}: {migrated} | "
-          f"{'deleted' if apply else 'would delete'}: {deleted}")
+    print(
+        f"\n=== {'migrated' if apply else 'would migrate'}: {migrated} | "
+        f"{'deleted' if apply else 'would delete'}: {deleted}"
+    )
 
 
 if __name__ == "__main__":
