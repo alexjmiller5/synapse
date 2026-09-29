@@ -118,10 +118,11 @@ class TestYamlFixGuards:
     def test_movies_tags_instruction_mentions_all_time_favorite(self):
         instr = DATABASES["databases"]["movies"]["properties"]["Tags"]["instruction"]
         assert "all time favorite" in instr.lower()
-        assert (
-            "All-time Favorite"
-            in DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
-        )
+        allow = DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
+        # one Favorite tier: the old spellings must never be offered again
+        assert "Favorite" in allow
+        assert "All-time Favorite" not in allow
+        assert "Best Movies" not in allow
 
     def test_media_categories_are_hub_backed_not_notion(self):
         """movies/tv-shows write to life-data: they carry a hub_table and NO db_id
@@ -140,11 +141,12 @@ class TestYamlFixGuards:
 
     def test_media_tags_allowlists_match_the_life_data_catalog(self):
         assert set(DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]) == {
-            "All-time Favorite",
+            "Favorite",
+            "Sequel",
+            "Prequel",
             "Studio Ghibli",
             "LS477",
             "Sad",
-            "Best Movies",
             "Coming-of-age",
             "Animé",
             "Mocumentary",
@@ -154,10 +156,12 @@ class TestYamlFixGuards:
             "Cult Classic",
         }
         assert set(DATABASES["databases"]["tv-shows"]["properties"]["Tags"]["allowlist"]) == {
-            "All-time Favorite",
+            "Favorite",
+            "Classic",
+            "Sequel",
+            "Prequel",
             "Animé",
             "Dystopia",
-            "Classics",
             "Mocumentary",
             "Spanish",
             "Sport",
@@ -174,14 +178,13 @@ class TestYamlFixGuards:
         assert "need to watch" in instr.lower()
 
     def test_tv_status_allowlist_matches_live_options(self):
-        """The live TV Shows DB has six statuses (verified 2026-09-01); an
-        allowlist missing two makes them unreachable — hydration intersects
-        with live options, it never adds."""
+        """The allowlist is exactly the tv_shows.status options in the life-data
+        catalog; any other word is rejected by the hub."""
         allow = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["allowlist"]
         assert set(allow) == {
             "Priority",
             "Not Started",
-            "Watched Some",
+            "Watched Parts",
             "In Progress",
             "Finished",
             "Gave Up",
@@ -189,11 +192,10 @@ class TestYamlFixGuards:
 
     def test_tv_status_instruction_uses_tv_names_and_is_unambiguous(self):
         instr = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["instruction"]
-        # "Watched Parts" is the MOVIES name; on TV the partial-watch status is
-        # "Watched Some" — naming a non-existent status sends picks into the
-        # hydration filter and the field comes back empty
-        assert "Watched Parts" not in instr
-        assert "Watched Some" in instr
+        # the catalog's partial-watch word is "Watched Parts" for movies and TV
+        # alike; "Watched Some" is not an option and the hub rejects it
+        assert "Watched Some" not in instr
+        assert "Watched Parts" in instr
         # "must watch" must map to exactly one status (Priority, matching
         # movies) — the old text routed "Must watch [title]" to Not Started in
         # one clause and "must watch" to Priority in another

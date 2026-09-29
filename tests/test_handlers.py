@@ -287,7 +287,7 @@ ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 class TestHandleMoviesTv:
     def test_confident_match_pushes_one_row(self, mock_notion):
-        data = {"Title": "Inception", "Status": "Not Started", "Tags": ["All-time Favorite"]}
+        data = {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]}
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205") as resolve,
             patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
@@ -302,7 +302,7 @@ class TestHandleMoviesTv:
         row = rows[0]
         assert row["id"] == "27205"
         assert row["status"] == "Not Started"
-        assert row["tags"] == ["All-time Favorite"]
+        assert row["tags"] == ["Favorite"]
         assert ISO_MS.match(row["updated_at"])
         # Created Item is the life-data row reference, not a Notion URL
         assert ref == "movies/27205"
