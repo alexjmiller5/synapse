@@ -7,7 +7,17 @@ sends only the columns it actually knows.
 
 import requests
 
-from core.settings import get_settings
+from types import SimpleNamespace
+
+from core.workspace import current
+
+
+def _hub():
+    """The active workspace's life-data hub (url + token)."""
+    s = current().secrets
+    return SimpleNamespace(
+        life_hub_url=s.get("life_hub_url"), life_hub_token=s.get("life_hub_token")
+    )
 
 
 def push_rows(table, rows, *, settings=None, client=None):
@@ -18,7 +28,7 @@ def push_rows(table, rows, *, settings=None, client=None):
     A rejected row comes back as {id, col, rule, message}; the caller decides
     what to do with it. Raises on a non-2xx response.
     """
-    settings = settings or get_settings()
+    settings = settings or _hub()
     if not settings.life_hub_url or not settings.life_hub_token:
         raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
 
@@ -48,7 +58,7 @@ def pull_rows(table, columns, *, settings=None, client=None):
     Read against the hub's actual state (never an in-run cache) so a capture
     can find the row it should update - a grocery by name, a bookmark by url.
     """
-    settings = settings or get_settings()
+    settings = settings or _hub()
     if not settings.life_hub_url or not settings.life_hub_token:
         raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
 

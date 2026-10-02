@@ -14,6 +14,7 @@ from notion_client import Client
 from spotipy.oauth2 import SpotifyClientCredentials
 
 from core.settings import get_settings
+from core.workspace import current
 
 
 @lru_cache
@@ -22,10 +23,15 @@ def get_gemini_client():
     return genai.Client(api_key=key) if key else None
 
 
-@lru_cache
 def get_notion():
-    token = get_settings().notion_integration_token
-    return Client(auth=token, notion_version="2022-06-28") if token else None
+    """The ACTIVE workspace's Notion connection (one client per token)."""
+    token = current().secrets.get("notion_integration_token")
+    return _notion_client(token) if token else None
+
+
+@lru_cache
+def _notion_client(token):
+    return Client(auth=token, notion_version="2022-06-28")
 
 
 @lru_cache

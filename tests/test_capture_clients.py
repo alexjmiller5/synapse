@@ -72,3 +72,20 @@ def test_enrollment_link_keeps_the_secret_out_of_the_server_request():
         "url": ["https://ws--synapse-capture.modal.run"],
         "token": ["tok/en+="],
     }
+
+
+def test_a_token_carries_its_workspace():
+    store = {}
+    friend = cc.issue(store, "friend phone", workspace="friend")
+    mine = cc.issue(store, "my phone")
+    assert cc.authenticate(store, f"Bearer {friend['token']}")["workspace"] == "friend"
+    assert cc.authenticate(store, f"Bearer {mine['token']}")["workspace"] == "default"
+
+
+def test_tokens_issued_before_workspaces_belong_to_the_default_one():
+    store = {}
+    old = cc.issue(store, "old phone")
+    record = store[f"client:{old['client_id']}"]
+    del record["workspace"]
+    store[f"client:{old['client_id']}"] = record
+    assert cc.authenticate(store, f"Bearer {old['token']}")["workspace"] == "default"

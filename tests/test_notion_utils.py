@@ -453,23 +453,23 @@ class TestCreateProjectTask:
 # ======================================================================
 class TestFetchExistingPage:
     def test_found(self, mock_notion):
-        page = make_notion_page("found-id", "Title", "Kayaking")
+        page = make_notion_page("found-id", "Name", "Kayaking")
         mock_notion.request.return_value = {"results": [page]}
 
-        result = fetch_existing_page("fun-activities", "Kayaking", "Title")
+        result = fetch_existing_page("tasks", "Kayaking", "Name")
         assert result == "found-id"
 
     def test_not_found(self, mock_notion):
         mock_notion.request.return_value = {"results": []}
-        result = fetch_existing_page("fun-activities", "NonExistent", "Title")
+        result = fetch_existing_page("tasks", "NonExistent", "Name")
         assert result is None
 
     def test_the_prefix_removal(self, mock_notion):
         """'The Freedom Trail' should search for 'Freedom Trail' (smart search)."""
         mock_notion.request.return_value = {"results": []}
-        fetch_existing_page("fun-activities", "The Freedom Trail", "Title")
+        fetch_existing_page("tasks", "The Freedom Trail", "Name")
         call_body = mock_notion.request.call_args.kwargs["body"]
-        assert call_body["filter"]["property"] == "Title"
+        assert call_body["filter"]["property"] == "Name"
         assert call_body["filter"]["title"]["contains"] == "Freedom Trail"
 
     def test_no_notion_client(self):

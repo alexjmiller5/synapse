@@ -1,0 +1,11 @@
+# Test workspace overlay: fake Notion ids over the product template.
+databases:
+  logs:
+    db_id: fake-logs-db-id
+  tasks:
+    db_id: fake-tasks-db-id
+  trips:
+    db_id: fake-trips-db-id
+db_ids:
+  notes: fake-notes-db-id
+  projects: fake-projects-db-id

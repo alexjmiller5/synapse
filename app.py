@@ -21,6 +21,7 @@ image = (
     # installed and src/ is only on sys.path under pytest) — mount the dir instead.
     # Lands at /root/core, importable in-container, yaml files included for free.
     .add_local_dir("src/core", remote_path="/root/core", ignore=["**/__pycache__"])
+    .add_local_file("store.py", remote_path="/root/store.py")
 )
 
 secrets = [modal.Secret.from_name(APP_NAME)]
@@ -29,9 +30,18 @@ secrets = [modal.Secret.from_name(APP_NAME)]
 # inside its dedup window. Entries expire after 7 idle days on Modal's side.
 seen_inputs = modal.Dict.from_name(f"{APP_NAME}-seen-inputs", create_if_missing=True)
 
-# Per-device capture tokens (core.capture_clients): hashes only. Issued and
-# revoked by the operator with scripts/capture_clients.py.
-capture_clients_store = modal.Dict.from_name(f"{APP_NAME}-capture-clients", create_if_missing=True)
+# Durable state (store.VolumeStore over this Volume): workspaces (core.workspace:
+# each user's overlay, property ids and Notion / life-data credentials) and
+# per-device capture tokens (core.capture_clients: hashes only, each bound to a
+# workspace). The operator edits both with scripts/workspace.py and
+# scripts/capture_clients.py.
+state = modal.Volume.from_name(f"{APP_NAME}-state", create_if_missing=True)  # = store.STATE_VOLUME
+
+
+def _state():
+    from store import VolumeStore
+
+    return VolumeStore(state)
 
 
 @app.function(
@@ -45,10 +55,13 @@ capture_clients_store = modal.Dict.from_name(f"{APP_NAME}-capture-clients", crea
     retries=modal.Retries(max_retries=3, backoff_coefficient=2.0),
 )
 def process(payload: dict):
-    """Background worker — .spawn()ed from the webhook. spawn() IS the queue."""
+    """Background worker — .spawn()ed from the webhook. spawn() IS the queue.
+    Runs inside the capture's workspace: its config, ids and credentials."""
+    from core import workspace
     from core.pipeline import run
 
-    return run(payload, seen=seen_inputs)
+    with workspace.use(workspace.load(_state(), payload.get("workspace") or workspace.DEFAULT_ID)):
+        return run(payload, seen=seen_inputs)
 
 
 @app.function(image=image, secrets=secrets)
@@ -65,7 +78,13 @@ def webhook(payload: dict) -> dict:
     if error:
         raise HTTPException(status_code=422, detail=error)
 
-    call = process.spawn({"raw_text": payload["raw_text"], "source": payload.get("source")})
+    call = process.spawn(
+        {
+            "raw_text": payload["raw_text"],
+            "source": payload.get("source"),
+            "workspace": payload.get("workspace") or "default",
+        }
+    )
     return {"status": "accepted", "call_id": call.object_id}
 
 
@@ -79,7 +98,7 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
     from core.pipeline import payload_error
 
     try:
-        capture_clients.authenticate(capture_clients_store, authorization)
+        client = capture_clients.authenticate(_state(), authorization)
     except capture_clients.Unauthorized:
         return JSONResponse(
             {"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"}
@@ -87,7 +106,13 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
     error = payload_error(payload)
     if error:
         return JSONResponse({"error": error}, status_code=422)
-    call = process.spawn({"raw_text": payload["raw_text"], "source": payload.get("source")})
+    call = process.spawn(
+        {
+            "raw_text": payload["raw_text"],
+            "source": payload.get("source"),
+            "workspace": client["workspace"],  # from the token, never the body
+        }
+    )
     return {"status": "accepted", "call_id": call.object_id}
 
 

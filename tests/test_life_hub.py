@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.life_hub import pull_ids, push_rows
-from core.settings import Settings
+from types import SimpleNamespace
 
 
 def _settings():
-    return Settings(life_hub_url="https://hub.example/", life_hub_token="tok")
+    return SimpleNamespace(life_hub_url="https://hub.example/", life_hub_token="tok")
 
 
 def _client(payload=None, status=200):
@@ -68,7 +68,7 @@ class TestPushRows:
             push_rows(
                 "movies",
                 [{"id": "1"}],
-                settings=Settings(life_hub_url=None, life_hub_token=None),
+                settings=SimpleNamespace(life_hub_url=None, life_hub_token=None),
                 client=_client(),
             )
 
@@ -106,6 +106,6 @@ class TestPullIds:
         with pytest.raises(RuntimeError, match="LIFE_HUB_URL"):
             pull_ids(
                 "youtube_channels",
-                settings=Settings(life_hub_url=None, life_hub_token=None),
+                settings=SimpleNamespace(life_hub_url=None, life_hub_token=None),
                 client=_client(),
             )

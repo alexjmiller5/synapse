@@ -2,9 +2,9 @@
 Shared test fixtures for the Synapse test suite.
 
 Mocking strategy:
-- Fake secrets are seeded as env vars BEFORE core modules import
-  (core.secrets reads env vars; DB ids fall back to databases.yaml, so the
-  fake NOTION_*_DB_ID vars here act as overrides that keep tests off real ids)
+- Fake secrets are seeded as env vars BEFORE core modules import, and the
+  local workspace (core.workspace.local) is tests/fixtures/workspace: the
+  product template plus fake Notion ids and property ids - never real ones
 - core.clients module globals (notion, gemini_client, spotify, youtube)
   are patched at the module level
 - All external API calls are intercepted before any real network I/O
@@ -28,26 +28,13 @@ FAKE_SECRETS = {
     # life-data hub (movies/tv-shows)
     "life-hub-url": "https://hub.test.invalid",
     "life-hub-token": "fake-hub-token",
-    # DB IDs
-    "notion-tasks-db-id": "fake-tasks-db-id",
-    "notion-groceries-db-id": "fake-groceries-db-id",
-    "notion-ideas-db-id": "fake-ideas-db-id",
-    "notion-quotes-db-id": "fake-quotes-db-id",
-    "notion-podcasts-db-id": "fake-podcasts-db-id",
-    "notion-youtube-videos-db-id": "fake-yt-videos-db-id",
-    "notion-youtube-channels-db-id": "fake-yt-channels-db-id",
-    "notion-fun-activities-db-id": "fake-fun-db-id",
-    "notion-people-db-id": "fake-people-db-id",
-    "notion-bookmarks-db-id": "fake-bookmarks-db-id",
-    "notion-bucket-list-db-id": "fake-bucket-list-db-id",
-    "notion-logs-db-id": "fake-logs-db-id",
-    "notion-trips-db-id": "fake-trips-db-id",
-    "notion-projects-db-id": "fake-projects-db-id",
-    "notion-notes-db-id": "fake-notes-db-id",
 }
 
 for _sid, _val in FAKE_SECRETS.items():
     os.environ.setdefault(_sid.upper().replace("-", "_"), _val)
+os.environ["SYNAPSE_WORKSPACE_DIR"] = os.path.join(
+    os.path.dirname(__file__), "fixtures", "workspace"
+)
 
 # Patch external client constructors BEFORE core.clients is imported
 patch("google.genai.Client", return_value=MagicMock()).start()
