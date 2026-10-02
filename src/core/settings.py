@@ -18,15 +18,12 @@ class Settings(BaseSettings):
     # Optional so a missing key degrades that one integration gracefully (the
     # client factory returns None) rather than crashing the whole service.
     gemini_api_key: str | None = None
-    notion_integration_token: str | None = None
     spotify_client_id: str | None = None
     spotify_client_secret: str | None = None
     google_youtube_api_key: str | None = None
     tmdb_api_key: str | None = None
-    # life-data hub (movies / tv-shows rows). Optional like the rest: an
-    # unconfigured hub fails those two categories loudly, not the whole service.
-    life_hub_url: str | None = None
-    life_hub_token: str | None = None
+    # A user's Notion connection and life-data hub are workspace credentials
+    # (core/workspace.py), not app settings.
 
 
 @lru_cache

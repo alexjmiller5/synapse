@@ -94,7 +94,9 @@ def run_set(prompt: str, name: str, cases: list[dict], repeats: int) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--core-dir", help="Alternate dir containing prompts.yaml + databases.yaml")
+    parser.add_argument(
+        "--core-dir", help="Alternate dir with template-format prompts.yaml + databases.yaml"
+    )
     parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
 
@@ -122,4 +124,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    sys.path.insert(0, str(ROOT))
+    from store import activate
+
+    with activate(os.environ.get("SYNAPSE_WORKSPACE")):
+        main()

@@ -1,11 +1,5 @@
-# Notion database ids for records not defined as categories below.
-db_ids:
-  projects: "30703953a8af80acaa34cde8f38980cf"
-  notes: "28a03953a8af80fa8dbfe65c4c3a09f5"
-
 databases:
   tasks:
-    db_id: "396848733b4e405982a4045545e49324"
     description: "A general to-do item, reminder, or action — anything the user must DO, decide, or schedule, even when it names a movie, show, venue, or trip. This is the ONLY category that stores a Due Date, so anything with a date/deadline belongs here."
     properties:
       Name:
@@ -33,7 +27,7 @@ databases:
           0. PLACE TAGS {place_tags}: if the Context or text names one of these places, ALWAYS use that place's tag — it wins over every rule below. These mark tasks to do when the user is next AT that place.
           1. "Chore": (DEFAULT) As the user says, "Most tasks are chores to be honest." If it's something quick to do on the computer, in the room, updating a playlist (e.g. Karaoke), editing a profile (dating app), or fixing a technical sync issue, IT IS A CHORE. A task belonging to one of the user's personal coding projects (e.g. the Context names a project) is ALWAYS a Chore no matter what its subject matter sounds like — a scraper for airline points built for a coding project is a Chore, NOT "Finances".
           2. "Errand": Whatever involves going out of the house to do it (e.g. picking up dry cleaning, dropping something off at Goodwill).
-          3. "Work": RARE. ONLY for the user's actual employer / employed job (or PTO from that job). The user's PERSONAL side projects and coding projects are NOT Work — e.g. "synapse", "notion" fixing/filling, "wtw"/wtwboston, "openclaw", "receptor", or any personal app/project. A task for a personal coding/side project (e.g. 'synapse project', 'notion fixing and filling') is a CHORE, not Work (its computer-based nature makes it a Chore per rule 1). "Work" is strictly Alex's employed job.
+          3. "Work": RARE. ONLY for the user's actual employer / employed job (or PTO from that job). The user's PERSONAL side projects and coding projects are NOT Work — e.g. a personal app, a side project, or fixing up their notes system. A task for a personal coding/side project is a CHORE, not Work (its computer-based nature makes it a Chore per rule 1). "Work" is strictly the user's employed job.
           4. "Shopping": Anything related to buying (Amazon, etc). Use "Gifts" if it's a gift idea or buying for someone else.
           5. "Learning": "Something to explore"—like looking through a website, looking into a tool, or figuring out how something works (e.g. "how the python tool uv works").
           6. "Career": General career stuff (job search, interviews, resume, networking — not day-to-day work tasks).
@@ -106,11 +100,10 @@ databases:
         allowlist: ["Someday", "Priority"]
         instruction: "Default to Someday (an idea, not a commitment). Use Priority only if the user says it is a good/great idea or otherwise signals they want to pursue it."
 
-  # quotes: DISABLED 2026-07-07 (Alex adds quotes manually). Commented out so
+  # quotes: DISABLED 2026-07-07 (added manually). Commented out so
   # it's excluded from the classifier enum — quote inputs now become tasks.
   # Uncomment to re-enable.
   # quotes:
-  #   db_id: "18f03953a8af80818514e90a57035436"
   #   description: "A memorable quote or saying (often attributed to a person). The input must contain the quote's ACTUAL WORDS. 'Add X's quote to the db' without the quote text is a task, not a quote."
   #   properties:
   #     Quote:
@@ -334,10 +327,9 @@ databases:
         allowlist: ["Someday", "Planned", "Completed"]
         instruction: "Default to 'Someday'. Use 'Planned' if the user has a concrete plan or date, 'Completed' if the user implies they already did it."
 
-  # people: DISABLED 2026-07-07 (Alex commented out like quotes — adds people manually).
+  # people: DISABLED 2026-07-07 (added manually, like quotes).
   # Commented out so it's excluded from the classifier enum; people inputs become tasks.
 #   people:
-#     db_id: "1a803953a8af8067b5bedb83b6358c58"
 #     description: "A database for people/contacts. Use ONLY if the user provides a name with context/job info (e.g. 'Arun Vantage senior associate')."
 #     properties:
 #       Name:
@@ -408,7 +400,6 @@ databases:
         type: "url"
 
   logs:
-    db_id: "2b103953a8af803280cec633c91c46c3"
     description: "Internal use."
     helper: true
     properties:
@@ -427,7 +418,6 @@ databases:
       Source:
         type: "select"
   trips:
-    db_id: "19603953a8af80c2818cd6135757f4c2"
     description: "Internal inventory of trips."
     helper: true
     properties:

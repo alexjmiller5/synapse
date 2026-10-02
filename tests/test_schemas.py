@@ -65,41 +65,6 @@ class TestYamlFixGuards:
         schema = get_gemini_schema("fun-activities")
         assert "Lakeport" in schema["properties"]["Location"]["enum"]
 
-    def test_location_allowlist_env_override(self, monkeypatch):
-        """NOTION_FUN_ACTIVITIES_LOCATIONS replaces the committed example cities."""
-        from core.config import apply_env_overrides
-
-        dbs = {
-            "databases": {
-                "fun-activities": {"properties": {"Location": {"allowlist": ["Lakeport"]}}}
-            }
-        }
-        monkeypatch.delenv("NOTION_FUN_ACTIVITIES_LOCATIONS", raising=False)
-        loc = apply_env_overrides(dbs)["databases"]["fun-activities"]["properties"]["Location"]
-        assert loc["allowlist"] == ["Lakeport"]
-
-        monkeypatch.setenv("NOTION_FUN_ACTIVITIES_LOCATIONS", "Boston, Springfield ,NYC")
-        loc = apply_env_overrides(dbs)["databases"]["fun-activities"]["properties"]["Location"]
-        assert loc["allowlist"] == ["Boston", "Springfield", "NYC"]
-
-    def test_tasks_place_tags_env_override(self, monkeypatch):
-        """NOTION_TASKS_PLACE_TAGS joins the tasks Tags allowlist and lands on the
-        category as place_tags (consumed by {place_tags} in prompt instructions)."""
-        from core.config import apply_env_overrides
-
-        def fresh():
-            return {"databases": {"tasks": {"properties": {"Tags": {"allowlist": ["Chore"]}}}}}
-
-        monkeypatch.delenv("NOTION_TASKS_PLACE_TAGS", raising=False)
-        tasks = apply_env_overrides(fresh())["databases"]["tasks"]
-        assert "place_tags" not in tasks
-        assert tasks["properties"]["Tags"]["allowlist"] == ["Chore"]
-
-        monkeypatch.setenv("NOTION_TASKS_PLACE_TAGS", "Lake House, Hometown ")
-        tasks = apply_env_overrides(fresh())["databases"]["tasks"]
-        assert tasks["place_tags"] == ["Lake House", "Hometown"]
-        assert tasks["properties"]["Tags"]["allowlist"] == ["Chore", "Lake House", "Hometown"]
-
     def test_place_tags_substituted_into_instructions(self, monkeypatch):
         """{place_tags} in a tasks instruction renders the configured list."""
         from core.ai_engine import generate_extraction_prompt

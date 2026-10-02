@@ -43,3 +43,8 @@ class TestPayloadError:
 
     def test_source_too_long(self):
         assert "source" in payload_error({"raw_text": "Buy eggs", "source": "x" * 65})
+
+    def test_workspace_id_shape(self):
+        assert payload_error({"raw_text": "x", "workspace": "friend-2"}) is None
+        assert payload_error({"raw_text": "x", "workspace": "../etc"}) is not None
+        assert payload_error({"raw_text": "x", "workspace": 3}) is not None

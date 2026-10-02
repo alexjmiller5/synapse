@@ -6,6 +6,7 @@ import time
 from google.genai import types
 
 from core.config import PROMPTS
+from core.workspace import current
 from core.settings import get_settings
 from core.notion_utils import (
     log_job_outcome,
@@ -246,7 +247,13 @@ def payload_error(payload):
     source = payload.get("source")
     if source is not None and (not isinstance(source, str) or len(source) > MAX_SOURCE_LEN):
         return f"'source' must be a string of at most {MAX_SOURCE_LEN} characters."
+    ws = payload.get("workspace")
+    if ws is not None and (not isinstance(ws, str) or not WORKSPACE_ID.fullmatch(ws)):
+        return "'workspace' must be a workspace id (lowercase letters, digits, dashes)."
     return None
+
+
+WORKSPACE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 
 
 # Where a capture came from (an app, a named shortcut, a hotkey, an agent) — a
@@ -262,7 +269,8 @@ DEDUP_WINDOW_S = 24 * 60 * 60
 
 
 def _dedup_key(raw_text: str) -> str:
-    return hashlib.sha256(raw_text.strip().encode()).hexdigest()
+    # Per workspace: two people sending the same words are two captures.
+    return hashlib.sha256(f"{current().id}\n{raw_text.strip()}".encode()).hexdigest()
 
 
 def run(payload: dict, seen=None):

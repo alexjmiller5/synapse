@@ -1,34 +1,36 @@
-"""Tests for core.secrets — env-var override with databases.yaml fallback."""
+"""Tests for core.secrets — Notion DB ids come from the active workspace."""
 
-from core.config import DATABASES
+from core import workspace
 from core.secrets import get_db_id
 
 
+def _ws(overlay):
+    return workspace.use(workspace.build("t", overlay))
+
+
 class TestGetDbId:
-    def test_env_var_wins(self, monkeypatch):
-        monkeypatch.setenv("NOTION_TASKS_DB_ID", "env-override-id")
-        assert get_db_id("tasks") == "env-override-id"
+    def test_category_stanza_id(self):
+        with _ws({"databases": {"tasks": {"db_id": "tasks-db"}}}):
+            assert get_db_id("tasks") == "tasks-db"
 
-    def test_unset_env_falls_back_to_yaml_stanza(self, monkeypatch):
-        monkeypatch.delenv("NOTION_TASKS_DB_ID", raising=False)
-        assert get_db_id("tasks") == DATABASES["databases"]["tasks"]["db_id"]
-        assert get_db_id("tasks")  # non-empty
+    def test_helper_id_from_top_level_mapping(self):
+        with _ws({"db_ids": {"projects": "projects-db"}}):
+            assert get_db_id("projects") == "projects-db"
 
-    def test_kebab_case_category(self, monkeypatch):
-        monkeypatch.setenv("NOTION_FUN_ACTIVITIES_DB_ID", "env-override-id")
-        assert get_db_id("fun-activities") == "env-override-id"
-        monkeypatch.delenv("NOTION_FUN_ACTIVITIES_DB_ID", raising=False)
-        assert get_db_id("fun-activities") is None  # a hub table has no Notion DB
+    def test_template_alone_has_no_ids(self):
+        with _ws({}):
+            assert get_db_id("tasks") is None
+            assert get_db_id("projects") is None
 
-    def test_hub_backed_category_has_no_db_id(self, monkeypatch):
+    def test_hub_backed_category_has_no_db_id(self):
         """movies/tv-shows live in life-data - no Notion DB, so no id to find."""
-        monkeypatch.delenv("NOTION_MOVIES_DB_ID", raising=False)
         assert get_db_id("movies") is None
 
-    def test_non_category_id_from_top_level_mapping(self, monkeypatch):
-        monkeypatch.delenv("NOTION_PROJECTS_DB_ID", raising=False)
-        assert get_db_id("projects") == DATABASES["db_ids"]["projects"]
-
-    def test_unknown_category_returns_none(self, monkeypatch):
-        monkeypatch.delenv("NOTION_NOPE_DB_ID", raising=False)
+    def test_unknown_category_returns_none(self):
         assert get_db_id("nope") is None
+
+    def test_each_workspace_sees_its_own_ids(self):
+        with _ws({"databases": {"tasks": {"db_id": "mine"}}}):
+            with _ws({"databases": {"tasks": {"db_id": "friend"}}}):
+                assert get_db_id("tasks") == "friend"
+            assert get_db_id("tasks") == "mine"

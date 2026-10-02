@@ -31,18 +31,18 @@ deploy: test sync-secrets
 
 # --- project-specific recipes below (one-offs live in scripts/, run directly) ---
 
-# Regenerate src/core/property_ids.yaml (name->id map). Re-run after ADDING a
-# Notion property Synapse writes; a rename alone keeps working via the stored id.
-sync-prop-ids:
-    op run --env-file=.env.tpl -- uv run scripts/fetch_property_ids.py
+# Refresh a workspace's Notion property-id map. Re-run after ADDING a Notion
+# property Synapse writes; a rename alone keeps working via the stored id.
+sync-prop-ids ws="default":
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret SYNAPSE_WORKSPACE={{ws}} op run --no-masking -- uv run scripts/fetch_property_ids.py
 
-# Validate databases.yaml matches the live Notion DB structure (drift check)
-validate:
-    op run --env-file=.env.tpl -- uv run scripts/validate_config.py
+# Check a workspace's config against its live Notion DBs (drift check)
+validate ws="default":
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret SYNAPSE_WORKSPACE={{ws}} op run --no-masking -- uv run scripts/validate_config.py
 
 # Classifier prompt eval — real Gemini calls against scripts/eval_cases.yaml
-eval-classifier:
-    op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
+eval-classifier ws="default":
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret SYNAPSE_WORKSPACE={{ws}} op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
 
 # Integration suite — real Gemini calls (key injected via op)
 test-integration:
@@ -55,7 +55,12 @@ recept +args:
     MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://skkfhuuqegdpyzuobf6h6dyoly/tf26sufzmjt3zphrx37hexmbse/proxy-token-secret')}" \
     uv run scripts/recept.py {{quote(args)}}
 
-# Per-device capture tokens: `just clients issue "<device>"` prints an
-# enrollment link; also `list` and `revoke <client_id>`. Operator Modal auth.
-clients action *rest:
-    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret op run --no-masking -- uv run scripts/capture_clients.py {{action}} {{quote(rest)}}
+# Per-device capture tokens: `just clients issue "<device>" [workspace]` prints
+# an enrollment link; also `list` and `revoke <client_id>`. Operator Modal auth.
+clients action arg="" ws="":
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret op run --no-masking -- uv run scripts/capture_clients.py {{action}} {{quote(arg)}} {{ws}}
+
+# Workspaces (one user's config overlay, property ids, Notion/hub credentials):
+# `list`, `show <id>`, `pull <id> <dir>`, `push <id> <dir>`, `set-secrets <id>` (stdin)
+workspace action *args:
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret op run --no-masking -- uv run scripts/workspace.py {{action}} {{args}}
