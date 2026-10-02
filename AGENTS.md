@@ -21,15 +21,26 @@ tests or on any future platform.
   `modal.Dict` (app.py); the key is written only AFTER a run completes, so a
   crashed run still gets its Modal retry. Receptor's iOS background uploads
   re-send when a success callback is lost - this is the backstop for that.
-- Endpoints use `requires_proxy_auth=True` — callers send `Modal-Key` +
-  `Modal-Secret` headers (mint tokens in the Modal dashboard → Settings →
-  Proxy Auth Tokens). Never expose an unauthenticated endpoint.
+- Two ways in, never an unauthenticated one:
+  - `webhook` (`requires_proxy_auth=True`): the OPERATOR path (`just recept`,
+    agents) - `Modal-Key` + `Modal-Secret` headers, workspace credentials.
+  - `capture` (label `synapse-capture`): the CLIENT path (Receptor) -
+    `Authorization: Bearer <token>`, a per-device token Synapse itself issues
+    (`core/capture_clients.py`, hashes only, in the `synapse-capture-clients`
+    `modal.Dict`). A client app never holds workspace credentials.
+  - `just clients issue "<device>"` mints a token and prints an enrollment
+    link to the `enroll` page (label `synapse-enroll`); the token rides in
+    the URL fragment, so it never reaches a server, and the page hands it to
+    `receptor://enroll`. `just clients list` / `revoke <client_id>` manage
+    them; revoking one device touches no other.
 
 ## The pipeline (`core/pipeline.py: run`)
 
 Payload: `{"raw_text": str, "source": str | null}`. `source` is a free-form
-caller label (`ios-app`, `macos-app`, `share-sheet`, `hammerspoon`, `agent`,
-`cli`) logged as the execution's `Source` select; Synapse never parses it. A standalone `pj` token in text or context forces a project task
+caller label naming the surface that captured it (Receptor's table is in its
+AGENTS.md: `ios-app`, `macos-panel`, `share-send`, `app-shortcut`,
+`hammerspoon-hyper-r`, ...; plus `agent`, `cli`) logged as the execution's
+`Source` select (new labels auto-create options); Synapse never parses it. A standalone `pj` token in text or context forces a project task
 (`PJ_KEYWORD`): category tasks, project linked (contains-match, else one
 classifier call), token stripped from the task name.
 
@@ -143,6 +154,7 @@ The justfile is the interface, not a script catalog; one-offs go in
 | `just sync-secrets` | Push `.env.tpl` → Modal secret store |
 | `just deploy` | test + sync-secrets + `modal deploy` — CI's job, not yours (below) |
 | `just recept "text"` | POST one thought to the deployed webhook |
+| `just clients issue "<device>"` / `list` / `revoke <id>` | Per-device capture tokens; `issue` prints the enrollment link |
 
 **Deploying = commit + push to `main`.** `.github/workflows/deploy.yml` runs
 tests, syncs secrets, and `modal deploy`s — never run `just deploy` locally
@@ -162,7 +174,8 @@ clients (`core.clients` globals) for MagicMocks — no test touches the network.
 ## Receptor
 
 The iOS/macOS companion app lives at https://github.com/alexjmiller5/receptor.
-It POSTs `{"raw_text": ...}` with Modal proxy-auth headers and expects 200.
+It POSTs `{"raw_text": ..., "source": ...}` to `capture` with its own bearer
+token (from an enrollment link) and expects 200.
 
 ## Gemini isolation
 
