@@ -55,3 +55,7 @@ recept +args:
     MODAL_PROXY_TOKEN_SECRET="${MODAL_PROXY_TOKEN_SECRET:-$(op read 'op://skkfhuuqegdpyzuobf6h6dyoly/tf26sufzmjt3zphrx37hexmbse/proxy-token-secret')}" \
     uv run scripts/recept.py {{quote(args)}}
 
+# Per-device capture tokens: `just clients issue "<device>"` prints an
+# enrollment link; also `list` and `revoke <client_id>`. Operator Modal auth.
+clients action *rest:
+    MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret op run --no-masking -- uv run scripts/capture_clients.py {{action}} {{quote(rest)}}
