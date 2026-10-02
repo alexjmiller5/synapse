@@ -12,7 +12,8 @@ Synapse eliminates the friction of manual data entry in Notion. It accepts unstr
 - **`webhook`** — a proxy-authed `fastapi_endpoint`. Callers send `Modal-Key` + `Modal-Secret` headers; unauthorized requests are rejected at Modal's edge for free. It validates the payload and `spawn()`s the worker — **spawn IS the queue** (no Pub/Sub).
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1` to serialize runs since Notion dedupe is query-then-create, retries with backoff). Runs `core.pipeline.run`.
 - **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
-- **Secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — credentials only. Notion DB ids are committed config in `databases.yaml`, not secrets (a `NOTION_<X>_DB_ID` env var still overrides).
+- **App secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — the app's own provider keys only.
+- **Workspaces** hold everything that belongs to one user: their Notion ids, allowlists and wording, place tags, property-id map, and their Notion + life-data credentials. They live in the `synapse-state` Volume, edited with `just workspace ...`; each device token files its captures into one workspace. The repo carries only the generic template.
 
 ```mermaid
 flowchart LR
@@ -54,11 +55,13 @@ Everything else is code; these are one-time console/dashboard actions:
 6. **Notion select options:** every `allowlist` value in `databases.yaml` must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value. The Fun Activities `Location` allowlist is personal config: the committed yaml carries generic example cities — set `NOTION_FUN_ACTIVITIES_LOCATIONS` (comma-separated, in the env item `.env.tpl` references) to your real city list.
 7. **Executions DB `Tags` property:** a `Tags` multi_select with the `project-append` option must exist on the Executions DB.
 
-## Configuration: `src/core/databases.yaml`
+## Configuration: `src/core/template/databases.yaml` + a workspace overlay
 
-The whole pipeline is YAML-driven. To add a new Notion database category:
+The whole pipeline is YAML-driven. The template defines every category and its rules; a workspace's overlay supplies what is specific to it (`db_id` per Notion-backed category, the top-level `db_ids` for logs/trips/projects/notes, its own allowlists or wording, `tasks.place_tags`). `just workspace pull <id> <dir>` / `push <id> <dir>` round-trip an overlay.
 
-1. Add the category definition to `databases.yaml`, including its `db_id` — that single edit is the whole onboarding. (Non-category ids live in the top-level `db_ids` mapping.) No 1Password or `.env.tpl` change needed.
+To add a new Notion database category:
+
+1. Add the category definition to `template/databases.yaml` (no ids), then add its `db_id` to each workspace's overlay and `just sync-prop-ids <id>`.
 
 ### Database level
 
@@ -98,8 +101,9 @@ The whole pipeline is YAML-driven. To add a new Notion database category:
 ```
 app.py            # the ONLY file that imports modal
 src/core/         # business logic (pipeline, ai_engine, handlers, notion_utils, ...)
-src/core/databases.yaml  # Notion schemas + extraction rules
-src/core/prompts.yaml    # parser/classifier/extractor system prompts
+src/core/template/       # generic Notion schemas, extraction rules and prompts
+src/core/workspace.py    # a user's overlay + credentials, the active workspace
+store.py                 # durable key -> JSON store on the synapse-state Volume
 tests/            # pytest suite (unit + test_integration.py for real Gemini)
 scripts/          # one-off clients for the deployed webhook
 .env.tpl          # secrets manifest (op:// refs)
