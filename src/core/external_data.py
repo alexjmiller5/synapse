@@ -85,9 +85,6 @@ def fetch_web_metadata(url):
 
     except Exception as e:
         print(f"   ⚠️ Web fetch failed: {e}")
-        # FALLBACK: Create Task
-        print("   🧹 Triggering cleanup task for failed web scrape...")
-        # create_cleanup_task(f"Manual Bookmark Entry (Scrape Failed): {url}", link_url=url)
         return "Error fetching metadata"
 
 

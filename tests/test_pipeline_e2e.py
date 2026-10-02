@@ -536,6 +536,30 @@ class TestBookmarkPipeline:
         row = push.call_args.args[1][0]
         assert row["tags"] == ["Github"] and row["description"] == "A repo"
 
+    def test_failed_scrape_flags_the_row_instead_of_filing_a_task(self, mock_gemini, mock_notion):
+        # A login-walled or bot-checked page: the model can only guess from the URL.
+        _setup_classify_extract(
+            mock_gemini,
+            "bookmarks",
+            {
+                "Description": "Instagram direct messages",
+                "Title": "Instagram",
+                "URL": "https://www.instagram.com/direct/inbox/",
+                "Tags": [],
+            },
+        )
+        with (
+            patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"),
+            patch("core.handlers.pull_rows", return_value=[]),
+            patch("core.pipeline.create_cleanup_task") as cleanup,
+            self._push() as push,
+        ):
+            _run(_item("https://www.instagram.com/direct/inbox/"))
+        row = push.call_args.args[1][0]
+        assert "title" not in row  # a guessed title would break "the page's own title"
+        assert row["needs_review"] and row["description"] == "Instagram direct messages"
+        cleanup.assert_not_called()
+
 
 # ======================================================================
 # People Tests
