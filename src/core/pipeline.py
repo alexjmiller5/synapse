@@ -195,19 +195,15 @@ def run_pipeline(
             else:
                 url = execute_logic(category, extracted)
         else:
+            if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
+                # The page was never read, so any Title is the model's guess. Leave
+                # it unset: the stanza's review_if_missing flags the row instead.
+                extracted.pop("Title", None)
             url = execute_logic(category, extracted, inventory_map)
 
-            if url and url_context:
-                is_scrape_error = (
-                    category == "bookmarks" and "Error fetching metadata" in url_context
-                )
-                is_yt_error = category == "youtube-videos" and "YT Error" in url_context
-
-                if is_scrape_error or is_yt_error:
-                    print(
-                        f"   🧹 Creating cleanup task for {category} failure (linked to new page)..."
-                    )
-                    create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
+            if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
+                print("   🧹 Creating cleanup task for youtube-videos failure...")
+                create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
         # A handler that wrote nothing returns Failed - never log that as Success.
         outcome, details = "Success", ""

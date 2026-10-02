@@ -74,8 +74,9 @@ Both files are `add_local_file`d into the image at `/root/core/`.
     columns (`things_to_do.kind`), `match_on` names the natural key (a
     grocery by `name`, a bookmark by `url`) so a repeat capture updates the
     existing row instead of duplicating it, `review_if_missing` turns an
-    unfillable property into a `needs_review` reason. New rows get a random
-    32-hex id.
+    unfillable property into a `needs_review` reason (a bookmark whose page
+    could not be fetched is pushed without a guessed Title and flagged this
+    way, never as a cleanup task). New rows get a random 32-hex id.
   - Resolved-id handlers (movies, tv-shows, youtube-videos): the row id is an
     external id (TMDB, YouTube) that `external_data` resolves first - no
     confident match = a cleanup task and no write, because a wrong id
