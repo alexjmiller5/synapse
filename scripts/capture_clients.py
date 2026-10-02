@@ -20,7 +20,7 @@ APP_NAME = "synapse"
 
 
 def main(argv: list[str]) -> int:
-    store = modal.Dict.from_name(f"{APP_NAME}-capture-clients")
+    store = modal.Dict.from_name(f"{APP_NAME}-capture-clients", create_if_missing=True)
     match [a for a in argv if a]:
         case ["issue", label]:
             issued = capture_clients.issue(store, label)
