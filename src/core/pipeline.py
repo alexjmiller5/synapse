@@ -196,9 +196,11 @@ def run_pipeline(
                 url = execute_logic(category, extracted)
         else:
             if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
-                # The page was never read, so any Title is the model's guess. Leave
-                # it unset: the stanza's review_if_missing flags the row instead.
+                # The page was never read, so everything but the URL is the model's
+                # guess. Title stays unset (the stanza's review_if_missing flags the
+                # row); Description and Tags only fill gaps on an already-known url.
                 extracted.pop("Title", None)
+                extracted["_fill_only"] = ["Description", "Tags"]
             url = execute_logic(category, extracted, inventory_map)
 
             if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
