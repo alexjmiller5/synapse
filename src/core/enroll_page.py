@@ -22,6 +22,7 @@ ENROLL_PAGE = """<!doctype html>
   p { color: var(--muted); margin: 0 0 1.5rem; }
   a.button { display: inline-block; padding: .8rem 1.6rem; border-radius: .75rem; background: var(--accent);
              color: #fff; text-decoration: none; font-weight: 600; }
+  #install { margin: 1.5rem 0 0; font-size: .9rem; }
   code { font-size: .85rem; }
 </style>
 </head>
