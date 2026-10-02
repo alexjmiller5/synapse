@@ -56,6 +56,11 @@ class Failed(NamedTuple):
     detail: str
 
 
+def _empty(value):
+    # A pulled multi_select comes back as JSON text, so "[]" is empty too.
+    return value in (None, "", [], "[]")
+
+
 def handle_hub_logic(category, data):
     """A capture for any category whose stanza names a life-data `hub_table`.
 
@@ -64,35 +69,44 @@ def handle_hub_logic(category, data):
     the natural key - a row already holding that value is UPDATED (only the
     columns we know are sent, so a status capture never clobbers the rest)
     instead of duplicated; `review_if_missing` turns an unfillable property into
-    a `needs_review` reason rather than a Notion cleanup task. Everything the
-    yaml used to enforce (required, allowlists, defaults) is the catalog's job
-    now: a rejected row files a cleanup task and writes nothing.
+    a `needs_review` reason rather than a Notion cleanup task (only when the
+    matched row lacks it too; a capture that fills it clears that reason).
+    `data["_fill_only"]` names properties the caller only guessed: they fill
+    an empty column but never replace a value the matched row already holds.
+    Everything the yaml used to enforce (required, allowlists, defaults) is
+    the catalog's job now: a rejected row files a cleanup task and writes
+    nothing.
     """
     stanza = DATABASES["databases"][category]
     table = stanza["hub_table"]
-    row = {
-        col: data[prop]
-        for prop, col in stanza.get("columns", {}).items()
-        if data.get(prop) not in (None, "", [])
-    }
+    columns = stanza.get("columns", {})
+    review = stanza.get("review_if_missing") or {}
+    fill_only = data.get("_fill_only") or []
+    row = {col: data[prop] for prop, col in columns.items() if not _empty(data.get(prop))}
     row.update(stanza.get("constants") or {})
-    for prop, reason in (stanza.get("review_if_missing") or {}).items():
-        if data.get(prop) in (None, "", []):
-            row["needs_review"] = reason
 
     match = stanza.get("match_on")
-    row_id = None
+    known = {}
     if match and row.get(match):
         key = str(row[match]).strip().lower()
-        row_id = next(
-            (
-                r["id"]
-                for r in pull_rows(table, [match])
-                if str(r.get(match) or "").strip().lower() == key
-            ),
-            None,
+        wanted = [match] + [columns[p] for p in [*review, *fill_only]]
+        wanted += ["needs_review"] if review else []
+        known = next(
+            (r for r in pull_rows(table, wanted) if str(r.get(match) or "").strip().lower() == key),
+            {},
         )
-    row["id"] = row_id or secrets.token_hex(16)
+
+    for prop in fill_only:
+        if not _empty(known.get(columns[prop])):
+            row.pop(columns[prop], None)
+    for prop, reason in review.items():
+        if not _empty(data.get(prop)):
+            if known.get("needs_review") == reason:
+                row["needs_review"] = None
+        elif _empty(known.get(columns[prop])):
+            row["needs_review"] = reason
+
+    row["id"] = known.get("id") or secrets.token_hex(16)
     row["updated_at"] = now_utc_iso_ms()
 
     rejected = push_rows(table, [row]).get("rejected") or []

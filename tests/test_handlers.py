@@ -14,6 +14,7 @@ from core.handlers import (
     handle_people_logic,
     handle_default_logic,
 )
+from core.config import DATABASES
 from helpers import sent_props
 
 
@@ -98,6 +99,53 @@ class TestHubHandler:
         row = push.call_args.args[1][0]
         assert row["id"] == "bm1" and row["description"] == "A site"
         assert "tags" not in row  # empty lists are not sent
+
+    # A bookmark whose page could not be fetched: the pipeline drops Title and
+    # marks Description/Tags as guesses that may only fill empty columns.
+    GUESS = {
+        "Description": "A guess",
+        "URL": "https://x.com",
+        "Tags": ["Money"],
+        "_fill_only": ["Description", "Tags"],
+    }
+    REASON = DATABASES["databases"]["bookmarks"]["review_if_missing"]["Title"]
+
+    def _known(self, **cols):
+        row = {"id": "bm1", "url": "https://x.com", "title": None, "description": None}
+        return patch("core.handlers.pull_rows", return_value=[{**row, **cols}])
+
+    def test_a_guess_never_replaces_a_known_bookmarks_values(self):
+        known = self._known(title="X", description="Real", tags='["List"]', needs_review=None)
+        with known as pull, self._push() as push:
+            ref = handle_hub_logic("bookmarks", dict(self.GUESS))
+        assert ref == "bookmarks/bm1"
+        assert set(pull.call_args.args[1]) >= {"url", "title", "description", "tags"}
+        row = push.call_args.args[1][0]
+        assert row["id"] == "bm1"
+        assert "description" not in row and "tags" not in row
+        assert "needs_review" not in row  # the row already has the title we could not fetch
+
+    def test_a_guess_still_fills_an_empty_column_on_a_known_bookmark(self):
+        with self._known(description="Real", tags="[]", needs_review=None), self._push() as push:
+            handle_hub_logic("bookmarks", dict(self.GUESS))
+        row = push.call_args.args[1][0]
+        assert row["tags"] == ["Money"] and "description" not in row
+        assert row["needs_review"] == self.REASON  # still no title anywhere
+
+    def test_filling_the_flagged_column_clears_its_own_reason(self):
+        with self._known(needs_review=self.REASON), self._push() as push:
+            handle_hub_logic(
+                "bookmarks", {"Description": "Real", "Title": "X", "URL": "https://x.com"}
+            )
+        row = push.call_args.args[1][0]
+        assert row["title"] == "X" and row["needs_review"] is None
+
+    def test_another_review_reason_is_left_alone(self):
+        with self._known(needs_review="Duplicate of another bookmark"), self._push() as push:
+            handle_hub_logic(
+                "bookmarks", {"Description": "Real", "Title": "X", "URL": "https://x.com"}
+            )
+        assert "needs_review" not in push.call_args.args[1][0]
 
 
 # ======================================================================

@@ -560,6 +560,30 @@ class TestBookmarkPipeline:
         assert row["needs_review"] and row["description"] == "Instagram direct messages"
         cleanup.assert_not_called()
 
+    def test_failed_scrape_of_a_known_bookmark_changes_nothing(self, mock_gemini, mock_notion):
+        _setup_classify_extract(
+            mock_gemini,
+            "bookmarks",
+            {"Description": "A guess", "Title": "Guess", "URL": "https://x.com", "Tags": ["Money"]},
+        )
+        known = {
+            "id": "bm1",
+            "url": "https://x.com",
+            "title": "X",
+            "description": "Real",
+            "tags": '["List"]',
+            "needs_review": None,
+        }
+        with (
+            patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"),
+            patch("core.handlers.pull_rows", return_value=[known]),
+            self._push() as push,
+        ):
+            _run(_item("https://x.com"))
+        row = push.call_args.args[1][0]
+        assert row["id"] == "bm1"
+        assert not {"title", "description", "tags", "needs_review"} & row.keys()
+
 
 # ======================================================================
 # People Tests
