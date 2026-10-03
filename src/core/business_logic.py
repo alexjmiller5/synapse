@@ -253,7 +253,7 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         # here too so the grounded value is clean wherever data is read.
         if source_text is not None:
             data["Name"] = clean_text(source_text)
-        # Place-tagged tasks (NOTION_TASKS_PLACE_TAGS) are dateless by design: the
+        # Place-tagged tasks (workspace tasks.place_tags) are dateless by design: the
         # prompt returns "" when no date was given — drop it so an empty date
         # payload never reaches Notion.
         if not data.get("Due Date"):

@@ -180,8 +180,8 @@ def generate_extraction_prompt(
         )
 
     # 4. Instructions Section
-    # {place_tags}: the category's personal place tags (NOTION_TASKS_PLACE_TAGS
-    # via config.apply_env_overrides) — kept out of the committed yaml.
+    # {place_tags}: the category's personal place tags (the workspace overlay's
+    # tasks.place_tags, see core/workspace.py) - kept out of the committed template.
     place_tags_json = json.dumps(db_config.get("place_tags", []))
     instr_lines = []
     for prop_name, rules in db_config.get("properties", {}).items():
