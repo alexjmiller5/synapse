@@ -14,6 +14,7 @@ from core.config import DATABASES, PROMPTS
 from core.clients import get_gemini_client
 from core.schemas import PARSER_SCHEMA
 from core.timeutils import today_eastern
+from core.workflow import task_day
 
 # The ONE place the model names live — overridable via env.
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
@@ -183,12 +184,14 @@ def generate_extraction_prompt(
     # {place_tags}: the category's personal place tags (the workspace overlay's
     # tasks.place_tags, see core/workspace.py) - kept out of the committed template.
     place_tags_json = json.dumps(db_config.get("place_tags", []))
+    extraction_day = task_day() if category == "tasks" else None
+    extraction_day = extraction_day or today_eastern().isoformat()
     instr_lines = []
     for prop_name, rules in db_config.get("properties", {}).items():
         instr = rules.get("instruction")
         is_virtual = rules.get("virtual")
         if instr and not is_virtual:
-            formatted_instr = instr.replace("{current_date}", today_eastern().isoformat())
+            formatted_instr = instr.replace("{current_date}", extraction_day)
             formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
             formatted_instr = formatted_instr.replace("{place_tags}", place_tags_json)
             instr_lines.append(f"- `{prop_name}`: {formatted_instr}")

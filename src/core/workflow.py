@@ -12,8 +12,10 @@ import hashlib
 import json
 import re
 from contextvars import ContextVar
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core import life_hub
 from core.workspace import current
@@ -48,6 +50,36 @@ def binding_for(kind):
 
 
 _ACTIVE = ContextVar("workflow_capture", default=None)
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def _task_day(binding):
+    if binding is None or "calendar" not in binding:
+        return None
+    policy = binding["calendar"]
+    if not isinstance(policy, dict) or not isinstance(policy.get("timeZone"), str):
+        raise ValueError("Invalid workflow task calendar")
+    minutes = policy.get("dayStartMinutes", 0)
+    if type(minutes) is not int or not 0 <= minutes <= 1439:
+        raise ValueError("Invalid workflow task calendar boundary")
+    try:
+        zone = ZoneInfo(policy["timeZone"])
+    except (ValueError, ZoneInfoNotFoundError):
+        raise ValueError("Invalid workflow task calendar timezone") from None
+    local = utc_now().astimezone(zone)
+    day = local.date()
+    if local.hour * 60 + local.minute < minutes:
+        day -= timedelta(days=1)
+    return day.isoformat()
+
+
+def task_day():
+    """Only task extraction adopts this runtime calendar; retries keep acceptance day."""
+    active = _ACTIVE.get()
+    return active.task_day if active is not None else _task_day(binding_for("tasks"))
 
 
 class WorkflowWriter:
@@ -248,9 +280,16 @@ def capture_scope(store, payload):
         raise ValueError("Capture workspace does not match the authenticated context")
     journal = CaptureJournal(store, payload)
     bindings = journal.checkpoint("bindings", lambda: current().databases.get("workflow", {}))
+    task_binding = bindings.get("tasks")
+    day = (
+        journal.checkpoint("task_day", lambda: _task_day(task_binding))
+        if isinstance(task_binding, dict) and "calendar" in task_binding
+        else None
+    )
     active = SimpleNamespace(
         journal=journal,
         bindings=bindings,
+        task_day=day,
         writer=WorkflowWriter(store, current().id, payload["capture_id"]),
         item_index=0,
         counters={},
