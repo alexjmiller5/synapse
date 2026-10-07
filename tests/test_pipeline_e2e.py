@@ -4,6 +4,10 @@ Each test sends realistic input through the full pipeline and verifies
 the correct Notion API calls are made with proper data.
 """
 
+import pytest
+from core import life_hub
+
+
 import time
 from unittest.mock import MagicMock, patch
 
@@ -356,6 +360,7 @@ class TestGroceryPipeline:
 # ======================================================================
 # YouTube Tests - life-data, not Notion (see handlers.TestYouTubeToLifeData)
 # ======================================================================
+@pytest.mark.usefixtures("media_hub")
 class TestYouTubePipeline:
     SNIPPET = {
         "items": [
@@ -400,7 +405,7 @@ class TestYouTubePipeline:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt()),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             _run(_item("https://youtu.be/abc123"))
 
@@ -441,6 +446,7 @@ class TestYouTubePipeline:
 # ======================================================================
 # Movie/TV Tests
 # ======================================================================
+@pytest.mark.usefixtures("media_hub")
 class TestMovieTvPipeline:
     def test_movie_pushed_to_life_data_and_logged_by_row_ref(self, mock_gemini, mock_notion):
         _setup_classify_extract(
@@ -450,7 +456,7 @@ class TestMovieTvPipeline:
         )
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             _run(_item("Inception"))
 
@@ -661,6 +667,7 @@ class TestFunActivitiesPipeline:
 # ======================================================================
 # Podcast Tests
 # ======================================================================
+@pytest.mark.usefixtures("media_hub")
 class TestPodcastPipeline:
     def test_spotify_podcast(self, mock_gemini, mock_notion):
         _setup_classify_extract(
@@ -679,7 +686,7 @@ class TestPodcastPipeline:
                 "core.external_data.get_spotify_metadata",
                 return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
             ),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             _run(_item("https://open.spotify.com/episode/abc"))
         row = push.call_args.args[1][0]

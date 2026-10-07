@@ -5,6 +5,7 @@ from core.timeutils import today_eastern
 from core.notion_utils import clean_text, prop_id
 from core.handlers import (
     handle_hub_logic,
+    handle_url_media,
     handle_youtube_logic,
     handle_movies_tv_logic,
     handle_people_logic,
@@ -273,11 +274,6 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
             existing = data.get("Notes") or ""
             data["Notes"] = f"{existing}\n\n{annotation}" if existing else annotation
 
-    elif category in ("movies", "tv-shows"):
-        # life-data requires a status on every row; the rest of the metadata is
-        # derived on the hub from the TMDB id the handler resolves.
-        data.setdefault("Status", "Not Started")
-
     elif category == "podcasts":
         if data.get("Status") == "Finished":
             data["Date Listened To"] = today_str
@@ -311,6 +307,8 @@ def execute_logic(category, data, inventory_map=None):
         return create_task(data)
     print(f"⚙️ Executing Logic for: {category}")
     stanza = DATABASES["databases"].get(category, {})
+    if category in ("podcasts", "articles"):
+        return handle_url_media(category, data)
     if stanza.get("hub_table") and "columns" in stanza:
         return handle_hub_logic(category, data)
     handler = LOGIC_HANDLERS.get(category, handle_default_logic)

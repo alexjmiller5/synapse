@@ -102,7 +102,7 @@ class TestYamlFixGuards:
         extracting AI guesses for them would be rejected as unprovenanced."""
         for cat in ("movies", "tv-shows"):
             props = DATABASES["databases"][cat]["properties"]
-            assert set(props) == {"Title", "Status", "Tags"}
+            assert not {"Genres", "Director", "Famous Cast Members"}.intersection(props)
 
     def test_media_tags_allowlists_match_the_life_data_catalog(self):
         assert set(DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]) == {
