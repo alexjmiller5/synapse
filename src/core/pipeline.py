@@ -195,6 +195,18 @@ def run_pipeline(
         from core.workflow import prepare_item
 
         prepared = prepare_item(prepare)
+        if "preparation_error" in prepared:
+            recovery = create_high_priority_task(full_str_for_log)
+            log_job_outcome(
+                full_str_for_log,
+                "Unknown",
+                "Error(s)",
+                details=prepared["preparation_error"],
+                created_url=recovery,
+                ai_data=log_payload,
+                source=source,
+            )
+            return
         category, project = prepared["category"], prepared["project"]
         extracted, log_payload = prepared["extracted"], prepared["log_payload"]
         url_context = prepared["url_context"]
