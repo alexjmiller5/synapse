@@ -106,7 +106,12 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   rows}` to the hub's `/v1/rows/push` with the `LIFE_HUB_URL` /
   `LIFE_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
   also pull rows). Push ONLY the columns you know - the hub's upsert touches
-  exactly the columns sent, so a status capture never blanks tags. The
+  exactly the columns sent, so a status capture never blanks tags.
+  `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
+  failed scan never returns a partial inventory. Workflow adapters use
+  `insert_rows` for stable-ID creation (preserves existing/tombstoned rows and
+  verifies exhaustive receipts) and `patch_row` for revision-guarded edits.
+  Neither helper retries ambiguous writes or falls back to upsert. The
   CATALOG enforces what this yaml used to (required fields, option
   vocabularies, uniqueness, defaults); a rejected row files a cleanup task
   and writes nothing. Two handler shapes:
@@ -141,6 +146,31 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   whole row. A handler that wrote nothing returns `handlers.Failed(detail)`,
   which the pipeline logs as `Error(s)`; returning None there would log a
   Success over an empty result.
+- `workflow.projects` in a workspace overlay selects Life Data project reads:
+  `table`, `title_column`, `status_column`, and `active_statuses` are runtime
+  values. Omission retains Notion; malformed selected configuration fails
+  closed. Duplicate active titles are rejected because the prompt-to-ID map
+  cannot represent them safely.
+- Oversized execution fields can use runtime `retained_fields`,
+  `max_inline_bytes` and `files_prefix`. Retain the frozen original with a
+  conditional file create, then byte-verify readback before inserting its row
+  reference. The workspace credential has only the configured file prefix;
+  no provider storage credentials belong in workspace configuration.
+- `core.workflow.WorkflowWriter` journals a mapped output before its checked
+  insert, keyed by workspace, persisted capture identity, and item/role path.
+  One serialized worker owns its operational store. Retries reuse the original
+  table, ID, and body, and never overwrite an existing user row. Capture
+  acceptance requires a canonical UUID `capture_id` when workflow Tasks and
+  Executions are selected. Clients persist that ID for the submission and reuse
+  it for HTTP retries; identical text with a new ID is a new capture. The worker
+  freezes its bindings, project/inventory context, parsed items, prepared item
+  data, and successful result before marking the capture complete. Changed
+  input under the same workspace/capture ID is rejected. Failures propagate to
+  Modal retries without creating a second error task over an ambiguous write.
+  Tasks and Executions switch together; project reads can be selected earlier.
+  Omitted workflow configuration retains the legacy Notion behavior. Mappings
+  use `table`, `columns`, and optional missing-value `defaults`, all runtime
+  state. Execution text/JSON is preserved without the Notion length truncation.
 - Notion DB ids are workspace data: a category stanza's `db_id` and the
   top-level `db_ids` mapping (logs, trips, projects, notes) in the workspace
   overlay, read through `get_db_id`. The template carries none.
