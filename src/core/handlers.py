@@ -16,6 +16,8 @@ from core.external_data import (
     sanitize_youtube_url,
 )
 from core.life_hub import pull_ids, pull_rows, push_rows
+from core import life_hub
+from core.media_save import save_media
 from core.timeutils import now_utc_iso_ms
 
 # Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
@@ -120,11 +122,38 @@ def handle_hub_logic(category, data):
     return f"{table}/{row['id']}"
 
 
+def _capture_media(category, identity, initializer, data):
+    stanza = DATABASES["databases"][category]
+    mapping = stanza["capture_columns"]
+    requested = {
+        column: data[field] for field, column in mapping.items() if not _empty(data.get(field))
+    }
+    saved_column = stanza.get("saved_column")
+    if data.get("Capture Intent") == "save":
+        if not saved_column:
+            return Failed("Explicit saves require a configured saved field")
+        requested[saved_column] = 1
+    receipt = save_media(
+        life_hub,
+        {
+            "table": stanza["hub_table"],
+            "editable_columns": [*mapping.values(), *([saved_column] if saved_column else [])],
+        },
+        identity,
+        initializer,
+        requested,
+    )
+    if receipt.state != "saved":
+        create_cleanup_task(f"Media capture requires review: {receipt.reason}")
+        return Failed(f"Media capture {receipt.state}: {receipt.reason}")
+    return f"{stanza['hub_table']}/{identity}"
+
+
 def handle_youtube_logic(category, data):
     """YouTube captures are a life-data table, not a Notion DB.
 
     A channel is pushed once (on first sight of a video from it), with a
-    "Classify new Channel" cleanup task so Alex sets follow/subscription by
+    "Classify new Channel" cleanup task so the user chooses follow by
     hand; every later video from that channel just links channel_id. Channel
     membership is checked against the hub's actual state (known_channel_ids),
     never an in-run cache.
@@ -167,17 +196,23 @@ def handle_youtube_logic(category, data):
             "uploads_playlist_id": ch["contentDetails"]["relatedPlaylists"]["uploads"],
             "follow": 0,
             "backfilled": 0,
-            "subscription": "Never Subscribed",
             "updated_at": now_utc_iso_ms(),
         }
-        push_rows("youtube_channels", [channel_row])
+        receipt = save_media(
+            life_hub,
+            {"table": "youtube_channels", "editable_columns": []},
+            channel_id,
+            channel_row,
+            {},
+        )
+        if receipt.state != "saved":
+            return Failed(f"Channel capture {receipt.state}: {receipt.reason}")
         create_cleanup_task(f"Classify new Channel: {title}")
 
     # A live/premiere video has no fixed duration yet - the row is still valid
     # without it, just not resolvable as a short.
     duration = item["contentDetails"].get("duration")
     duration_s = _parse_duration_s(duration) if duration else None
-    status = data.get("Status") or "Not Started"
     video_row = {
         "id": vid,
         "channel_id": channel_id,
@@ -186,20 +221,10 @@ def handle_youtube_logic(category, data):
         "duration_s": duration_s,
         "thumbnail_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
         "is_short": 1 if duration_s is not None and duration_s <= 180 else 0,
-        "status": status,
+        "status": "Not Started",
         "updated_at": now_utc_iso_ms(),
     }
-    if data.get("Tags"):
-        video_row["tags"] = data["Tags"]
-
-    rejected = push_rows("youtube_videos", [video_row]).get("rejected") or []
-    if rejected:
-        message = rejected[0].get("message")
-        create_cleanup_task(f"life-data rejected {snippet['title']!r}: {message}")
-        return Failed(f"life-data rejected youtube_videos/{vid}: {message}")
-
-    print(f"   ✅ Pushed youtube_videos/{vid}")
-    return f"youtube_videos/{vid}"
+    return _capture_media(category, vid, video_row, data)
 
 
 def handle_movies_tv_logic(category, data):
@@ -211,7 +236,6 @@ def handle_movies_tv_logic(category, data):
     the hub - we push only the columns we actually know, and the hub's upsert
     touches only those, so a status capture never clobbers tags or date_watched.
     """
-    table = DATABASES["databases"][category]["hub_table"]
     kind = "movie" if category == "movies" else "tv"
     title = data.get("Title")
 
@@ -220,20 +244,7 @@ def handle_movies_tv_logic(category, data):
         create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
         return Failed(f"No confident TMDB match for {title!r} - nothing written")
 
-    # The extractor emits "" for a field it could not fill; status is required.
-    status = data.get("Status") or "Not Started"
-    row = {"id": tmdb_id, "status": status, "updated_at": now_utc_iso_ms()}
-    if data.get("Tags"):
-        row["tags"] = data["Tags"]
-
-    rejected = push_rows(table, [row]).get("rejected") or []
-    if rejected:
-        message = rejected[0].get("message")
-        create_cleanup_task(f"life-data rejected {title!r}: {message}")
-        return Failed(f"life-data rejected {table}/{tmdb_id}: {message}")
-
-    print(f"   ✅ Pushed {table}/{tmdb_id}")
-    return f"{table}/{tmdb_id}"
+    return _capture_media(category, tmdb_id, {"status": "Not Started"}, data)
 
 
 def handle_people_logic(category, data):

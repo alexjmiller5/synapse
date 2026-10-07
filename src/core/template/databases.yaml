@@ -123,7 +123,19 @@ databases:
     # the hub, which derives title/year/genres/director/cast/poster from TMDB.
     hub_table: "movies"
     description: "A movie title, genre, or film description to watch or rate. A bare 'need to watch X' with NO date is a movie (Status: Priority). But if there is a date/deadline, a 'task' context, or a request to edit the movies db (e.g. 'add X to my movies db'), it is a task, not a movie."
+    saved_column: null
+    capture_columns: {Status: status, Tags: tags, Date Watched: date_watched, Notes: note}
     properties:
+      Capture Intent:
+        type: "select"
+        allowlist: ["save", "record_consumption", "none"]
+        instruction: "save only for an explicit wish to watch or save for later; record_consumption for a report of watching or completion; none otherwise. A past-tense report is not a save."
+      Date Watched:
+        type: "date"
+        instruction: "Only a consumption date explicitly supplied by the user. Leave empty when unspecified."
+      Notes:
+        type: "rich_text"
+        instruction: "Only notes explicitly requested by the user; leave empty otherwise."
       Title:
         type: "title"
         required: true
@@ -149,7 +161,7 @@ databases:
           ]
       Status:
         type: "status"
-        required: true
+        required: false
         allowlist:
           [
             "Priority",
@@ -166,12 +178,24 @@ databases:
           3. "In Progress": If the user says "watching", "started", or "currently on".
           4. "Watched Parts": If they mention having watched parts/some of it.
           5. "Gave Up": If the user stopped watching or disliked it.
-          6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix").
+          6. Leave Status empty unless the user explicitly requests a status. A neutral title or save-for-later request must not reset an existing status.
   tv-shows:
     # A life-data table - see the movies stanza above.
     hub_table: "tv_shows"
     description: "A TV series title to start or track status of."
+    saved_column: null
+    capture_columns: {Status: status, Tags: tags, Date Watched: date_watched, Notes: note}
     properties:
+      Capture Intent:
+        type: "select"
+        allowlist: ["save", "record_consumption", "none"]
+        instruction: "save only for an explicit wish to watch or save for later; record_consumption for a report of watching or completion; none otherwise. A past-tense report is not a save."
+      Date Watched:
+        type: "date"
+        instruction: "Only a consumption date explicitly supplied by the user. Leave empty when unspecified."
+      Notes:
+        type: "rich_text"
+        instruction: "Only notes explicitly requested by the user; leave empty otherwise."
       Title:
         type: "title"
         required: true
@@ -198,7 +222,7 @@ databases:
           ]
       Status:
         type: "status"
-        required: true
+        required: false
         allowlist:
           [
             "Priority",
@@ -215,7 +239,7 @@ databases:
           3. "In Progress": If the user says "watching", "started", or "currently on".
           4. "Gave Up": If the user stopped watching or disliked it.
           5. "Watched Parts": If they mention having watched parts/some episodes of it.
-          6. "Not Started": (DEFAULT) If the user simply mentions the title neutrally (e.g., "The Matrix"), or says "watch [title]" without urgency.
+          6. Leave Status empty unless the user explicitly requests a status. A neutral title or save-for-later request must not reset an existing status.
 
   podcasts:
     # A life-data table: manually curated episodes (podcasts are not a Media Center source).
@@ -254,7 +278,19 @@ databases:
     # A life-data table, not a Notion DB - see the movies stanza above.
     hub_table: "youtube_videos"
     description: "A YouTube video. MUST contain a valid 'youtube.com' or 'youtu.be' or m.youtube.com link. If the user just describes a video without a link, classify as a TASK (Chore)."
+    saved_column: null
+    capture_columns: {Status: status, Tags: tags, Date Watched: date_watched, Notes: note}
     properties:
+      Capture Intent:
+        type: "select"
+        allowlist: ["save", "record_consumption", "none"]
+        instruction: "save only for an explicit wish to watch or save for later; record_consumption for a report of watching or completion; none otherwise. A past-tense report is not a save."
+      Date Watched:
+        type: "date"
+        instruction: "Only a consumption date explicitly supplied by the user. Leave empty when unspecified."
+      Notes:
+        type: "rich_text"
+        instruction: "Only notes explicitly requested by the user; leave empty otherwise."
       Title:
         type: "title"
         required: true
@@ -269,7 +305,7 @@ databases:
         instruction: "The creator's handle (e.g. @MKBHD) or channel name. Extract this from the 'Context from URL' metadata if possible."
       Status:
         type: "status"
-        required: true
+        required: false
         allowlist:
           [
             "Priority",
@@ -286,7 +322,7 @@ databases:
           3. "In Progress": If the user says "watching", "started", or "currently on".
           4. "Watched Parts": If they mention having watched parts/some of it.
           5. "Gave Up": If the user stopped watching or disliked it.
-          6. "Not Started": (DEFAULT) If the user simply mentions the video neutrally, or says "watch [video]" without urgency.
+          6. Leave Status empty unless the user explicitly requests a status. A neutral title or save-for-later request must not reset an existing status.
       Tags:
         type: "multi_select"
         allowlist: ["Favorite", "Classic"]

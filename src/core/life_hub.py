@@ -80,3 +80,83 @@ def pull_rows(table, columns, *, settings=None, client=None):
 def pull_ids(table, *, settings=None, client=None):
     """The set of non-deleted row ids currently in a life-data `table`."""
     return {r["id"] for r in pull_rows(table, [], settings=settings, client=client)}
+
+
+def _post_rows(route, body, *, settings=None, client=None):
+    settings = settings or _hub()
+    if not settings.life_hub_url or not settings.life_hub_token:
+        raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
+    response = (client or requests).post(
+        f"{settings.life_hub_url.rstrip('/')}/v1/rows/{route}",
+        json=body,
+        headers={
+            "Authorization": f"Bearer {settings.life_hub_token}",
+            "User-Agent": "synapse",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def read_row(table, identity, columns, *, settings=None, client=None):
+    """A bounded identity read, including tombstones for explicit save decisions."""
+    result = _post_rows(
+        "pull",
+        {
+            "table": table,
+            "columns": sorted(set(columns) | {"id", "updated_at", "hub_at", "deleted_at"}),
+            "where": {"id": identity},
+            "limit": 2,
+        },
+        settings=settings,
+        client=client,
+    )
+    rows = result.get("rows")
+    if not isinstance(rows, list) or len(rows) > 1 or result.get("next_cursor"):
+        raise ValueError("invalid identity read receipt")
+    if not rows:
+        return None
+    if rows[0].get("id") != identity or not isinstance(rows[0].get("updated_at"), str):
+        raise ValueError("invalid identity read receipt")
+    return rows[0]
+
+
+def insert_rows(table, rows, *, settings=None, client=None):
+    result = _post_rows(
+        "insert",
+        {"table": table, "columns": sorted({key for row in rows for key in row}), "rows": rows},
+        settings=settings,
+        client=client,
+    )
+    if not isinstance(result, dict) or any(
+        not isinstance(result.get(key), list) for key in ("inserted", "existing", "rejected")
+    ):
+        raise ValueError("invalid insert receipt")
+    acknowledged = (
+        result["inserted"] + result["existing"] + [r.get("id") for r in result["rejected"]]
+    )
+    if len(set(acknowledged)) != len(acknowledged) or set(acknowledged) != {
+        row["id"] for row in rows
+    }:
+        raise ValueError("invalid insert receipt")
+    return result
+
+
+def patch_row(table, identity, values, expected_revision, *, settings=None, client=None):
+    result = _post_rows(
+        "patch",
+        {"table": table, "id": identity, "values": values, "expected_revision": expected_revision},
+        settings=settings,
+        client=client,
+    )
+    if (
+        not isinstance(result, dict)
+        or result.get("id") != identity
+        or not isinstance(result.get("revision"), dict)
+        or not isinstance(result["revision"].get("updated_at"), str)
+        or "hub_at" not in result["revision"]
+    ):
+        raise ValueError("invalid patch receipt")
+    return result

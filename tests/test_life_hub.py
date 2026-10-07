@@ -109,3 +109,43 @@ class TestPullIds:
                 settings=SimpleNamespace(life_hub_url=None, life_hub_token=None),
                 client=_client(),
             )
+
+
+def test_identity_read_is_bounded_and_preserves_tombstones():
+    from core.life_hub import read_row
+
+    row = {"id": "item", "updated_at": "revision", "hub_at": "hub", "deleted_at": "gone"}
+    client = _client({"rows": [row], "next_cursor": None})
+    assert read_row("items", "item", ["status"], settings=_settings(), client=client) == row
+    body = client.post.call_args.kwargs["json"]
+    assert body["where"] == {"id": "item"} and body["limit"] == 2
+    assert "deleted_at" in body["columns"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"inserted": [], "existing": [], "rejected": []},
+        {"inserted": ["item"], "existing": ["item"], "rejected": []},
+        {"inserted": ["other"], "existing": [], "rejected": []},
+    ],
+)
+def test_invalid_insert_receipts_never_become_success_or_push_fallback(payload):
+    from core.life_hub import insert_rows
+
+    client = _client(payload)
+    with pytest.raises(ValueError):
+        insert_rows("items", [{"id": "item"}], settings=_settings(), client=client)
+    assert client.post.call_count == 1
+    assert client.post.call_args.args[0].endswith("/v1/rows/insert")
+
+
+def test_patch_requires_matching_receipt_identity_and_revision():
+    from core.life_hub import patch_row
+
+    client = _client({"id": "other", "revision": {"updated_at": "new", "hub_at": "new"}})
+    revision = {"updated_at": "old", "hub_at": "old"}
+    with pytest.raises(ValueError):
+        patch_row("items", "item", {"saved": 1}, revision, settings=_settings(), client=client)
+    assert client.post.call_args.kwargs["json"]["expected_revision"] == revision
+    assert "updated_at" not in client.post.call_args.kwargs["json"]["values"]
