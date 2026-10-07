@@ -14,6 +14,8 @@ def _settings():
 
 def _client(payload=None, status=200):
     resp = MagicMock()
+    if payload is not None and "rows" in payload:
+        payload = {**payload, "next_cursor": None}
     resp.json.return_value = payload if payload is not None else {"upserted": 1, "rejected": []}
     resp.status_code = status
     client = MagicMock()
@@ -85,7 +87,12 @@ class TestPullIds:
         url = client.post.call_args.args[0]
         assert url == "https://hub.example/v1/rows/pull"
         body = client.post.call_args.kwargs["json"]
-        assert body == {"table": "youtube_channels", "columns": ["id", "deleted_at"], "since": ""}
+        assert body == {
+            "table": "youtube_channels",
+            "columns": ["id", "deleted_at"],
+            "since": "",
+            "limit": 200,
+        }
         headers = client.post.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer tok"
         assert headers["User-Agent"] == "synapse"
@@ -134,7 +141,7 @@ def test_invalid_insert_receipts_never_become_success_or_push_fallback(payload):
     from core.life_hub import insert_rows
 
     client = _client(payload)
-    with pytest.raises(ValueError):
+    with pytest.raises(RuntimeError):
         insert_rows("items", [{"id": "item"}], settings=_settings(), client=client)
     assert client.post.call_count == 1
     assert client.post.call_args.args[0].endswith("/v1/rows/insert")
@@ -145,7 +152,7 @@ def test_patch_requires_matching_receipt_identity_and_revision():
 
     client = _client({"id": "other", "revision": {"updated_at": "new", "hub_at": "new"}})
     revision = {"updated_at": "old", "hub_at": "old"}
-    with pytest.raises(ValueError):
+    with pytest.raises(RuntimeError):
         patch_row("items", "item", {"saved": 1}, revision, settings=_settings(), client=client)
     assert client.post.call_args.kwargs["json"]["expected_revision"] == revision
     assert "updated_at" not in client.post.call_args.kwargs["json"]["values"]

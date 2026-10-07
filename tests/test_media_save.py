@@ -207,3 +207,36 @@ def test_json_encoded_tags_are_not_rewritten_when_the_saved_intent_already_match
     result = save(hub, {"saved": 1, "tags": ["Favorite"]})
     assert result.state == "saved"
     assert hub.writes == []
+
+
+def test_current_hub_rejection_and_invalid_receipts_remain_typed_media_outcomes():
+    import json
+    import requests
+
+    rejected = SyntheticHub()
+    original = rejected.post
+
+    def reject_insert(url, **kwargs):
+        if not url.endswith("/insert"):
+            return original(url, **kwargs)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(
+            {"inserted": [], "existing": [], "rejected": [{"id": "abc123"}]}
+        ).encode()
+        return response
+
+    rejected.post = reject_insert
+    assert save(rejected).state == "needs_review"
+    malformed = SyntheticHub({"items": {"abc123": existing()}})
+    transport = malformed.post
+
+    def invalid_reply(url, **kwargs):
+        response = transport(url, **kwargs)
+        if url.endswith("/patch"):
+            response._content = b'{"id":"abc123","revision":{"updated_at":"invalid","hub_at":null}}'
+        return response
+
+    malformed.post = invalid_reply
+    assert save(malformed).state == "uncertain"
+    assert len(malformed.writes) == 1

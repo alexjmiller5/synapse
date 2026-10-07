@@ -156,7 +156,11 @@ def hydrate_dynamic_options(only_category=None):
     path. One `databases.retrieve` per category (not per property).
     """
     print(f"🔄 Hydrating Options{f' for {only_category}' if only_category else ''}...")
+    from core.workflow import binding_for
+
     for category, details in DATABASES.get("databases", {}).items():
+        if category == "tasks" and binding_for("tasks") is not None:
+            continue
         if only_category and category != only_category:
             continue
         if details.get("helper") or details.get("hub_table"):
@@ -196,6 +200,12 @@ def fetch_active_projects():
     - prompt_list: ["Project Name", ...]
     - id_map: {"Project Name": "page-id"}
     """
+    from core.workflow import active_projects, binding_for
+
+    binding = binding_for("projects")
+    if binding is not None:
+        return active_projects(binding)
+
     print("📂 Fetching active projects from Projects DB...")
 
     query_body = {
@@ -260,7 +270,9 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if not data.get("Due Date"):
             data.pop("Due Date", None)
         if related_project:
-            data["Notes"] = f"Project: {related_project}"
+            annotation = f"Project: {related_project}"
+            existing = data.get("Notes") or ""
+            data["Notes"] = f"{existing}\n\n{annotation}" if existing else annotation
 
     elif category == "podcasts":
         if data.get("Status") == "Finished":
@@ -289,6 +301,10 @@ LOGIC_HANDLERS = {
 
 
 def execute_logic(category, data, inventory_map=None):
+    from core.workflow import binding_for, create_task
+
+    if category == "tasks" and binding_for("tasks") is not None:
+        return create_task(data)
     print(f"⚙️ Executing Logic for: {category}")
     stanza = DATABASES["databases"].get(category, {})
     if category in ("podcasts", "articles"):
