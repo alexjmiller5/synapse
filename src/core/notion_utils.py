@@ -290,14 +290,14 @@ def create_project_task(project_id, extracted_data):
 
 
 def create_cleanup_task(desc, link_url=None):
-    from core.workflow import binding_for, create_task
+    from core.workflow import binding_for, create_task, task_day
 
     if binding_for("tasks") is not None:
         values = {
             "Name": desc,
             "Status": "To Do",
             "Tags": ["Chore"],
-            "Due Date": today_eastern().isoformat(),
+            "Due Date": task_day() or today_eastern().isoformat(),
             "Priority": "Low",
         }
         if link_url:
@@ -324,14 +324,14 @@ def create_cleanup_task(desc, link_url=None):
 
 
 def create_high_priority_task(desc, link_url=None):
-    from core.workflow import binding_for, create_task
+    from core.workflow import binding_for, create_task, task_day
 
     if binding_for("tasks") is not None:
         values = {
             "Name": "Classify the following thought (it failed due to pipeline errors): " + desc,
             "Status": "To Do",
             "Tags": ["Chore"],
-            "Due Date": today_eastern().isoformat(),
+            "Due Date": task_day() or today_eastern().isoformat(),
             "Priority": "High",
         }
         if link_url:
