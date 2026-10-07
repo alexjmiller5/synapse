@@ -269,7 +269,9 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if not data.get("Due Date"):
             data.pop("Due Date", None)
         if related_project:
-            data["Notes"] = f"Project: {related_project}"
+            annotation = f"Project: {related_project}"
+            existing = data.get("Notes") or ""
+            data["Notes"] = f"{existing}\n\n{annotation}" if existing else annotation
 
     elif category in ("movies", "tv-shows"):
         # life-data requires a status on every row; the rest of the metadata is

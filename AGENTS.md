@@ -151,6 +151,11 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   values. Omission retains Notion; malformed selected configuration fails
   closed. Duplicate active titles are rejected because the prompt-to-ID map
   cannot represent them safely.
+- Oversized execution fields can use runtime `retained_fields`,
+  `max_inline_bytes` and `files_prefix`. Retain the frozen original with a
+  conditional file create, then byte-verify readback before inserting its row
+  reference. The workspace credential has only the configured file prefix;
+  no provider storage credentials belong in workspace configuration.
 - `core.workflow.WorkflowWriter` journals a mapped output before its checked
   insert, keyed by workspace, persisted capture identity, and item/role path.
   One serialized worker owns its operational store. Retries reuse the original

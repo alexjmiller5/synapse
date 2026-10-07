@@ -102,3 +102,17 @@ def test_selected_workflow_requires_client_identity_for_http_retry_safety():
     with pytest.raises(ValueError, match="capture_id"):
         accepted_capture({"raw_text": "One"}, "sample", require_identity=True)
     assert accepted_capture(payload(), "sample", require_identity=True)["capture_id"] == CAPTURE
+
+
+def test_capture_scope_refuses_authenticated_workspace_mismatch_before_journal():
+    from core.workflow import capture_scope
+    from core import workspace
+
+    store = {}
+    with (
+        workspace.use(workspace.build("authorized", {})),
+        pytest.raises(ValueError, match="workspace"),
+    ):
+        with capture_scope(store, accepted_capture(payload(), "other")):
+            pytest.fail("wrong workspace accepted")
+    assert store == {}

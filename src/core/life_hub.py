@@ -1,11 +1,68 @@
 """Life Data transport for sparse updates, complete reads and stable-ID creation."""
 
 from datetime import datetime
+import hashlib
+import re
 from types import SimpleNamespace
 
 import requests
 
 from core.workspace import current
+
+
+def file_key(key):
+    if (
+        not isinstance(key, str)
+        or not re.fullmatch(r"[A-Za-z0-9_./-]+", key)
+        or any(part in ("", ".", "..") for part in key.split("/"))
+    ):
+        raise ValueError("Retained file key must be canonical")
+    return key
+
+
+def retain_text(key, value, *, settings=None, client=None):
+    """Create an immutable original through the supported file API, then verify.
+
+    Retrying a lost upload reply accepts an existing object only when its bytes
+    match exactly. Never replace another retained object at the same key.
+    """
+    key = file_key(key)
+    settings = settings or _hub()
+    if not settings.life_hub_url or not settings.life_hub_token:
+        raise RuntimeError("Life Data files require configured workspace auth")
+    raw = value.encode("utf-8")
+    digest = hashlib.sha256(raw).hexdigest()
+    path = f"/v1/files/{key}"
+    url = settings.life_hub_url.rstrip("/") + path
+    headers = {"Authorization": f"Bearer {settings.life_hub_token}", "User-Agent": "synapse"}
+    transport = client or requests
+    response = transport.put(
+        url,
+        data=raw,
+        headers={
+            **headers,
+            "If-None-Match": "*",
+            "X-Content-SHA256": digest,
+            "Content-Type": "text/plain; charset=utf-8",
+        },
+        timeout=60,
+    )
+    if response.status_code == 201:
+        receipt = response.json()
+        if (
+            receipt.get("key") != key
+            or receipt.get("bytes") != len(raw)
+            or receipt.get("sha256") != digest
+        ):
+            raise RuntimeError("Invalid retained file receipt")
+    elif response.status_code != 412:
+        response.raise_for_status()
+        raise RuntimeError("Unexpected retained file response")
+    readback = transport.get(url, headers=headers, timeout=60)
+    readback.raise_for_status()
+    if readback.content != raw:
+        raise RuntimeError("Retained file content does not match the original")
+    return path
 
 
 def _hub():
