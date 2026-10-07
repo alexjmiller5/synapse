@@ -67,11 +67,19 @@ def test_saved_only_after_writer_receipt_and_no_replay_after_success():
     assert observed == ["processing"]
 
 
-def test_interrupted_or_uncertain_processing_never_replays_a_write():
+def test_interrupted_or_uncertain_processing_never_replays_a_write(media_hub):
     store, caller = fixture()
     media_capture.submit_capture(store, caller, REQUEST)
 
     def interrupted(*args, **kwargs):
+        kwargs["checkpoint"](
+            {
+                "table": "youtube_videos",
+                "identity": "video-1",
+                "values": {"saved": 1},
+                "kind": "youtubeVideo",
+            }
+        )
         raise SystemExit("worker interrupted after mutation")
 
     with pytest.raises(SystemExit):

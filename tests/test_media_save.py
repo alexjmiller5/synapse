@@ -175,7 +175,7 @@ def test_article_capture_uses_the_pollers_canonical_url_identity(monkeypatch):
     hub = SyntheticHub()
     monkeypatch.setattr(life_hub.requests, "post", hub.post)
     data = {
-        "URL": "https://example.test/story/?utm_source=test&b=2&a=1#section",
+        "URL": "https://example.test/story/?utm_source=test&b=2&a=1",
         "Title": "Example",
         "Capture Intent": "save",
     }

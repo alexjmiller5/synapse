@@ -11,7 +11,13 @@ from core.ai_engine import (
     get_gemini_schema,
 )
 from core.external_data import enrich_context
-from core.handlers import Failed, handle_movies_tv_logic, handle_youtube_logic, handle_url_media
+from core.handlers import (
+    Failed,
+    _empty,
+    handle_movies_tv_logic,
+    handle_youtube_logic,
+    handle_url_media,
+)
 from core.media_save import SaveReceipt
 from core.pipeline import _classify_with_ai
 
@@ -63,6 +69,7 @@ def write_resolved(category, data, *, checkpoint=None, explicit_properties=()):
         review=lambda message: None,
         checkpoint=checkpoint,
         explicit_properties=explicit_properties,
+        **({"strict_identity": True} if category in ("movies", "tv-shows") else {}),
     )
 
 
@@ -85,7 +92,7 @@ def resolve_capture(request, categories, fields, *, checkpoint=None):
         return None, SaveReceipt("needs_review", "", reason="unsupported_category")
     data = extract(category, text)
     if "url" in request["input"]:
-        data["URL"] = request["input"]["url"]
+        data["Video URL" if category == "youtube-videos" else "URL"] = request["input"]["url"]
     field_map = {
         **FIELDS,
         "consumed_at": "Date Listened To"
@@ -94,13 +101,24 @@ def resolve_capture(request, categories, fields, *, checkpoint=None):
         if category == "articles"
         else "Date Watched",
     }
-    for logical, prop in field_map.items():
-        if data.get(prop) and logical not in fields:
-            return None, SaveReceipt("needs_review", "", reason="field_not_editable")
-    for logical, value in request.get("fields", {}).items():
+    explicit = request.get("fields", {})
+    for logical, value in explicit.items():
         if logical not in fields or logical not in field_map:
             return None, SaveReceipt("needs_review", "", reason="field_not_editable")
         data[field_map[logical]] = value
+    for logical, prop in field_map.items():
+        value = data.get(prop)
+        if logical not in explicit and _empty(value):
+            continue
+        if logical not in fields:
+            return None, SaveReceipt("needs_review", "", reason="field_not_editable")
+        valid = value is None or (
+            isinstance(value, list) and all(isinstance(tag, str) for tag in value)
+            if logical == "tags"
+            else isinstance(value, str)
+        )
+        if not valid:
+            return None, SaveReceipt("needs_review", "", reason="invalid_field_type")
     if request["intent"] == "save" and "saved" not in fields:
         return None, SaveReceipt("needs_review", "", reason="field_not_editable")
     data["Capture Intent"] = request["intent"]
