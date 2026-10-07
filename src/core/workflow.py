@@ -51,11 +51,12 @@ _ACTIVE = ContextVar("workflow_capture", default=None)
 
 
 class WorkflowWriter:
-    def __init__(self, store, workspace_id, operation_id, *, send=None):
+    def __init__(self, store, workspace_id, operation_id, *, send=None, retain=None):
         self.store = store
         self.workspace_id = _identity(workspace_id)
         self.operation_id = _identity(operation_id)
         self.send = send or life_hub.insert_rows
+        self.retain = retain or life_hub.retain_text
 
     def create(self, binding, role, values):
         """Freeze first intent, then deliver it without ever upserting a retry.
@@ -90,7 +91,33 @@ class WorkflowWriter:
                 raise ValueError(f"Unmapped workflow properties: {sorted(unknown)}")
             row = {columns[name]: copy.deepcopy(value) for name, value in values.items()}
             row["id"] = uuid5(NAMESPACE_URL, identity).hex
-            record = {"identity": identity, "table": table, "row": row, "delivered": False}
+            files = []
+            retained = binding.get("retained_fields", [])
+            if not isinstance(retained, list) or any(name not in columns for name in retained):
+                raise ValueError("Retained fields must name mapped properties")
+            limit = binding.get("max_inline_bytes", 131072)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1024:
+                raise ValueError("max_inline_bytes must be an integer of at least 1024")
+            for name in retained:
+                column = columns[name]
+                text = row.get(column)
+                if not isinstance(text, str) or len(text.encode("utf-8")) <= limit:
+                    continue
+                prefix = life_hub.file_key(binding["files_prefix"])
+                digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                file_key = f"{prefix}/{hashlib.sha256(identity.encode()).hexdigest()}/{column}-{digest}.txt"
+                files.append({"key": file_key, "text": text, "verified": False})
+                row[column] = (
+                    f"[Open retained original](/v1/files/{file_key})\n\n"
+                    f"{len(text.encode('utf-8'))} UTF-8 bytes; SHA-256 {digest}."
+                )
+            record = {
+                "identity": identity,
+                "table": table,
+                "row": row,
+                "files": files,
+                "delivered": False,
+            }
             # Refuse non-JSON data before touching either the store or the hub.
             json.dumps(record, ensure_ascii=False, allow_nan=False)
             self.store[key] = copy.deepcopy(record)
@@ -103,6 +130,13 @@ class WorkflowWriter:
             raise ValueError("Invalid retained workflow intent")
         table = _identifier(record["table"])
         if not record["delivered"]:
+            for retained in record.get("files", []):
+                if not retained["verified"]:
+                    path = self.retain(retained["key"], retained["text"])
+                    if path != "/v1/files/" + retained["key"]:
+                        raise RuntimeError("Retained original returned a different identity")
+                    retained["verified"] = True
+                    self.store[key] = copy.deepcopy(record)
             self.send(table, [copy.deepcopy(record["row"])])
             record["delivered"] = True
             self.store[key] = record
@@ -210,6 +244,8 @@ class CaptureJournal:
 
 @contextlib.contextmanager
 def capture_scope(store, payload):
+    if payload.get("workspace") != current().id:
+        raise ValueError("Capture workspace does not match the authenticated context")
     journal = CaptureJournal(store, payload)
     bindings = journal.checkpoint("bindings", lambda: current().databases.get("workflow", {}))
     active = SimpleNamespace(
