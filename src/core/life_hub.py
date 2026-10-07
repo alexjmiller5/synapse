@@ -140,6 +140,10 @@ def _identity(value):
     return isinstance(value, str) and bool(value.strip())
 
 
+class InsertRejected(RuntimeError):
+    pass
+
+
 def insert_rows(table, rows, *, settings=None, client=None):
     """Insert only; existing IDs (including tombstones) are never overwritten.
 
@@ -160,7 +164,7 @@ def insert_rows(table, rows, *, settings=None, client=None):
     if not all(isinstance(out.get(key), list) for key in ("inserted", "existing", "rejected")):
         raise RuntimeError("Life Data returned an invalid insert receipt")
     if out["rejected"]:
-        raise RuntimeError(f"Life Data rejected {len(out['rejected'])} rows")
+        raise InsertRejected(f"Life Data rejected {len(out['rejected'])} rows")
     accepted = out["inserted"] + out["existing"]
     if (
         not all(_identity(value) for value in accepted)
@@ -202,3 +206,57 @@ def patch_row(table, row_id, values, expected_revision, *, settings=None, client
     ):
         raise RuntimeError("Life Data returned an invalid patch receipt")
     return out
+
+
+def read_row(table, identity, columns, *, settings=None, client=None):
+    """A bounded identity read, including tombstones for explicit save decisions."""
+    result = _post(
+        "/v1/rows/pull",
+        {
+            "table": table,
+            "columns": sorted(set(columns) | {"id", "updated_at", "hub_at", "deleted_at"}),
+            "where": {"id": identity},
+            "limit": 2,
+        },
+        settings=settings,
+        client=client,
+    )
+    rows = result.get("rows")
+    if not isinstance(rows, list) or len(rows) > 1 or result.get("next_cursor"):
+        raise ValueError("invalid identity read receipt")
+    if not rows:
+        return None
+    if rows[0].get("id") != identity or not isinstance(rows[0].get("updated_at"), str):
+        raise ValueError("invalid identity read receipt")
+    return rows[0]
+
+
+def media_url_identity(table, url, canonicalize, *, settings=None, client=None):
+    """Reuse a legacy URL identity, including tombstones, without a guessed match.
+
+    Old curated catalogs used random IDs. This bounded paged lookup avoids
+    creating a second record for their canonical URL. Large or ambiguous matches
+    require review rather than inventing an identity.
+    """
+    after = None
+    matches = []
+    for _ in range(50):
+        body = {"table": table, "columns": ["id", "url", "deleted_at"], "limit": 200}
+        if after is not None:
+            body["after"] = after
+        result = _post("/v1/rows/pull", body, settings=settings, client=client)
+        rows = result.get("rows")
+        if not isinstance(rows, list) or len(rows) > 200:
+            raise ValueError("invalid URL lookup")
+        for row in rows:
+            if row.get("url") and canonicalize(row["url"]) == url:
+                matches.append(row["id"])
+        cursor = result.get("next_cursor")
+        if not cursor:
+            if len(matches) > 1:
+                raise ValueError("ambiguous URL identity")
+            return matches[0] if matches else url
+        if not isinstance(cursor, str) or cursor == after:
+            raise ValueError("invalid URL cursor")
+        after = cursor
+    raise ValueError("URL catalog requires review")

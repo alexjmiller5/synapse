@@ -4,7 +4,7 @@ Each device gets its own revocable bearer token, minted here and handed over
 through an enrollment link - never the operator's Modal proxy credentials -
 and bound to the workspace its captures are filed into (core/workspace.py).
 Only a SHA-256 of each token is stored. `store` is any mutable mapping: a
-modal.Dict in production, a plain dict in tests.
+store.VolumeStore in production, a plain dict in tests.
 """
 
 import hmac
@@ -61,6 +61,7 @@ def authenticate(store, authorization: str | None) -> dict:
         "client_id": client["client_id"],
         "label": client["label"],
         "workspace": client.get("workspace", "default"),
+        **({"purpose": client["purpose"]} if client.get("purpose") else {}),
     }
 
 
@@ -91,3 +92,32 @@ def enrollment_link(enroll_page_url: str, capture_url: str, token: str) -> str:
     """The token rides in the URL fragment, which browsers never send to the
     page's server, so it stays out of request logs."""
     return f"{enroll_page_url}#{urlencode({'url': capture_url, 'token': token})}"
+
+
+def issue_gateway(store, label, workspace, categories, fields):
+    """Dedicated delegation credential; never valid for general Receptor capture."""
+    if (
+        not isinstance(categories, list)
+        or not categories
+        or not set(categories).issubset(
+            {"movies", "tv-shows", "youtube-videos", "podcasts", "articles"}
+        )
+        or len(set(categories)) != len(categories)
+    ):
+        raise InvalidRequest("unsupported media categories")
+    if (
+        not isinstance(fields, list)
+        or not fields
+        or not set(fields).issubset({"saved", "status", "tags", "note", "consumed_at"})
+        or len(set(fields)) != len(fields)
+    ):
+        raise InvalidRequest("unsupported media fields")
+    issued = issue(store, label, workspace)
+    key = f"client:{issued['client_id']}"
+    store[key] = {
+        **store[key],
+        "purpose": "media-gateway",
+        "categories": categories,
+        "fields": fields,
+    }
+    return issued

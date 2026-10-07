@@ -1,5 +1,8 @@
 """Tests for handlers.py — category-specific logic for all Notion DB categories."""
 
+from core import life_hub
+
+
 import re
 from unittest.mock import MagicMock, patch
 
@@ -172,6 +175,7 @@ class TestToHubDatetime:
 # ======================================================================
 # handle_youtube_logic - YouTube captures live in life-data, not Notion
 # ======================================================================
+@pytest.mark.usefixtures("media_hub")
 class TestYouTubeToLifeData:
     SNIPPET = {
         "items": [
@@ -207,7 +211,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(False)),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             ref = handle_youtube_logic(
                 "youtube-videos",
@@ -224,7 +228,7 @@ class TestYouTubeToLifeData:
         assert chan["id"] == "UCuAXFkgsw1L7xaCfnd5JJOw" and chan["follow"] == 0
         assert chan["backfilled"] == 0
         assert chan["uploads_playlist_id"] == "UUuAXFkgsw1L7xaCfnd5JJOw"
-        assert chan["subscription"] == "Never Subscribed"
+        assert "subscription" not in chan
         vid = push.call_args_list[1].args[1][0]
         assert vid["id"] == "dQw4w9WgXcQ" and vid["channel_id"] == chan["id"]
         assert vid["status"] == "Not Started" and vid["tags"] == ["Classic"]
@@ -238,7 +242,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(True)),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             handle_youtube_logic(
                 "youtube-videos",
@@ -258,9 +262,10 @@ class TestYouTubeToLifeData:
             patch("core.handlers.get_youtube", return_value=self._yt(True)),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
             patch(
-                "core.handlers.push_rows",
+                "core.life_hub.insert_rows",
                 return_value={
-                    "upserted": 0,
+                    "inserted": [],
+                    "existing": [],
                     "rejected": [
                         {"id": "dQw4w9WgXcQ", "col": "status", "rule": "select", "message": "bad"}
                     ],
@@ -271,7 +276,7 @@ class TestYouTubeToLifeData:
                 "youtube-videos",
                 {"Video URL": "https://youtu.be/dQw4w9WgXcQ", "Status": "Not Started"},
             )
-        assert isinstance(out, Failed) and "bad" in out.detail
+        assert isinstance(out, Failed) and "insert_rejected" in out.detail
 
     def test_no_youtube_client_files_cleanup_task_and_fails(self, mock_notion):
         with patch("core.handlers.get_youtube", return_value=None):
@@ -299,7 +304,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=yt),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.handlers.push_rows") as push,
+            patch("core.life_hub.insert_rows") as push,
         ):
             out = handle_youtube_logic(
                 "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
@@ -317,7 +322,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=yt),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             handle_youtube_logic(
                 "youtube-videos",
@@ -333,12 +338,13 @@ class TestYouTubeToLifeData:
 ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 
+@pytest.mark.usefixtures("media_hub")
 class TestHandleMoviesTv:
     def test_confident_match_pushes_one_row(self, mock_notion):
         data = {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]}
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205") as resolve,
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             ref = handle_movies_tv_logic("movies", data)
 
@@ -363,7 +369,7 @@ class TestHandleMoviesTv:
         status update must not blank an existing row's tags."""
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Finished"})
         assert set(push.call_args.args[1][0]) == {"id", "status", "updated_at"}
@@ -373,7 +379,7 @@ class TestHandleMoviesTv:
         never go out empty."""
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             handle_movies_tv_logic("movies", {"Title": "Inception", "Status": ""})
         assert push.call_args.args[1][0]["status"] == "Not Started"
@@ -381,7 +387,7 @@ class TestHandleMoviesTv:
     def test_tv_shows_push_to_tv_shows_table(self):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="1396") as resolve,
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             ref = handle_movies_tv_logic(
                 "tv-shows", {"Title": "Breaking Bad", "Status": "Finished"}
@@ -393,7 +399,7 @@ class TestHandleMoviesTv:
     def test_no_tmdb_match_files_cleanup_task_and_pushes_nothing(self, mock_notion):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value=None),
-            patch("core.handlers.push_rows") as push,
+            patch("core.life_hub.insert_rows") as push,
         ):
             out = handle_movies_tv_logic(
                 "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
@@ -417,15 +423,18 @@ class TestHandleMoviesTv:
         }
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.handlers.push_rows", return_value={"upserted": 0, "rejected": [rejected]}),
+            patch(
+                "core.life_hub.insert_rows",
+                return_value={"inserted": [], "existing": [], "rejected": [rejected]},
+            ),
         ):
             out = handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Bogus"})
 
         assert isinstance(out, Failed)
-        assert rejected["message"] in out.detail
+        assert "insert_rejected" in out.detail
         mock_notion.pages.create.assert_called_once()
         name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
-        assert rejected["message"] in name
+        assert "insert_rejected" in name
 
 
 # ======================================================================

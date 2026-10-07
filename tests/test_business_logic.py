@@ -78,19 +78,18 @@ class TestApplyBusinessLogic:
         result = apply_business_logic("groceries", {"Name": "Eggs"}, source_text="buy eggs")
         assert result["Name"] == "Eggs"
 
-    def test_movies_default_status(self):
+    def test_movies_omitted_status_stays_unspecified(self):
         data = {"Title": "Inception"}
         result = apply_business_logic("movies", data)
-        assert result["Status"] == "Not Started"
+        assert "Status" not in result
 
     def test_movies_keeps_explicit_status(self):
         data = {"Title": "Inception", "Status": "Finished"}
         result = apply_business_logic("movies", data)
         assert result["Status"] == "Finished"
 
-    def test_tv_show_default_status(self):
-        """TV shows default to Not Started too - life-data requires a status."""
-        assert apply_business_logic("tv-shows", {"Title": "Severance"})["Status"] == "Not Started"
+    def test_tv_show_omitted_status_stays_unspecified(self):
+        assert "Status" not in apply_business_logic("tv-shows", {"Title": "Severance"})
 
     def test_tasks_empty_due_date_dropped(self):
         """Place-tagged tasks are dateless: the prompt returns '' for Due Date and

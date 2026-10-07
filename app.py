@@ -60,8 +60,18 @@ def process(payload: dict):
     from core import workspace
     from core.pipeline import run
 
-    with workspace.use(workspace.load(_state(), payload.get("workspace") or workspace.DEFAULT_ID)):
-        return run(payload, seen=seen_inputs, store=_state())
+    store = _state()
+    with workspace.use(workspace.load(store, payload.get("workspace") or workspace.DEFAULT_ID)):
+        media = payload.get("media_operation")
+        if media:
+            from core import media_capture
+
+            if media["action"] == "submit":
+                return media_capture.submit_capture(store, media["caller"], media["request"])
+            if media["action"] == "process":
+                return media_capture.process_capture(store, media["caller"], media["request_id"])
+            raise ValueError("unsupported media operation")
+        return run(payload, seen=seen_inputs, store=store)
 
 
 def _accepted_payload(payload, workspace_id):
@@ -106,6 +116,8 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
 
     try:
         client = capture_clients.authenticate(_state(), authorization)
+        if client.get("purpose"):
+            raise capture_clients.Unauthorized()
     except capture_clients.Unauthorized:
         return JSONResponse(
             {"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"}
@@ -120,6 +132,48 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
         return JSONResponse({"error": str(error)}, status_code=422)
     call = process.spawn(accepted)
     return {"status": "accepted", "call_id": call.object_id, "capture_id": accepted["capture_id"]}
+
+
+@app.function(image=image)
+@modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-media-capture")
+def media_capture_endpoint(payload: dict, authorization: Annotated[str | None, Header()] = None):
+    """Dedicated gateway credential; all durable changes use the single worker."""
+    from fastapi.responses import JSONResponse
+    from core import capture_clients, media_capture
+
+    try:
+        media_capture.validate_envelope(payload)
+        caller = media_capture.gateway_caller(_state(), authorization, payload)
+        operation = {"action": payload["action"], "caller": caller}
+        if payload["action"] == "submit":
+            operation["request"] = payload["request"]
+        else:
+            return media_capture.get_capture(_state(), caller, payload["request_id"])
+        receipt = process.remote({"workspace": caller["workspace"], "media_operation": operation})
+        if payload["action"] == "submit" and receipt["state"] in (
+            "received",
+            "processing",
+            "uncertain",
+        ):
+            process.spawn(
+                {
+                    "workspace": caller["workspace"],
+                    "media_operation": {
+                        "action": "process",
+                        "caller": caller,
+                        "request_id": receipt["request_id"],
+                    },
+                }
+            )
+        return receipt
+    except capture_clients.Unauthorized:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    except media_capture.InvalidRequest:
+        return JSONResponse({"error": "invalid capture"}, status_code=400)
+    except media_capture.Conflict:
+        return JSONResponse({"error": "request conflict"}, status_code=409)
+    except media_capture.NotFound:
+        return JSONResponse({"error": "capture not found"}, status_code=404)
 
 
 @app.function(image=image)

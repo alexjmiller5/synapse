@@ -16,6 +16,8 @@ from core.external_data import (
     sanitize_youtube_url,
 )
 from core.life_hub import pull_ids, pull_rows, push_rows
+from core import life_hub
+from core.media_save import save_media
 from core.timeutils import now_utc_iso_ms
 
 # Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
@@ -120,15 +122,59 @@ def handle_hub_logic(category, data):
     return f"{table}/{row['id']}"
 
 
-def handle_youtube_logic(category, data):
+def _capture_media(
+    category,
+    identity,
+    initializer,
+    data,
+    *,
+    receipt=False,
+    review=None,
+    checkpoint=None,
+    explicit_properties=(),
+):
+    review = review or create_cleanup_task
+    stanza = DATABASES["databases"][category]
+    mapping = stanza["capture_columns"]
+    requested = {
+        column: data[field]
+        for field, column in mapping.items()
+        if field in explicit_properties or not _empty(data.get(field))
+    }
+    saved_column = stanza.get("saved_column")
+    if data.get("Capture Intent") == "save":
+        if not saved_column:
+            return Failed("Explicit saves require a configured saved field")
+        requested[saved_column] = 1
+    result = save_media(
+        life_hub,
+        {
+            "table": stanza["hub_table"],
+            "editable_columns": [*mapping.values(), *([saved_column] if saved_column else [])],
+        },
+        identity,
+        initializer,
+        requested,
+        checkpoint=checkpoint,
+    )
+    if result.state != "saved":
+        review(f"Media capture requires review: {result.reason}")
+        return result if receipt else Failed(f"Media capture {result.state}: {result.reason}")
+    return result if receipt else f"{stanza['hub_table']}/{identity}"
+
+
+def handle_youtube_logic(
+    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+):
     """YouTube captures are a life-data table, not a Notion DB.
 
     A channel is pushed once (on first sight of a video from it), with a
-    "Classify new Channel" cleanup task so Alex sets follow/subscription by
+    "Classify new Channel" cleanup task so the user chooses follow by
     hand; every later video from that channel just links channel_id. Channel
     membership is checked against the hub's actual state (known_channel_ids),
     never an in-run cache.
     """
+    review = review or create_cleanup_task
     url = sanitize_youtube_url(data["Video URL"]) if data.get("Video URL") else None
     vid = get_youtube_video_id(url) if url else None
     if not vid:
@@ -136,14 +182,14 @@ def handle_youtube_logic(category, data):
 
     yt = get_youtube()
     if not yt:
-        create_cleanup_task(f"No YouTube client configured for video {vid}")
+        review(f"No YouTube client configured for video {vid}")
         return Failed(f"No YouTube client configured for video {vid}")
 
     video_items = (
         yt.videos().list(part="snippet,contentDetails", id=vid).execute().get("items") or []
     )
     if not video_items:
-        create_cleanup_task(f"YouTube video not found: {vid}")
+        review(f"YouTube video not found: {vid}")
         return Failed(f"YouTube video not found: {vid}")
     item = video_items[0]
     snippet = item["snippet"]
@@ -155,7 +201,7 @@ def handle_youtube_logic(category, data):
             or []
         )
         if not channel_items:
-            create_cleanup_task(f"YouTube channel not found: {channel_id}")
+            review(f"YouTube channel not found: {channel_id}")
             return Failed(f"YouTube channel not found: {channel_id}")
         ch = channel_items[0]
         title = ch["snippet"]["title"]
@@ -167,17 +213,23 @@ def handle_youtube_logic(category, data):
             "uploads_playlist_id": ch["contentDetails"]["relatedPlaylists"]["uploads"],
             "follow": 0,
             "backfilled": 0,
-            "subscription": "Never Subscribed",
             "updated_at": now_utc_iso_ms(),
         }
-        push_rows("youtube_channels", [channel_row])
-        create_cleanup_task(f"Classify new Channel: {title}")
+        channel_receipt = save_media(
+            life_hub,
+            {"table": "youtube_channels", "editable_columns": []},
+            channel_id,
+            channel_row,
+            {},
+        )
+        if channel_receipt.state != "saved":
+            return Failed(f"Channel capture {channel_receipt.state}: {channel_receipt.reason}")
+        review(f"Classify new Channel: {title}")
 
     # A live/premiere video has no fixed duration yet - the row is still valid
     # without it, just not resolvable as a short.
     duration = item["contentDetails"].get("duration")
     duration_s = _parse_duration_s(duration) if duration else None
-    status = data.get("Status") or "Not Started"
     video_row = {
         "id": vid,
         "channel_id": channel_id,
@@ -186,23 +238,31 @@ def handle_youtube_logic(category, data):
         "duration_s": duration_s,
         "thumbnail_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
         "is_short": 1 if duration_s is not None and duration_s <= 180 else 0,
-        "status": status,
+        "status": "Not Started",
         "updated_at": now_utc_iso_ms(),
     }
-    if data.get("Tags"):
-        video_row["tags"] = data["Tags"]
+    return _capture_media(
+        category,
+        vid,
+        video_row,
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )
 
-    rejected = push_rows("youtube_videos", [video_row]).get("rejected") or []
-    if rejected:
-        message = rejected[0].get("message")
-        create_cleanup_task(f"life-data rejected {snippet['title']!r}: {message}")
-        return Failed(f"life-data rejected youtube_videos/{vid}: {message}")
 
-    print(f"   ✅ Pushed youtube_videos/{vid}")
-    return f"youtube_videos/{vid}"
-
-
-def handle_movies_tv_logic(category, data):
+def handle_movies_tv_logic(
+    category,
+    data,
+    *,
+    receipt=False,
+    review=None,
+    checkpoint=None,
+    explicit_properties=(),
+    strict_identity=False,
+):
     """Movies and TV shows are life-data rows, not Notion pages.
 
     The TMDB id IS the row id, so an unconfident match is worse than none: we
@@ -211,29 +271,29 @@ def handle_movies_tv_logic(category, data):
     the hub - we push only the columns we actually know, and the hub's upsert
     touches only those, so a status capture never clobbers tags or date_watched.
     """
-    table = DATABASES["databases"][category]["hub_table"]
+    review = review or create_cleanup_task
     kind = "movie" if category == "movies" else "tv"
     title = data.get("Title")
 
-    tmdb_id = resolve_tmdb_id(kind, title)
+    tmdb_id = (
+        resolve_tmdb_id(kind, title, strict=True)
+        if strict_identity
+        else resolve_tmdb_id(kind, title)
+    )
     if not tmdb_id:
-        create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
+        review(f"Could not resolve {title!r} on TMDB ({category})")
         return Failed(f"No confident TMDB match for {title!r} - nothing written")
 
-    # The extractor emits "" for a field it could not fill; status is required.
-    status = data.get("Status") or "Not Started"
-    row = {"id": tmdb_id, "status": status, "updated_at": now_utc_iso_ms()}
-    if data.get("Tags"):
-        row["tags"] = data["Tags"]
-
-    rejected = push_rows(table, [row]).get("rejected") or []
-    if rejected:
-        message = rejected[0].get("message")
-        create_cleanup_task(f"life-data rejected {title!r}: {message}")
-        return Failed(f"life-data rejected {table}/{tmdb_id}: {message}")
-
-    print(f"   ✅ Pushed {table}/{tmdb_id}")
-    return f"{table}/{tmdb_id}"
+    return _capture_media(
+        category,
+        tmdb_id,
+        {"status": "Not Started"},
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )
 
 
 def handle_people_logic(category, data):
@@ -242,3 +302,68 @@ def handle_people_logic(category, data):
 
 def handle_default_logic(category, data):
     return create_page(category, build_notion_properties(category, data)).get("url")
+
+
+def canonical_media_url(url):
+    """The media poller's public URL identity rules; no personal source list."""
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(url.strip())
+    if (
+        parsed.scheme.lower() not in ("https", "http")
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("invalid media URL")
+    query = sorted(
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.startswith("utm_") and key not in {"si", "ref", "fbclid", "gclid"}
+    )
+    path = parsed.path.rstrip("/") if len(parsed.path) > 1 else parsed.path
+    return urlunparse(
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, "", urlencode(query), "")
+    )
+
+
+def handle_url_media(
+    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+):
+    stanza = DATABASES["databases"][category]
+    try:
+        raw_url = (data.get("URL") or "").strip()
+        url = canonical_media_url(raw_url)
+        if category == "podcasts":
+            identity = life_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
+        else:
+            # Some producer IDs deliberately retain fragments and trailing slashes.
+            # Check exact identity before applying ordinary URL normalization.
+            exact = life_hub.read_row(stanza["hub_table"], raw_url, ["id"])
+            if exact:
+                identity = raw_url
+            elif "#" in raw_url:
+                return Failed("Unknown fragment identity requires review")
+            else:
+                identity = url
+    except (ValueError, TypeError):
+        return Failed("Media URL requires identity review")
+    user_columns = set(stanza["capture_columns"].values())
+    initializer = {
+        column: data[prop]
+        for prop, column in stanza.get("columns", {}).items()
+        if column not in user_columns and not _empty(data.get(prop))
+    }
+    if category == "podcasts":
+        initializer["url"] = url
+    initializer["status"] = "Not Started"
+    return _capture_media(
+        category,
+        identity,
+        initializer,
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )

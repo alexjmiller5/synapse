@@ -150,7 +150,7 @@ def run_pipeline(
         # 3. Extract
         url_context = (
             enrich_context(category, raw_text) or "No URL"
-            if category in ["podcasts", "youtube-videos", "bookmarks"]
+            if category in ["podcasts", "youtube-videos", "bookmarks", "articles"]
             else None
         )
         extract_prompt = generate_extraction_prompt(

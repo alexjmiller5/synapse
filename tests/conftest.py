@@ -125,3 +125,13 @@ def mock_youtube():
     """Provides the mock YouTube client."""
     _mock_youtube.reset_mock()
     return _mock_youtube
+
+
+@pytest.fixture
+def media_hub(monkeypatch):
+    from media_hub import SyntheticHub
+    from core import life_hub
+
+    hub = SyntheticHub()
+    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    return hub
