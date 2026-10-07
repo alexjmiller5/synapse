@@ -353,7 +353,7 @@ def enrich_context(category, raw_text):
             return get_tal_metadata(url)
     elif category == "youtube-videos":
         return get_youtube_metadata(url)
-    elif category == "bookmarks":
+    elif category in ("bookmarks", "articles"):
         return fetch_web_metadata(url)
 
     return None

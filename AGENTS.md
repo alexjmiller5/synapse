@@ -21,13 +21,15 @@ tests or on any future platform.
   `modal.Dict` (app.py); the key is written only AFTER a run completes, so a
   crashed run still gets its Modal retry. Receptor's iOS background uploads
   re-send when a success callback is lost - this is the backstop for that.
-- Two ways in, never an unauthenticated one:
+- Authenticated entrypoints:
   - `webhook` (`requires_proxy_auth=True`): the OPERATOR path (`just recept`,
     agents) - `Modal-Key` + `Modal-Secret` headers, workspace credentials.
   - `capture` (label `synapse-capture`): the CLIENT path (Receptor) -
     `Authorization: Bearer <token>`, a per-device token Synapse itself issues
-    (`core/capture_clients.py`, hashes only, in the `synapse-capture-clients`
-    `modal.Dict`). A client app never holds workspace credentials.
+    (`core/capture_clients.py`, hashes only, in the `synapse-state`
+    Volume through `store.VolumeStore`). A client app never holds workspace credentials.
+  - `media_capture_endpoint` (label `synapse-media-capture`): the delegated
+    service path, restricted to media categories and fields by its dedicated token.
   - `just clients issue "<device>"` mints a token and prints an enrollment
     link to the `enroll` page (label `synapse-enroll`); the token rides in
     the URL fragment, so it never reaches a server, and the page hands it to
@@ -213,7 +215,7 @@ token (from an enrollment link) and expects 200.
 
 ## Media capture writes
 
-Resolved movie, TV and video captures use `core/media_save.py` through the
+Resolved movie, TV, video, article and podcast captures use `core/media_save.py` through the
 existing hub client. New identities use insert-only creation; existing rows
 receive only requested fields through revision-checked patches. Missing status
 is an initializer default only and never resets a stored status. Tombstones,
@@ -234,3 +236,35 @@ Use a dedicated Google Cloud project and API key restricted to
 key; billing account credit or spending controls may still be shared.
 A credential cutover requires a successful `generateContent` request with
 the configured model before deployment. Never reuse another app's key.
+
+## Media gateway contract
+
+Life Data is an approved consumer of Synapse's media-capture endpoint. Its
+stateless gateway holds an independently minted, workspace-bound media-gateway
+credential. It delegates opaque caller subjects and an approved logical field
+set; a device bearer is never forwarded. Gateway credentials cannot invoke the
+general Receptor endpoint. Revocation affects this caller only. Replacing the
+gateway client identity also changes its receipt namespace; settle pending jobs
+before replacement or retain their private operator reconciliation record.
+
+`core/media_capture.py` stores idempotent requests and receipts in the existing
+owned `synapse-state` VolumeStore. All writes and resolution run through the
+existing serialized `process` worker; read-only receipt retrieval can run while
+it is busy. HTTP acceptance is received, never saved. A saved receipt requires a
+committed identity result. Interrupted/uncertain jobs retain their pre-write
+resolution plan and reconcile by supported hub reads without replaying edits.
+
+`core/media_resolution.py` permits only configured media categories and fields.
+It never enters general task/note fan-out or creates cleanup tasks. Input cannot
+choose its workspace, endpoint or credential. Article IDs use the poller's URL
+normalization; podcast capture preserves legacy URL-matched IDs and tombstones.
+Legacy podcast URL matching is capped at 50 pages of 200 projected rows; larger
+or ambiguous catalogs require review. Actual category bindings remain workspace
+state. `scripts/media-capture.py` mints the dedicated gateway credential through
+the existing operator interface; its one-time output belongs in the caller's
+secret store, never in a native app or source control.
+
+The media gateway enriches YouTube through its provider API. Article/podcast
+URLs are captured from the submitted input without arbitrary page fetching;
+model extraction cannot change a submitted URL. This path never calls general
+podcast cleanup-task enrichment. Stored titles remain editable metadata.

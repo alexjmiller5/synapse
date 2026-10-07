@@ -667,6 +667,7 @@ class TestFunActivitiesPipeline:
 # ======================================================================
 # Podcast Tests
 # ======================================================================
+@pytest.mark.usefixtures("media_hub")
 class TestPodcastPipeline:
     def test_spotify_podcast(self, mock_gemini, mock_notion):
         _setup_classify_extract(
@@ -685,7 +686,7 @@ class TestPodcastPipeline:
                 "core.external_data.get_spotify_metadata",
                 return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
             ),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
+            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
         ):
             _run(_item("https://open.spotify.com/episode/abc"))
         row = push.call_args.args[1][0]

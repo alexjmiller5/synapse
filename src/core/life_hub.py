@@ -160,3 +160,34 @@ def patch_row(table, identity, values, expected_revision, *, settings=None, clie
     ):
         raise ValueError("invalid patch receipt")
     return result
+
+
+def media_url_identity(table, url, canonicalize, *, settings=None, client=None):
+    """Reuse a legacy URL identity, including tombstones, without a guessed match.
+
+    Old curated catalogs used random IDs. This bounded paged lookup avoids
+    creating a second record for their canonical URL. Large or ambiguous matches
+    require review rather than inventing an identity.
+    """
+    after = None
+    matches = []
+    for _ in range(50):
+        body = {"table": table, "columns": ["id", "url", "deleted_at"], "limit": 200}
+        if after is not None:
+            body["after"] = after
+        result = _post_rows("pull", body, settings=settings, client=client)
+        rows = result.get("rows")
+        if not isinstance(rows, list) or len(rows) > 200:
+            raise ValueError("invalid URL lookup")
+        for row in rows:
+            if row.get("url") and canonicalize(row["url"]) == url:
+                matches.append(row["id"])
+        cursor = result.get("next_cursor")
+        if not cursor:
+            if len(matches) > 1:
+                raise ValueError("ambiguous URL identity")
+            return matches[0] if matches else url
+        if not isinstance(cursor, str) or cursor == after:
+            raise ValueError("invalid URL cursor")
+        after = cursor
+    raise ValueError("URL catalog requires review")

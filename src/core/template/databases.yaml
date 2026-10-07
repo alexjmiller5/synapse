@@ -245,8 +245,17 @@ databases:
     # A life-data table: manually curated episodes (podcasts are not a Media Center source).
     hub_table: "podcast_episodes"
     columns: { "Episode Title": title, "Podcast Name": podcast, Producer: producer, Genres: genres, Status: status, URL: url, "Date Listened To": date_listened }
+    saved_column: null
+    capture_columns: {Status: status, Date Listened To: date_listened, Notes: note}
     description: "A podcast episode or series (MUST contains a Spotify or 'thisamericanlife.org' link). If the user just describes a podcast without a link, classify as a TASK (Chore). Or if they say add these podcasts to my db for example, that is also a task."
     properties:
+      Capture Intent:
+        type: "select"
+        allowlist: ["save", "record_consumption", "none"]
+        instruction: "save only for an explicit save-for-later request; record_consumption for a listening report; none otherwise."
+      Notes:
+        type: "rich_text"
+        instruction: "Only notes explicitly requested by the user."
       Episode Title:
         type: "title"
         required: true
@@ -268,7 +277,7 @@ databases:
         type: "status"
         required: true
         allowlist: ["Priority", "Not Started", "In Progress", "Finished"]
-        instruction: "Finished if listened, In Progress if listening, Priority if the user says they must/need to listen, Not Started otherwise."
+        instruction: "Finished if listened, In Progress if listening, Priority if the user says they must/need to listen, Leave empty when the user did not specify consumption state."
       URL:
         type: "url"
         required: true
@@ -467,3 +476,35 @@ databases:
           2. CHECK TEXT: Otherwise, look for a date mentioned in the text itself.
           3. If a month/day is given with no year, assume the next future occurrence relative to {current_date}.
           4. If NO concrete date can be determined, OMIT this field entirely. Never output an empty string, a guess, or vague text like "after graduation".
+
+  articles:
+    hub_table: "articles"
+    saved_column: null
+    columns: {Title: title}
+    capture_columns: {Status: status, Date Read: date_read, Tags: tags, Notes: note}
+    description: "An article the user explicitly wants to save for reading or reports reading. Must include its URL. General website bookmarks remain bookmarks."
+    properties:
+      Title:
+        type: "title"
+        instruction: "Use the article title from fetched metadata or an explicitly supplied title. Never invent a title."
+      URL:
+        type: "url"
+        required: true
+        instruction: "The exact article URL."
+      Capture Intent:
+        type: "select"
+        allowlist: ["save", "record_consumption", "none"]
+        instruction: "save for an explicit save-for-later request, record_consumption for a reading report, none otherwise."
+      Status:
+        type: "status"
+        allowlist: ["Priority", "Not Started", "In Progress", "Finished", "Watched Parts", "Gave Up"]
+        instruction: "Only consumption state explicitly conveyed by the user. Leave empty for a save request."
+      Date Read:
+        type: "date"
+        instruction: "Only a reading date explicitly supplied by the user."
+      Tags:
+        type: "multi_select"
+        instruction: "Only tags explicitly requested by the user."
+      Notes:
+        type: "rich_text"
+        instruction: "Only notes explicitly requested by the user."

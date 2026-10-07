@@ -1,5 +1,6 @@
 """Lossless media capture over the supported hub row API."""
 
+import json
 from dataclasses import dataclass
 from typing import Literal
 
@@ -16,7 +17,25 @@ class SaveReceipt:
     reason: str | None = None
 
 
-def save_media(hub, binding, identity, initializer, requested_values, expected_revision=None):
+def same_value(actual, expected):
+    if isinstance(expected, (list, dict)) and isinstance(actual, str):
+        try:
+            actual = json.loads(actual)
+        except ValueError:
+            return False
+    return actual == expected
+
+
+def save_media(
+    hub,
+    binding,
+    identity,
+    initializer,
+    requested_values,
+    expected_revision=None,
+    *,
+    checkpoint=None,
+):
     """Insert once or conditionally patch only explicitly requested user fields.
 
     A timeout is uncertain even if a later read may reconcile it. This function
@@ -30,6 +49,8 @@ def save_media(hub, binding, identity, initializer, requested_values, expected_r
     ):
         return SaveReceipt("needs_review", identity, reason="field_not_editable")
     table = binding["table"]
+    if checkpoint:
+        checkpoint({"table": table, "identity": identity, "values": requested_values})
     columns = sorted(set(initializer) | set(requested_values) | reserved)
     try:
         row = hub.read_row(table, identity, columns)
@@ -55,7 +76,11 @@ def save_media(hub, binding, identity, initializer, requested_values, expected_r
         revision = {column: row.get(column) for column in ("updated_at", "hub_at")}
         if expected_revision is not None and revision != expected_revision:
             return SaveReceipt("conflict", identity, reason="revision_conflict")
-        values = {key: value for key, value in requested_values.items() if row.get(key) != value}
+        values = {
+            key: value
+            for key, value in requested_values.items()
+            if not same_value(row.get(key), value)
+        }
         if not values:
             return SaveReceipt("saved", identity, revision)
         result = hub.patch_row(table, identity, values, revision)

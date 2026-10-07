@@ -5,7 +5,7 @@ properties, extraction instructions, generic allowlists) and
 `template/prompts.yaml`. Everything that belongs to one user - their Notion
 ids, their allowlists and wording, their place tags, their Notion and
 life-data credentials, their property-id map - is a workspace, stored by the
-running service (a modal.Dict in production) and edited with
+running service (a store.VolumeStore in production) and edited with
 `scripts/workspace.py`, never committed.
 
 A workspace's config is the template deep-merged with its overlay (dicts

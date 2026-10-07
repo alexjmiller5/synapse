@@ -5,6 +5,7 @@ from core.timeutils import today_eastern
 from core.notion_utils import clean_text, prop_id
 from core.handlers import (
     handle_hub_logic,
+    handle_url_media,
     handle_youtube_logic,
     handle_movies_tv_logic,
     handle_people_logic,
@@ -290,6 +291,8 @@ LOGIC_HANDLERS = {
 def execute_logic(category, data, inventory_map=None):
     print(f"⚙️ Executing Logic for: {category}")
     stanza = DATABASES["databases"].get(category, {})
+    if category in ("podcasts", "articles"):
+        return handle_url_media(category, data)
     if stanza.get("hub_table") and "columns" in stanza:
         return handle_hub_logic(category, data)
     handler = LOGIC_HANDLERS.get(category, handle_default_logic)
