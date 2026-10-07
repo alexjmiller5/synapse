@@ -153,6 +153,11 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   values. Omission retains Notion; malformed selected configuration fails
   closed. Duplicate active titles are rejected because the prompt-to-ID map
   cannot represent them safely.
+- `workflow.tasks.calendar` optionally sets `timeZone` and `dayStartMinutes`
+  (integer 0..1439, absent boundary means midnight). Task extraction and generated
+  followups use that civil day. The capture journal freezes it before extraction
+  so retries cannot move a task into a later day. Other categories keep their
+  own calendar behavior; invalid selected calendars fail closed.
 - Oversized execution fields can use runtime `retained_fields`,
   `max_inline_bytes` and `files_prefix`. Retain the frozen original with a
   conditional file create, then byte-verify readback before inserting its row
