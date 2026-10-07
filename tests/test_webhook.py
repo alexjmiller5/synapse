@@ -48,3 +48,12 @@ class TestPayloadError:
         assert payload_error({"raw_text": "x", "workspace": "friend-2"}) is None
         assert payload_error({"raw_text": "x", "workspace": "../etc"}) is not None
         assert payload_error({"raw_text": "x", "workspace": 3}) is not None
+
+
+def test_invalid_capture_identity_is_rejected_before_queueing():
+    for capture_id in [None, "", "not-an-id", 7, "E8BFC1E9-6F0E-4C15-8764-7C98D4B3A2AB"]:
+        assert "capture_id" in payload_error({"raw_text": "One", "capture_id": capture_id})
+    assert (
+        payload_error({"raw_text": "One", "capture_id": "e8bfc1e9-6f0e-4c15-8764-7c98d4b3a2ab"})
+        is None
+    )

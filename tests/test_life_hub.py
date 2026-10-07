@@ -14,6 +14,8 @@ def _settings():
 
 def _client(payload=None, status=200):
     resp = MagicMock()
+    if payload is not None and "rows" in payload:
+        payload = {**payload, "next_cursor": None}
     resp.json.return_value = payload if payload is not None else {"upserted": 1, "rejected": []}
     resp.status_code = status
     client = MagicMock()
@@ -85,7 +87,12 @@ class TestPullIds:
         url = client.post.call_args.args[0]
         assert url == "https://hub.example/v1/rows/pull"
         body = client.post.call_args.kwargs["json"]
-        assert body == {"table": "youtube_channels", "columns": ["id", "deleted_at"], "since": ""}
+        assert body == {
+            "table": "youtube_channels",
+            "columns": ["id", "deleted_at"],
+            "since": "",
+            "limit": 200,
+        }
         headers = client.post.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer tok"
         assert headers["User-Agent"] == "synapse"

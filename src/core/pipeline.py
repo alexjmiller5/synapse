@@ -104,7 +104,7 @@ def run_pipeline(
 
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
-    try:
+    def prepare():
         print(f"🚀 Pipeline Start: {repr(raw_text)}")  # Debugging the input to the pipeline
 
         # 2. Classify
@@ -183,35 +183,83 @@ def run_pipeline(
         extracted = apply_business_logic(category, extracted, project, raw_text)
         log_payload["Extractor_Data"] = extracted
 
-        url = None
-        project_append = False
-        if project and category == "tasks":
-            project_id = project_id_map.get(project)
-            if project_id:
-                project_append = True
-                # A matched project is ALWAYS a task now (project notes removed).
-                print(f"   -> Creating project task for: {project}")
-                url = create_project_task(project_id, extracted)
-                log_payload["Extractor_Data"]["Action"] = "Created Project Task"
+        return {
+            "category": category,
+            "project": project,
+            "extracted": extracted,
+            "log_payload": log_payload,
+            "url_context": url_context,
+        }
+
+    try:
+        from core.workflow import prepare_item
+
+        prepared = prepare_item(prepare)
+        if "preparation_error" in prepared:
+            recovery = create_high_priority_task(full_str_for_log)
+            log_job_outcome(
+                full_str_for_log,
+                "Unknown",
+                "Error(s)",
+                details=prepared["preparation_error"],
+                created_url=recovery,
+                ai_data=log_payload,
+                source=source,
+            )
+            return
+        category, project = prepared["category"], prepared["project"]
+        extracted, log_payload = prepared["extracted"], prepared["log_payload"]
+        url_context = prepared["url_context"]
+
+        def execute():
+            url = None
+            project_append = False
+            if project and category == "tasks":
+                project_id = project_id_map.get(project)
+                if project_id:
+                    project_append = True
+                    # A matched project is ALWAYS a task now (project notes removed).
+                    print(f"   -> Creating project task for: {project}")
+                    url = create_project_task(project_id, extracted)
+                    log_payload["Extractor_Data"]["Action"] = "Created Project Task"
+                else:
+                    url = execute_logic(category, extracted)
             else:
-                url = execute_logic(category, extracted)
-        else:
-            if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
-                # The page was never read, so everything but the URL is the model's
-                # guess. Title stays unset (the stanza's review_if_missing flags the
-                # row); Description and Tags only fill gaps on an already-known url.
-                extracted.pop("Title", None)
-                extracted["_fill_only"] = ["Description", "Tags"]
-            url = execute_logic(category, extracted, inventory_map)
+                if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
+                    # The page was never read, so everything but the URL is the model's
+                    # guess. Title stays unset (the stanza's review_if_missing flags the
+                    # row); Description and Tags only fill gaps on an already-known url.
+                    extracted.pop("Title", None)
+                    extracted["_fill_only"] = ["Description", "Tags"]
+                url = execute_logic(category, extracted, inventory_map)
 
-            if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
-                print("   🧹 Creating cleanup task for youtube-videos failure...")
-                create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
+                if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
+                    print("   🧹 Creating cleanup task for youtube-videos failure...")
+                    create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
 
-        # A handler that wrote nothing returns Failed - never log that as Success.
-        outcome, details = "Success", ""
-        if isinstance(url, Failed):
-            outcome, details, url = "Error(s)", url.detail, None
+            # A handler that wrote nothing returns Failed - never log that as Success.
+            outcome, details = "Success", ""
+            if isinstance(url, Failed):
+                outcome, details, url = "Error(s)", url.detail, None
+
+            return {
+                "url": url,
+                "outcome": outcome,
+                "details": details,
+                "project_append": project_append,
+                "log_payload": log_payload,
+            }
+
+        from core.workflow import current_capture
+
+        active = current_capture()
+        result = (
+            active.journal.checkpoint(f"item/{active.item_index}/result", execute)
+            if active is not None
+            else execute()
+        )
+        url, outcome, details = result["url"], result["outcome"], result["details"]
+        project_append, log_payload = result["project_append"], result["log_payload"]
 
         log_job_outcome(
             full_str_for_log,
@@ -225,6 +273,12 @@ def run_pipeline(
         )
 
     except Exception as e:
+        from core.workflow import current_capture
+
+        if current_capture() is not None:
+            # A remote effect may already have committed. Preserve the journal
+            # and let the existing worker retry rather than create a second task.
+            raise
         print(f"❌ Pipeline Error: {e}")
         log_job_outcome(
             full_str_for_log,
@@ -247,6 +301,13 @@ def payload_error(payload):
     source = payload.get("source")
     if source is not None and (not isinstance(source, str) or len(source) > MAX_SOURCE_LEN):
         return f"'source' must be a string of at most {MAX_SOURCE_LEN} characters."
+    if "capture_id" in payload:
+        from core.workflow import accepted_capture
+
+        try:
+            accepted_capture(payload, "validation")
+        except ValueError as error:
+            return str(error)
     ws = payload.get("workspace")
     if ws is not None and (not isinstance(ws, str) or not WORKSPACE_ID.fullmatch(ws)):
         return "'workspace' must be a workspace id (lowercase letters, digits, dashes)."
@@ -273,7 +334,7 @@ def _dedup_key(raw_text: str) -> str:
     return hashlib.sha256(f"{current().id}\n{raw_text.strip()}".encode()).hexdigest()
 
 
-def run(payload: dict, seen=None):
+def _run(payload: dict, seen=None):
     """Process one webhook payload.
 
     `seen` is any mapping (a modal.Dict in production) of dedup key -> epoch
@@ -281,8 +342,13 @@ def run(payload: dict, seen=None):
     DEDUP_WINDOW_S is skipped; the key is marked only after processing, so a
     crashed run is retried rather than deduped away. None disables the check.
     """
+    from core.workflow import current_capture
+
+    active = current_capture()
     print("🧠 Worker awake!")
     if not get_settings().gemini_api_key or not PROMPTS:
+        if active is not None:
+            raise RuntimeError("Missing API Key or Prompts")
         print("❌ Critical: Missing API Key or Prompts")
         return
 
@@ -296,8 +362,19 @@ def run(payload: dict, seen=None):
     # Option hydration is deferred to run_pipeline (only the classified
     # category) — that alone cut ~40 upfront Notion calls per thought to ~2-3.
     # Projects/inventory are one query each, so they stay here.
-    project_prompts, project_id_map = fetch_active_projects()
-    inventory_map = fetch_inventory_map("groceries")
+    def load_context():
+        names, ids = fetch_active_projects()
+        return {
+            "projects": names,
+            "project_ids": ids,
+            "inventory": fetch_inventory_map("groceries"),
+        }
+
+    context = (
+        active.journal.checkpoint("context", load_context) if active is not None else load_context()
+    )
+    project_prompts, project_id_map = context["projects"], context["project_ids"]
+    inventory_map = context["inventory"]
     inventory_list = list(inventory_map.keys())
 
     try:
@@ -307,11 +384,18 @@ def run(payload: dict, seen=None):
         print(f"🔍 DEBUG INPUT REPR: {repr(full_text)}")
 
         # STEP 1: AI PARSING
-        parsed_items = parse_raw_input(full_text)
+        parsed_items = (
+            active.journal.checkpoint("parsed_items", lambda: parse_raw_input(full_text))
+            if active is not None
+            else parse_raw_input(full_text)
+        )
         print(f"📋 Processing Batch: {len(parsed_items)} item(s)")
 
         # STEP 2: LOOP
-        for item in parsed_items:
+        for index, item in enumerate(parsed_items):
+            if active is not None:
+                active.item_index = index
+                active.counters = {}
             run_pipeline(
                 item,
                 project_prompts,
@@ -324,7 +408,28 @@ def run(payload: dict, seen=None):
         print("--- BATCH COMPLETE ---")
 
     except Exception as e:
+        if active is not None:
+            raise
         print(f"❌ Critical Event Error: {e}")
 
     if seen is not None:
         seen[key] = time.time()
+
+
+def run(payload: dict, seen=None, store=None):
+    from core.workflow import binding_for, capture_scope
+
+    tasks_enabled = binding_for("tasks") is not None
+    executions_enabled = binding_for("executions") is not None
+    if tasks_enabled != executions_enabled:
+        raise ValueError("Workflow tasks and executions must switch together for retry safety")
+    enabled = tasks_enabled
+    if not enabled:
+        return _run(payload, seen=seen)
+    if store is None or "capture_id" not in payload:
+        raise ValueError("Workflow capture requires a persisted identity and operational store")
+    with capture_scope(store, payload) as active:
+        if active.journal.completed:
+            return
+        _run(payload)
+        active.journal.finish()
