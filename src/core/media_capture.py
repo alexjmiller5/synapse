@@ -126,7 +126,7 @@ def process_capture(store, caller, request_id, *, resolver=None):
         job["state"] = "needs_review"
         store[key] = job
         return _receipt(job)
-    if job["state"] in ("processing", "uncertain"):
+    if job["state"] in ("processing", "uncertain") and job.get("phase") != "resolving":
         job["state"] = "uncertain"
         plan = job.get("resolution")
         if plan:
@@ -144,6 +144,7 @@ def process_capture(store, caller, request_id, *, resolver=None):
         store[key] = job
         return _receipt(job)
     job["state"] = "processing"
+    job["phase"] = "resolving"
     store[key] = job
     if resolver is None:
         from core.media_resolution import resolve_capture
@@ -151,6 +152,7 @@ def process_capture(store, caller, request_id, *, resolver=None):
         resolver = resolve_capture
 
     def checkpoint(plan):
+        job["phase"] = "writing"
         job["resolution"] = deepcopy(plan)
         store[key] = job
 

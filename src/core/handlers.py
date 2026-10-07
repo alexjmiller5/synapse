@@ -254,7 +254,14 @@ def handle_youtube_logic(
 
 
 def handle_movies_tv_logic(
-    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+    category,
+    data,
+    *,
+    receipt=False,
+    review=None,
+    checkpoint=None,
+    explicit_properties=(),
+    strict_identity=False,
 ):
     """Movies and TV shows are life-data rows, not Notion pages.
 
@@ -268,7 +275,11 @@ def handle_movies_tv_logic(
     kind = "movie" if category == "movies" else "tv"
     title = data.get("Title")
 
-    tmdb_id = resolve_tmdb_id(kind, title)
+    tmdb_id = (
+        resolve_tmdb_id(kind, title, strict=True)
+        if strict_identity
+        else resolve_tmdb_id(kind, title)
+    )
     if not tmdb_id:
         review(f"Could not resolve {title!r} on TMDB ({category})")
         return Failed(f"No confident TMDB match for {title!r} - nothing written")
@@ -321,12 +332,20 @@ def handle_url_media(
 ):
     stanza = DATABASES["databases"][category]
     try:
-        url = canonical_media_url(data.get("URL") or "")
-        identity = (
-            life_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
-            if category == "podcasts"
-            else url
-        )
+        raw_url = (data.get("URL") or "").strip()
+        url = canonical_media_url(raw_url)
+        if category == "podcasts":
+            identity = life_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
+        else:
+            # Some producer IDs deliberately retain fragments and trailing slashes.
+            # Check exact identity before applying ordinary URL normalization.
+            exact = life_hub.read_row(stanza["hub_table"], raw_url, ["id"])
+            if exact:
+                identity = raw_url
+            elif "#" in raw_url:
+                return Failed("Unknown fragment identity requires review")
+            else:
+                identity = url
     except (ValueError, TypeError):
         return Failed("Media URL requires identity review")
     user_columns = set(stanza["capture_columns"].values())

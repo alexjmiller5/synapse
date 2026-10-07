@@ -284,7 +284,7 @@ def _toggle_the(query):
     return query[4:] if query.lower().startswith("the ") else f"The {query}"
 
 
-def _pick(results, query, year):
+def _pick(results, query, year, *, strict=False):
     """The one result confident enough to write, or None.
 
     Precedence: a single case-insensitive exact title match > a lone search
@@ -299,13 +299,15 @@ def _pick(results, query, year):
         exact = [r for r in exact if r["year"] == year]
     if len(exact) == 1:
         return exact[0]
+    if strict:
+        return None
     if len(results) == 1:
         return results[0]
     pool = [r for r in results if r["year"] == year] if year else []
     return next((r for r in (pool or results) if r["votes"] >= TMDB_MIN_VOTES), None)
 
 
-def resolve_tmdb_id(kind, title):
+def resolve_tmdb_id(kind, title, *, strict=False):
     """The TMDB id (as a string) for a movie/TV title, or None if nothing matched
     confidently. That id IS the life-data row id, so a wrong match is worse than
     no match - the caller files a cleanup task instead.
@@ -323,13 +325,16 @@ def resolve_tmdb_id(kind, title):
     year = m.group(1) if m else None
     query = _YEAR_SUFFIX.sub("", title).strip()
 
-    for attempt_query, attempt_year in ((query, year), (_toggle_the(query), None)):
+    for attempt_query, attempt_year in (
+        (query, year),
+        (_toggle_the(query), year if strict else None),
+    ):
         try:
             results = tmdb_search(kind, attempt_query, tmdb_key)
         except Exception as e:
             print(f"   ⚠️ TMDB search failed for {kind} {attempt_query!r}: {e}")
             return None
-        chosen = _pick(results, attempt_query, attempt_year)
+        chosen = _pick(results, attempt_query, attempt_year, strict=strict)
         if chosen:
             print(f"   🎬 TMDB {kind} {title!r} -> {chosen['title']!r} ({chosen['id']})")
             return str(chosen["id"])

@@ -268,3 +268,12 @@ The media gateway enriches YouTube through its provider API. Article/podcast
 URLs are captured from the submitted input without arbitrary page fetching;
 model extraction cannot change a submitted URL. This path never calls general
 podcast cleanup-task enrichment. Stored titles remain editable metadata.
+
+Gateway resolution persists a `resolving` phase before provider work and a
+`writing` phase at the primary-item checkpoint. Same-request retries may repeat
+resolution and insert-once source initialization, but never a primary user-field
+write with an uncertain outcome. Old receipts without phase evidence stay
+uncertain. Strict movie/TV capture requires a unique exact title match and keeps
+an explicit year. Inferred and explicit edits use the same presence semantics
+and type checks. Article capture first checks exact existing identity, including
+tombstones and fragment IDs; a new fragment identity requires review.
