@@ -420,3 +420,12 @@ class TestValidateConfig:
         report = validate_all()
         assert isinstance(report, dict)
         assert len(report) > 0  # empty live schemas => drift everywhere
+
+
+def test_project_routing_preserves_extracted_task_notes():
+    result = apply_business_logic(
+        "tasks",
+        {"Name": "Follow up", "Notes": "Keep the supplied details"},
+        related_project="Example Project",
+    )
+    assert result["Notes"] == "Keep the supplied details\n\nProject: Example Project"

@@ -71,7 +71,16 @@ def process(payload: dict):
             if media["action"] == "process":
                 return media_capture.process_capture(store, media["caller"], media["request_id"])
             raise ValueError("unsupported media operation")
-        return run(payload, seen=seen_inputs)
+        return run(payload, seen=seen_inputs, store=store)
+
+
+def _accepted_payload(payload, workspace_id):
+    from core import workspace
+    from core.workflow import accepted_capture, binding_for
+
+    with workspace.use(workspace.load(_state(), workspace_id)):
+        workflow = binding_for("tasks") is not None or binding_for("executions") is not None
+        return accepted_capture(payload, workspace_id, require_identity=workflow)
 
 
 @app.function(image=image, secrets=secrets)
@@ -88,14 +97,12 @@ def webhook(payload: dict) -> dict:
     if error:
         raise HTTPException(status_code=422, detail=error)
 
-    call = process.spawn(
-        {
-            "raw_text": payload["raw_text"],
-            "source": payload.get("source"),
-            "workspace": payload.get("workspace") or "default",
-        }
-    )
-    return {"status": "accepted", "call_id": call.object_id}
+    try:
+        accepted = _accepted_payload(payload, payload.get("workspace") or "default")
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    call = process.spawn(accepted)
+    return {"status": "accepted", "call_id": call.object_id, "capture_id": accepted["capture_id"]}
 
 
 @app.function(image=image)
@@ -118,14 +125,13 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
     error = payload_error(payload)
     if error:
         return JSONResponse({"error": error}, status_code=422)
-    call = process.spawn(
-        {
-            "raw_text": payload["raw_text"],
-            "source": payload.get("source"),
-            "workspace": client["workspace"],  # from the token, never the body
-        }
-    )
-    return {"status": "accepted", "call_id": call.object_id}
+    try:
+        # Workspace comes from this caller's token, never the request body.
+        accepted = _accepted_payload(payload, client["workspace"])
+    except ValueError as error:
+        return JSONResponse({"error": str(error)}, status_code=422)
+    call = process.spawn(accepted)
+    return {"status": "accepted", "call_id": call.object_id, "capture_id": accepted["capture_id"]}
 
 
 @app.function(image=image)

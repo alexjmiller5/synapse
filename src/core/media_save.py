@@ -7,6 +7,7 @@ from typing import Literal
 import requests
 
 from core.timeutils import now_utc_iso_ms
+from core.life_hub import InsertRejected
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,8 @@ def save_media(
             return SaveReceipt("saved", identity, revision)
         result = hub.patch_row(table, identity, values, revision)
         return SaveReceipt("saved", identity, result["revision"])
+    except InsertRejected:
+        return SaveReceipt("needs_review", identity, reason="insert_rejected")
     except requests.HTTPError as error:
         status = error.response.status_code if error.response is not None else None
         if status == 409:
@@ -92,5 +95,5 @@ def save_media(
         if status in (400, 401, 403, 404, 422):
             return SaveReceipt("needs_review", identity, reason="request_rejected")
         return SaveReceipt("uncertain", identity, reason="service_unavailable")
-    except (requests.RequestException, ValueError, KeyError):
+    except (requests.RequestException, ValueError, KeyError, RuntimeError):
         return SaveReceipt("uncertain", identity, reason="reply_unavailable")

@@ -123,3 +123,29 @@ Gemini request quotas are per project, so separate keys in one project do
 not isolate quota ([Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)).
 Verify a small `generateContent` request with the configured model before
 syncing a replacement key; listing models does not verify billing credits.
+
+## Workflow capture and retained execution content
+
+A workspace can select Life Data Tasks and Executions together through its
+`workflow` mappings; absent mappings retain Notion behavior. Selected captures
+require a canonical UUID `capture_id`, persisted by the caller across retries.
+Authentication fixes the workspace. The server rejects a workspace mismatch or
+reuse of a capture ID with changed input. Two separately submitted captures may
+have identical text and still produce distinct output identities.
+
+The operational journal freezes parser/extractor decisions, output mappings,
+row IDs and bodies before delivery. Retry uses checked insert-only writes, so
+completed, reviewed and tombstoned output rows remain unchanged. Logging failure
+after a task write retains the task ID for recovery. Execution text is never
+limited to Notion's 2,000-character property size on the Life Data path.
+
+Execution bindings may specify `retained_fields` (logical mapped property names),
+`max_inline_bytes` (default 131072 UTF-8 bytes), and a dedicated `files_prefix`.
+Oversized selected text is retained through the hub file API using a
+content-addressed key and `If-None-Match: *`. The complete original is frozen in
+the journal before upload. Every upload, including an already-existing result,
+is read back and checked byte-for-byte before a row can reference it. The row
+contains a readable file link, byte count and SHA-256. Upload failure leaves the
+output pending; a retry cannot silently replace the original or create a
+reference to an unverified file. The workspace token needs read/write grants for
+only its configured file prefix in addition to the required workflow tables.
