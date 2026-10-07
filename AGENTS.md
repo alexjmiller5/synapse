@@ -106,7 +106,12 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   rows}` to the hub's `/v1/rows/push` with the `LIFE_HUB_URL` /
   `LIFE_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
   also pull rows). Push ONLY the columns you know - the hub's upsert touches
-  exactly the columns sent, so a status capture never blanks tags. The
+  exactly the columns sent, so a status capture never blanks tags.
+  `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
+  failed scan never returns a partial inventory. Workflow adapters use
+  `insert_rows` for stable-ID creation (preserves existing/tombstoned rows and
+  verifies exhaustive receipts) and `patch_row` for revision-guarded edits.
+  Neither helper retries ambiguous writes or falls back to upsert. The
   CATALOG enforces what this yaml used to (required fields, option
   vocabularies, uniqueness, defaults); a rejected row files a cleanup task
   and writes nothing. Two handler shapes:
