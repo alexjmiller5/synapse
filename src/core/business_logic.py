@@ -195,6 +195,12 @@ def fetch_active_projects():
     - prompt_list: ["Project Name", ...]
     - id_map: {"Project Name": "page-id"}
     """
+    from core.workflow import active_projects, binding_for
+
+    binding = binding_for("projects")
+    if binding is not None:
+        return active_projects(binding)
+
     print("📂 Fetching active projects from Projects DB...")
 
     query_body = {

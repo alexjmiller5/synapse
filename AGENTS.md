@@ -146,6 +146,17 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   whole row. A handler that wrote nothing returns `handlers.Failed(detail)`,
   which the pipeline logs as `Error(s)`; returning None there would log a
   Success over an empty result.
+- `workflow.projects` in a workspace overlay selects Life Data project reads:
+  `table`, `title_column`, `status_column`, and `active_statuses` are runtime
+  values. Omission retains Notion; malformed selected configuration fails
+  closed. Duplicate active titles are rejected because the prompt-to-ID map
+  cannot represent them safely.
+- `core.workflow.WorkflowWriter` journals a mapped output before its checked
+  insert, keyed by workspace, persisted capture identity, and item/role path.
+  One serialized worker owns its operational store. Retries reuse the original
+  table, ID, and body, and never overwrite an existing user row. Capture
+  acceptance and pipeline wiring must supply that persisted identity before
+  selecting this writer; the primitive itself does not activate a backend.
 - Notion DB ids are workspace data: a category stanza's `db_id` and the
   top-level `db_ids` mapping (logs, trips, projects, notes) in the workspace
   overlay, read through `get_db_id`. The template carries none.
