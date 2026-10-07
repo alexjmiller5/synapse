@@ -122,18 +122,31 @@ def handle_hub_logic(category, data):
     return f"{table}/{row['id']}"
 
 
-def _capture_media(category, identity, initializer, data):
+def _capture_media(
+    category,
+    identity,
+    initializer,
+    data,
+    *,
+    receipt=False,
+    review=None,
+    checkpoint=None,
+    explicit_properties=(),
+):
+    review = review or create_cleanup_task
     stanza = DATABASES["databases"][category]
     mapping = stanza["capture_columns"]
     requested = {
-        column: data[field] for field, column in mapping.items() if not _empty(data.get(field))
+        column: data[field]
+        for field, column in mapping.items()
+        if field in explicit_properties or not _empty(data.get(field))
     }
     saved_column = stanza.get("saved_column")
     if data.get("Capture Intent") == "save":
         if not saved_column:
             return Failed("Explicit saves require a configured saved field")
         requested[saved_column] = 1
-    receipt = save_media(
+    result = save_media(
         life_hub,
         {
             "table": stanza["hub_table"],
@@ -142,14 +155,17 @@ def _capture_media(category, identity, initializer, data):
         identity,
         initializer,
         requested,
+        checkpoint=checkpoint,
     )
-    if receipt.state != "saved":
-        create_cleanup_task(f"Media capture requires review: {receipt.reason}")
-        return Failed(f"Media capture {receipt.state}: {receipt.reason}")
-    return f"{stanza['hub_table']}/{identity}"
+    if result.state != "saved":
+        review(f"Media capture requires review: {result.reason}")
+        return result if receipt else Failed(f"Media capture {result.state}: {result.reason}")
+    return result if receipt else f"{stanza['hub_table']}/{identity}"
 
 
-def handle_youtube_logic(category, data):
+def handle_youtube_logic(
+    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+):
     """YouTube captures are a life-data table, not a Notion DB.
 
     A channel is pushed once (on first sight of a video from it), with a
@@ -158,6 +174,7 @@ def handle_youtube_logic(category, data):
     membership is checked against the hub's actual state (known_channel_ids),
     never an in-run cache.
     """
+    review = review or create_cleanup_task
     url = sanitize_youtube_url(data["Video URL"]) if data.get("Video URL") else None
     vid = get_youtube_video_id(url) if url else None
     if not vid:
@@ -165,14 +182,14 @@ def handle_youtube_logic(category, data):
 
     yt = get_youtube()
     if not yt:
-        create_cleanup_task(f"No YouTube client configured for video {vid}")
+        review(f"No YouTube client configured for video {vid}")
         return Failed(f"No YouTube client configured for video {vid}")
 
     video_items = (
         yt.videos().list(part="snippet,contentDetails", id=vid).execute().get("items") or []
     )
     if not video_items:
-        create_cleanup_task(f"YouTube video not found: {vid}")
+        review(f"YouTube video not found: {vid}")
         return Failed(f"YouTube video not found: {vid}")
     item = video_items[0]
     snippet = item["snippet"]
@@ -184,7 +201,7 @@ def handle_youtube_logic(category, data):
             or []
         )
         if not channel_items:
-            create_cleanup_task(f"YouTube channel not found: {channel_id}")
+            review(f"YouTube channel not found: {channel_id}")
             return Failed(f"YouTube channel not found: {channel_id}")
         ch = channel_items[0]
         title = ch["snippet"]["title"]
@@ -198,16 +215,16 @@ def handle_youtube_logic(category, data):
             "backfilled": 0,
             "updated_at": now_utc_iso_ms(),
         }
-        receipt = save_media(
+        channel_receipt = save_media(
             life_hub,
             {"table": "youtube_channels", "editable_columns": []},
             channel_id,
             channel_row,
             {},
         )
-        if receipt.state != "saved":
-            return Failed(f"Channel capture {receipt.state}: {receipt.reason}")
-        create_cleanup_task(f"Classify new Channel: {title}")
+        if channel_receipt.state != "saved":
+            return Failed(f"Channel capture {channel_receipt.state}: {channel_receipt.reason}")
+        review(f"Classify new Channel: {title}")
 
     # A live/premiere video has no fixed duration yet - the row is still valid
     # without it, just not resolvable as a short.
@@ -224,10 +241,21 @@ def handle_youtube_logic(category, data):
         "status": "Not Started",
         "updated_at": now_utc_iso_ms(),
     }
-    return _capture_media(category, vid, video_row, data)
+    return _capture_media(
+        category,
+        vid,
+        video_row,
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )
 
 
-def handle_movies_tv_logic(category, data):
+def handle_movies_tv_logic(
+    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+):
     """Movies and TV shows are life-data rows, not Notion pages.
 
     The TMDB id IS the row id, so an unconfident match is worse than none: we
@@ -236,15 +264,25 @@ def handle_movies_tv_logic(category, data):
     the hub - we push only the columns we actually know, and the hub's upsert
     touches only those, so a status capture never clobbers tags or date_watched.
     """
+    review = review or create_cleanup_task
     kind = "movie" if category == "movies" else "tv"
     title = data.get("Title")
 
     tmdb_id = resolve_tmdb_id(kind, title)
     if not tmdb_id:
-        create_cleanup_task(f"Could not resolve {title!r} on TMDB ({category})")
+        review(f"Could not resolve {title!r} on TMDB ({category})")
         return Failed(f"No confident TMDB match for {title!r} - nothing written")
 
-    return _capture_media(category, tmdb_id, {"status": "Not Started"}, data)
+    return _capture_media(
+        category,
+        tmdb_id,
+        {"status": "Not Started"},
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )
 
 
 def handle_people_logic(category, data):
@@ -253,3 +291,60 @@ def handle_people_logic(category, data):
 
 def handle_default_logic(category, data):
     return create_page(category, build_notion_properties(category, data)).get("url")
+
+
+def canonical_media_url(url):
+    """The media poller's public URL identity rules; no personal source list."""
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(url.strip())
+    if (
+        parsed.scheme.lower() not in ("https", "http")
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("invalid media URL")
+    query = sorted(
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.startswith("utm_") and key not in {"si", "ref", "fbclid", "gclid"}
+    )
+    path = parsed.path.rstrip("/") if len(parsed.path) > 1 else parsed.path
+    return urlunparse(
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, "", urlencode(query), "")
+    )
+
+
+def handle_url_media(
+    category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
+):
+    stanza = DATABASES["databases"][category]
+    try:
+        url = canonical_media_url(data.get("URL") or "")
+        identity = (
+            life_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
+            if category == "podcasts"
+            else url
+        )
+    except (ValueError, TypeError):
+        return Failed("Media URL requires identity review")
+    user_columns = set(stanza["capture_columns"].values())
+    initializer = {
+        column: data[prop]
+        for prop, column in stanza.get("columns", {}).items()
+        if column not in user_columns and not _empty(data.get(prop))
+    }
+    if category == "podcasts":
+        initializer["url"] = url
+    initializer["status"] = "Not Started"
+    return _capture_media(
+        category,
+        identity,
+        initializer,
+        data,
+        receipt=receipt,
+        review=review,
+        checkpoint=checkpoint,
+        explicit_properties=explicit_properties,
+    )

@@ -1,5 +1,9 @@
 # Test workspace overlay: fake Notion ids over the product template.
 databases:
+  podcasts:
+    saved_column: saved
+  articles:
+    saved_column: saved
   movies:
     saved_column: saved
   tv-shows:

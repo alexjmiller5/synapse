@@ -143,3 +143,67 @@ def test_explicit_old_revision_cannot_be_rebased_onto_current_row():
     hub = SyntheticHub({"items": {"abc123": existing()}})
     assert save(hub, expected_revision={"updated_at": "old", "hub_at": "old"}).state == "conflict"
     assert hub.writes == []
+
+
+def test_podcast_url_reuses_legacy_id_and_preserves_consumption(monkeypatch):
+    from core.handlers import handle_url_media
+
+    row = {
+        **existing(),
+        "id": "legacy-episode",
+        "url": "https://open.spotify.com/episode/example?si=tracking",
+    }
+    hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
+    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    result = handle_url_media(
+        "podcasts",
+        {
+            "URL": "https://open.spotify.com/episode/example",
+            "Episode Title": "Example",
+            "Capture Intent": "save",
+        },
+    )
+    assert result == "podcast_episodes/legacy-episode"
+    assert len(hub.rows["podcast_episodes"]) == 1
+    assert hub.rows["podcast_episodes"]["legacy-episode"]["status"] == "Finished"
+    assert hub.rows["podcast_episodes"]["legacy-episode"]["saved"] == 1
+
+
+def test_article_capture_uses_the_pollers_canonical_url_identity(monkeypatch):
+    from core.handlers import handle_url_media
+
+    hub = SyntheticHub()
+    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    data = {
+        "URL": "https://example.test/story/?utm_source=test&b=2&a=1#section",
+        "Title": "Example",
+        "Capture Intent": "save",
+    }
+    assert handle_url_media("articles", data) == "articles/https://example.test/story?a=1&b=2"
+    assert handle_url_media("articles", data) == "articles/https://example.test/story?a=1&b=2"
+    assert len(hub.rows["articles"]) == 1
+
+
+def test_tombstoned_legacy_podcast_never_gets_a_new_url_identity(monkeypatch):
+    from core.handlers import handle_url_media, Failed
+
+    row = {
+        **existing(),
+        "id": "legacy-episode",
+        "url": "https://open.spotify.com/episode/example",
+        "deleted_at": "gone",
+    }
+    hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
+    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    result = handle_url_media(
+        "podcasts", {"URL": row["url"], "Episode Title": "Example", "Capture Intent": "save"}
+    )
+    assert isinstance(result, Failed)
+    assert len(hub.rows["podcast_episodes"]) == 1 and hub.writes == []
+
+
+def test_json_encoded_tags_are_not_rewritten_when_the_saved_intent_already_matches():
+    hub = SyntheticHub({"items": {"abc123": {**existing(), "saved": 1}}})
+    result = save(hub, {"saved": 1, "tags": ["Favorite"]})
+    assert result.state == "saved"
+    assert hub.writes == []
