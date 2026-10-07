@@ -273,6 +273,10 @@ def create_project_task(project_id, extracted_data):
     """
     Creates a Task in the Tasks DB and links it to a Project via relation.
     """
+    from core.workflow import binding_for, create_task
+
+    if binding_for("tasks") is not None:
+        return create_task(extracted_data, project_id)
     print(f"📋 Creating project task linked to project {project_id}...")
     props = build_notion_properties("tasks", extracted_data)
 
@@ -286,6 +290,20 @@ def create_project_task(project_id, extracted_data):
 
 
 def create_cleanup_task(desc, link_url=None):
+    from core.workflow import binding_for, create_task
+
+    if binding_for("tasks") is not None:
+        values = {
+            "Name": desc,
+            "Status": "To Do",
+            "Tags": ["Chore"],
+            "Due Date": today_eastern().isoformat(),
+            "Priority": "Low",
+        }
+        if link_url:
+            values["Links"] = link_url
+        return create_task(values, role="cleanup")
+
     print(f"🧹 Creating cleanup task: {desc}")
     props = {
         "Name": _notion_title(desc),
@@ -306,6 +324,20 @@ def create_cleanup_task(desc, link_url=None):
 
 
 def create_high_priority_task(desc, link_url=None):
+    from core.workflow import binding_for, create_task
+
+    if binding_for("tasks") is not None:
+        values = {
+            "Name": "Classify the following thought (it failed due to pipeline errors): " + desc,
+            "Status": "To Do",
+            "Tags": ["Chore"],
+            "Due Date": today_eastern().isoformat(),
+            "Priority": "High",
+        }
+        if link_url:
+            values["Links"] = link_url
+        return create_task(values, role="error-task")
+
     print(f"🧹 Creating cleanup task: {desc}")
     classification_message = "Classify the following thought (it failed due to pipeline errors): "
     task_text = f"{classification_message}{desc}"
@@ -337,6 +369,12 @@ def log_job_outcome(
     project_append=False,
     source=None,
 ):
+    from core.workflow import binding_for, log_execution
+
+    if binding_for("executions") is not None:
+        return log_execution(
+            raw_text, category, status, details, created_url, ai_data, project_append, source
+        )
     print(f"--- Logging: {status} ---")
     log_id = get_db_id("logs")
     if not get_notion() or not log_id:

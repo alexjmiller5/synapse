@@ -6,11 +6,14 @@ Synapse operational store, never a Life Data user table. Remote insert preserves
 any existing ID, including a reviewed, completed or tombstoned row.
 """
 
+import contextlib
 import copy
 import hashlib
 import json
 import re
-from uuid import NAMESPACE_URL, uuid5
+from contextvars import ContextVar
+from types import SimpleNamespace
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from core import life_hub
 from core.workspace import current
@@ -32,7 +35,8 @@ def _identity(value):
 
 
 def binding_for(kind):
-    config = current().databases.get("workflow", {})
+    active = _ACTIVE.get()
+    config = active.bindings if active is not None else current().databases.get("workflow", {})
     if not isinstance(config, dict):
         raise ValueError("Invalid workflow configuration")
     if kind not in config:
@@ -41,6 +45,9 @@ def binding_for(kind):
     if not isinstance(binding, dict) or not binding:
         raise ValueError("Invalid selected workflow binding")
     return binding
+
+
+_ACTIVE = ContextVar("workflow_capture", default=None)
 
 
 class WorkflowWriter:
@@ -75,6 +82,10 @@ class WorkflowWriter:
                 raise ValueError(
                     "Workflow mappings cannot replace identity/clocks or alias columns"
                 )
+            defaults = binding.get("defaults", {})
+            if not isinstance(defaults, dict):
+                raise ValueError("Workflow defaults must be a mapping")
+            values = {**copy.deepcopy(defaults), **values}
             if unknown := set(values) - set(columns):
                 raise ValueError(f"Unmapped workflow properties: {sorted(unknown)}")
             row = {columns[name]: copy.deepcopy(value) for name, value in values.items()}
@@ -120,3 +131,158 @@ def active_projects(binding, *, pull=None):
             names.append(name)
         ids[name] = row["id"]
     return names, ids
+
+
+def accepted_capture(payload, workspace_id, *, require_identity=False):
+    """The durable queue payload carries identity across worker retries.
+
+    Clients preserve capture_id across HTTP retries. Legacy clients may omit
+    it, but cannot obtain HTTP retry deduplication from a text hash on the new
+    workflow path. Authentication supplies workspace_id; body workspace is
+    deliberately ignored here.
+    """
+    if require_identity and "capture_id" not in payload:
+        raise ValueError("capture_id is required for workflow capture retries")
+    capture_id = payload["capture_id"] if "capture_id" in payload else str(uuid4())
+    try:
+        if not isinstance(capture_id, str) or str(UUID(capture_id)) != capture_id:
+            raise ValueError
+    except (ValueError, AttributeError):
+        raise ValueError("capture_id must be a canonical UUID") from None
+    return {
+        "raw_text": payload["raw_text"],
+        "source": payload.get("source"),
+        "workspace": _identity(workspace_id),
+        "capture_id": capture_id,
+    }
+
+
+class CaptureJournal:
+    """Checkpoint nondeterministic work under the serialized worker's ownership.
+
+    Persist each parser/classifier/extractor result before dispatching output.
+    A capture ID reused with different input is an error, never a fresh capture.
+    """
+
+    def __init__(self, store, payload):
+        accepted = accepted_capture(payload, payload["workspace"])
+        if "capture_id" not in payload:
+            raise ValueError("Capture identity must already be durable at acceptance")
+        self.store = store
+        identity = json.dumps(
+            [accepted["workspace"], accepted["capture_id"]], separators=(",", ":")
+        )
+        self.key = "capture:" + hashlib.sha256(identity.encode()).hexdigest()
+        record = self.store.get(self.key)
+        if record is None:
+            record = {"input": accepted, "checkpoints": {}, "completed": False}
+            self._save(record)
+        if record.get("input") != accepted:
+            raise ValueError("Capture identity already has a different payload")
+        if not isinstance(record.get("checkpoints"), dict) or not isinstance(
+            record.get("completed"), bool
+        ):
+            raise ValueError("Invalid capture journal")
+
+    def _save(self, record):
+        json.dumps(record, ensure_ascii=False, allow_nan=False)
+        self.store[self.key] = copy.deepcopy(record)
+
+    @property
+    def completed(self):
+        return self.store[self.key]["completed"]
+
+    def checkpoint(self, name, prepare):
+        record = copy.deepcopy(self.store[self.key])
+        checkpoints = record["checkpoints"]
+        if name not in checkpoints:
+            if record["completed"]:
+                raise ValueError("Completed captures cannot acquire new side effects")
+            checkpoints[_identity(name)] = prepare()
+            self._save(record)
+        return copy.deepcopy(checkpoints[name])
+
+    def finish(self):
+        record = copy.deepcopy(self.store[self.key])
+        record["completed"] = True
+        self._save(record)
+
+
+@contextlib.contextmanager
+def capture_scope(store, payload):
+    journal = CaptureJournal(store, payload)
+    bindings = journal.checkpoint("bindings", lambda: current().databases.get("workflow", {}))
+    active = SimpleNamespace(
+        journal=journal,
+        bindings=bindings,
+        writer=WorkflowWriter(store, current().id, payload["capture_id"]),
+        item_index=0,
+        counters={},
+    )
+    token = _ACTIVE.set(active)
+    try:
+        yield active
+    finally:
+        _ACTIVE.reset(token)
+
+
+def current_capture():
+    return _ACTIVE.get()
+
+
+def prepare_item(prepare):
+    active = current_capture()
+    if active is None:
+        return prepare()
+    return active.journal.checkpoint(f"item/{active.item_index}/prepared", prepare)
+
+
+def create_task(data, project_id=None, *, role="task"):
+    binding = binding_for("tasks")
+    if binding is None:
+        raise ValueError("Life Data tasks are not configured")
+    active = current_capture()
+    if active is None:
+        raise ValueError("Workflow tasks require a durable capture context")
+    values = {
+        name: copy.deepcopy(value) for name, value in data.items() if name in binding["columns"]
+    }
+    if isinstance(values.get("Links"), list):
+        values["Links"] = "\n".join(values["Links"])
+    if project_id is not None:
+        values["Project"] = [project_id]
+    count = active.counters.get(role, 0)
+    active.counters[role] = count + 1
+    return active.writer.create(binding, f"item/{active.item_index}/{role}/{count}", values)
+
+
+def log_execution(
+    raw_text,
+    category,
+    status,
+    details="",
+    created_url=None,
+    ai_data=None,
+    project_append=False,
+    source=None,
+):
+    binding = binding_for("executions")
+    active = current_capture()
+    if binding is None or active is None:
+        raise ValueError("Workflow executions require configuration and a durable capture context")
+    values = {
+        "Raw Input": raw_text,
+        "Category": category,
+        "Code Execution": status,
+        "Error Details": str(details),
+        "AI Summary": json.dumps(ai_data, ensure_ascii=False, indent=2)
+        if ai_data is not None
+        else "",
+    }
+    if created_url is not None:
+        values["Created Item"] = created_url
+    if project_append:
+        values["Tags"] = ["project-append"]
+    if source is not None:
+        values["Source"] = source
+    return active.writer.create(binding, f"item/{active.item_index}/execution", values)

@@ -211,3 +211,11 @@ def test_retained_intent_is_not_mutated_by_a_transport():
     with pytest.raises(RuntimeError):
         writer(store, send).create(BINDING, "task", {"Name": "Original"})
     assert next(iter(store.values()))["row"]["title"] == "Original"
+
+
+def test_runtime_defaults_fill_missing_values_without_overriding_explicit_values():
+    send = Mock(return_value={})
+    binding = {**BINDING, "defaults": {"Name": "Default", "Notes": "Default notes"}}
+    writer({}, send).create(binding, "task", {"Name": "Explicit"})
+    assert send.call_args.args[1][0]["title"] == "Explicit"
+    assert send.call_args.args[1][0]["notes"] == "Default notes"

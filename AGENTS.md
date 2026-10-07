@@ -155,8 +155,17 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   insert, keyed by workspace, persisted capture identity, and item/role path.
   One serialized worker owns its operational store. Retries reuse the original
   table, ID, and body, and never overwrite an existing user row. Capture
-  acceptance and pipeline wiring must supply that persisted identity before
-  selecting this writer; the primitive itself does not activate a backend.
+  acceptance requires a canonical UUID `capture_id` when workflow Tasks and
+  Executions are selected. Clients persist that ID for the submission and reuse
+  it for HTTP retries; identical text with a new ID is a new capture. The worker
+  freezes its bindings, project/inventory context, parsed items, prepared item
+  data, and successful result before marking the capture complete. Changed
+  input under the same workspace/capture ID is rejected. Failures propagate to
+  Modal retries without creating a second error task over an ambiguous write.
+  Tasks and Executions switch together; project reads can be selected earlier.
+  Omitted workflow configuration retains the legacy Notion behavior. Mappings
+  use `table`, `columns`, and optional missing-value `defaults`, all runtime
+  state. Execution text/JSON is preserved without the Notion length truncation.
 - Notion DB ids are workspace data: a category stanza's `db_id` and the
   top-level `db_ids` mapping (logs, trips, projects, notes) in the workspace
   overlay, read through `get_db_id`. The template carries none.

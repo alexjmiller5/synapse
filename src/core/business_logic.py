@@ -155,7 +155,11 @@ def hydrate_dynamic_options(only_category=None):
     path. One `databases.retrieve` per category (not per property).
     """
     print(f"🔄 Hydrating Options{f' for {only_category}' if only_category else ''}...")
+    from core.workflow import binding_for
+
     for category, details in DATABASES.get("databases", {}).items():
+        if category == "tasks" and binding_for("tasks") is not None:
+            continue
         if only_category and category != only_category:
             continue
         if details.get("helper") or details.get("hub_table"):
@@ -299,6 +303,10 @@ LOGIC_HANDLERS = {
 
 
 def execute_logic(category, data, inventory_map=None):
+    from core.workflow import binding_for, create_task
+
+    if category == "tasks" and binding_for("tasks") is not None:
+        return create_task(data)
     print(f"⚙️ Executing Logic for: {category}")
     stanza = DATABASES["databases"].get(category, {})
     if stanza.get("hub_table") and "columns" in stanza:
