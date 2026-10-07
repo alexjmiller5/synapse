@@ -261,11 +261,6 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         if related_project:
             data["Notes"] = f"Project: {related_project}"
 
-    elif category in ("movies", "tv-shows"):
-        # life-data requires a status on every row; the rest of the metadata is
-        # derived on the hub from the TMDB id the handler resolves.
-        data.setdefault("Status", "Not Started")
-
     elif category == "podcasts":
         if data.get("Status") == "Finished":
             data["Date Listened To"] = today_str

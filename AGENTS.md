@@ -211,6 +211,22 @@ The iOS/macOS companion app lives at https://github.com/alexjmiller5/receptor.
 It POSTs `{"raw_text": ..., "source": ...}` to `capture` with its own bearer
 token (from an enrollment link) and expects 200.
 
+## Media capture writes
+
+Resolved movie, TV and video captures use `core/media_save.py` through the
+existing hub client. New identities use insert-only creation; existing rows
+receive only requested fields through revision-checked patches. Missing status
+is an initializer default only and never resets a stored status. Tombstones,
+conflicts, rejection and uncertain transport remain explicit non-success states.
+No save path falls back to row push. Channel discovery no longer initializes
+external subscription tracking and preserves existing source rows.
+
+`Capture Intent` separates explicit saves from consumption reports. Per-category
+`capture_columns` and optional `saved_column` are workspace configuration.
+Configure saved_column only after its cataloged field exists; explicit saves
+without that mapping require review. Consumer/provider credentials remain outside
+the capture result and never enter native apps.
+
 ## Gemini isolation
 
 Use a dedicated Google Cloud project and API key restricted to
