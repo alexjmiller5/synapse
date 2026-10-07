@@ -234,7 +234,16 @@ def prepare_item(prepare):
     active = current_capture()
     if active is None:
         return prepare()
-    return active.journal.checkpoint(f"item/{active.item_index}/prepared", prepare)
+
+    def prepare_or_error():
+        try:
+            return prepare()
+        except Exception as error:
+            # Freeze the failure decision before its cleanup task/log. Retrying
+            # after one of those writes must not re-extract into a second task.
+            return {"preparation_error": str(error), "error_type": type(error).__name__}
+
+    return active.journal.checkpoint(f"item/{active.item_index}/prepared", prepare_or_error)
 
 
 def create_task(data, project_id=None, *, role="task"):

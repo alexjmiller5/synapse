@@ -216,3 +216,34 @@ def test_partial_workflow_switch_is_rejected_before_notion_side_effects(workflow
     with pytest.raises(ValueError, match="together"):
         pipeline.run({"raw_text": "One", "workspace": workflow.id, "capture_id": CAPTURE}, store={})
     mock_notion.pages.create.assert_not_called()
+
+
+def test_preparation_failure_freezes_one_actionable_error_across_logging_retry(
+    workflow, monkeypatch, mock_gemini
+):
+    remote, store = {}, {}
+
+    def send(table, rows):
+        row = copy.deepcopy(rows[0])
+        key = (table, row["id"])
+        created = key not in remote
+        remote.setdefault(key, row)
+        if table == "capture_logs" and created:
+            raise requests.Timeout("response lost")
+        return {}
+
+    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    failure = Mock(side_effect=ValueError("Invalid model output"))
+    monkeypatch.setattr(pipeline, "generate_with_retry", failure)
+    payload = {"raw_text": "Do a thing", "workspace": workflow.id, "capture_id": CAPTURE}
+    with pytest.raises(requests.Timeout):
+        pipeline.run(payload, store=store)
+    pipeline.run(payload, store=store)
+    assert len(remote) == 2
+    assert failure.call_count == 1
+    task = next(row for (table, _), row in remote.items() if table == "work_items")
+    log = next(row for (table, _), row in remote.items() if table == "capture_logs")
+    assert task["priority"] == "High"
+    assert log["code_execution"] == "Error(s)"
+    assert "Invalid model output" in log["error_details"]
+    assert log["created_item"] == f"work_items/{task['id']}"
