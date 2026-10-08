@@ -10,6 +10,7 @@ Run via `just recept "your text"` (fills them from 1Password).
 
 import os
 import sys
+from uuid import uuid4
 
 import requests
 
@@ -28,7 +29,10 @@ def send_event(input_text):
     print(f"🚀 Sending: '{input_text}'...")
     try:
         response = requests.post(
-            url, json={"raw_text": input_text, "source": "cli"}, headers=headers
+            url,
+            # One persisted identity per invocation: workflow capture requires it.
+            json={"raw_text": input_text, "source": "cli", "capture_id": str(uuid4())},
+            headers=headers,
         )
         response.raise_for_status()
         print(f"✅ Success: {response.status_code}")
