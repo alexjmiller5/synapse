@@ -25,8 +25,8 @@ from store import activate, open_state  # noqa: E402
 
 NOTION = "https://api.notion.com/v1"
 HEADERS = {"Notion-Version": "2026-03-11"}
-# Non-category DBs Synapse also writes to (mirror _prefetch_db_ids in secrets.py).
-HELPER_CATEGORIES = ["logs", "projects", "trips", "notes"]
+# Non-category DBs Synapse also reads or writes (the top-level `db_ids`).
+HELPER_CATEGORIES = ["logs", "projects"]
 
 
 def data_source_id(db_id):

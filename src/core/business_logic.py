@@ -8,7 +8,6 @@ from core.handlers import (
     handle_url_media,
     handle_youtube_logic,
     handle_movies_tv_logic,
-    handle_people_logic,
     handle_default_logic,
 )
 from core.life_hub import pull_rows
@@ -296,7 +295,6 @@ LOGIC_HANDLERS = {
     "youtube-videos": handle_youtube_logic,
     "movies": handle_movies_tv_logic,
     "tv-shows": handle_movies_tv_logic,
-    "people": handle_people_logic,
 }
 
 

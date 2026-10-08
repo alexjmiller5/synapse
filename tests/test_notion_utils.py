@@ -1,6 +1,5 @@
 """Tests for notion_utils.py — property builders, CRUD operations, logging."""
 
-from unittest.mock import patch
 import pytest
 
 from core.notion_utils import (
@@ -14,16 +13,14 @@ from core.notion_utils import (
     clean_text,
     build_notion_properties,
     create_page,
-    update_status,
     log_job_outcome,
     create_cleanup_task,
     create_high_priority_task,
     create_project_task,
-    fetch_existing_page,
     prop_id,
     keys_to_ids,
 )
-from helpers import make_notion_page, sent_props
+from helpers import sent_props
 
 
 # ======================================================================
@@ -239,20 +236,20 @@ class TestBuildNotionProperties:
         assert "Priority" not in props
 
     def test_date_field_valid_iso_ok(self):
-        props = build_notion_properties("trips", {"Name": "Miami", "Dates": "2026-09-01"})
-        assert props["Dates"] == {"date": {"start": "2026-09-01"}}
+        props = build_notion_properties("tasks", {"Name": "Miami", "Due Date": "2026-09-01"})
+        assert props["Due Date"] == {"date": {"start": "2026-09-01"}}
 
     def test_date_field_empty_raises(self):
         """Regression: page 35e0… — AI emitted Dates='' and the job 500'd at Notion."""
         with pytest.raises(ValueError):
-            build_notion_properties("trips", {"Name": "Miami", "Dates": ""})
+            build_notion_properties("tasks", {"Name": "Miami", "Due Date": ""})
 
     def test_date_field_natural_language_raises(self):
         """Regression: pages 3650…/36d0… — AI emitted 'Sep 1' / 'After graduation'."""
         with pytest.raises(ValueError):
-            build_notion_properties("trips", {"Name": "Ecuador", "Dates": "Sep 1"})
+            build_notion_properties("tasks", {"Name": "Ecuador", "Due Date": "Sep 1"})
         with pytest.raises(ValueError):
-            build_notion_properties("trips", {"Name": "Japan", "Dates": "After graduation"})
+            build_notion_properties("tasks", {"Name": "Japan", "Due Date": "After graduation"})
 
     def test_unknown_keys_skipped(self):
         data = {"Name": "Test", "FakeField": "value"}
@@ -320,38 +317,16 @@ class TestCreatePage:
         assert sent_props(mock_notion.pages.create, "tasks") == props
         assert "database_id" in call_kwargs.kwargs["parent"]
 
-    def test_podcast_icon(self, mock_notion):
-        props = {"Episode Title": _notion_title("Ep1")}
-        create_page("podcasts", props)
-        call_kwargs = mock_notion.pages.create.call_args
-        assert call_kwargs.kwargs["icon"]["emoji"] == "🎧"
-
-    def test_no_icon_for_tasks(self, mock_notion):
-        create_page("tasks", {"Name": _notion_title("Task")})
-        call_kwargs = mock_notion.pages.create.call_args
-        assert "icon" not in call_kwargs.kwargs
+    @pytest.mark.parametrize("category", ["tasks", "podcasts", "bookmarks"])
+    def test_no_icon(self, mock_notion, category):
+        """Podcasts and bookmarks are life-data tables; no Notion page gets an icon."""
+        create_page(category, {"URL": _notion_url("https://github.com/a/b")})
+        assert "icon" not in mock_notion.pages.create.call_args.kwargs
 
     def test_create_error_raises(self, mock_notion):
         mock_notion.pages.create.side_effect = Exception("Notion API error")
         with pytest.raises(Exception, match="Notion API error"):
             create_page("tasks", {"Name": _notion_title("Test")})
-
-
-# ======================================================================
-# update_status
-# ======================================================================
-class TestUpdateStatus:
-    def test_success(self, mock_notion):
-        update_status("page-123", "Done")
-        mock_notion.pages.update.assert_called_once_with(
-            page_id="page-123",
-            properties={"Status": {"status": {"name": "Done"}}},
-        )
-
-    def test_failure_returns_none(self, mock_notion):
-        mock_notion.pages.update.side_effect = Exception("fail")
-        result = update_status("page-123", "Done")
-        assert result is None
 
 
 # ======================================================================
@@ -446,38 +421,3 @@ class TestCreateProjectTask:
         assert url is not None
         props = sent_props(mock_notion.pages.create, "tasks")
         assert props["Project"] == {"relation": [{"id": "project-id-123"}]}
-
-
-# ======================================================================
-# fetch_existing_page
-# ======================================================================
-class TestFetchExistingPage:
-    def test_found(self, mock_notion):
-        page = make_notion_page("found-id", "Name", "Kayaking")
-        mock_notion.request.return_value = {"results": [page]}
-
-        result = fetch_existing_page("tasks", "Kayaking", "Name")
-        assert result == "found-id"
-
-    def test_not_found(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        result = fetch_existing_page("tasks", "NonExistent", "Name")
-        assert result is None
-
-    def test_the_prefix_removal(self, mock_notion):
-        """'The Freedom Trail' should search for 'Freedom Trail' (smart search)."""
-        mock_notion.request.return_value = {"results": []}
-        fetch_existing_page("tasks", "The Freedom Trail", "Name")
-        call_body = mock_notion.request.call_args.kwargs["body"]
-        assert call_body["filter"]["property"] == "Name"
-        assert call_body["filter"]["title"]["contains"] == "Freedom Trail"
-
-    def test_no_notion_client(self):
-        with patch("core.notion_utils.get_notion", return_value=None):
-            result = fetch_existing_page("fun-activities", "Test", "Title")
-            assert result is None
-
-    def test_no_db_id(self):
-        with patch("core.notion_utils.get_db_id", return_value=None):
-            result = fetch_existing_page("fun-activities", "Test", "Title")
-            assert result is None

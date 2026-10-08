@@ -26,8 +26,6 @@ categorize_template: |
           https://hhub.io") -> "bookmarks"; a URL inside an ACTION ("Buy this rice
           cooker [URL]", "Read this article [URL]") -> "tasks".
   4. CATEGORY REQUIREMENTS (strict):
-       - people: only for a "[Name] [Job/Context]" pattern ("Will Theo's friend"). An
-         action ("Call Will") is a "task".
        - youtube-videos: only with a LINK. "watch youtube video" with no link -> "task".
        - fun-activities: must imply a location or a "fun thing to do".
   5. PROJECT RULE (strict): only set a `related_project` if the Context names it
@@ -48,7 +46,6 @@ categorize_template: |
   {active_projects_list}
 
   ## Examples
-  - `Arun [Context: People]` -> people
   - `Go Skydiving [Context: Bucket List]` -> bucket-list
   - `Union Square [Context: Fun]` -> fun-activities
   - `Python link [Context: Bookmark]` -> bookmarks

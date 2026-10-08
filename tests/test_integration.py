@@ -470,11 +470,6 @@ class TestPodcastClassification:
 # PEOPLE TESTS
 # ======================================================================
 class TestPeopleClassification:
-    def test_person_with_context(self):
-        cat, data, _ = full_pipeline("Arun Vantage senior associate")
-        assert cat == "people"
-        assert "Arun" in data.get("Name", "")
-
     def test_action_with_person_is_task(self):
         cat, _, _ = full_pipeline("Call Will about the dinner plans")
         assert cat == "tasks"

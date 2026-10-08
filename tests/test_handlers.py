@@ -14,7 +14,6 @@ from core.handlers import (
     handle_hub_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
-    handle_people_logic,
     handle_default_logic,
 )
 from core.config import DATABASES
@@ -435,17 +434,6 @@ class TestHandleMoviesTv:
         mock_notion.pages.create.assert_called_once()
         name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
         assert "insert_rejected" in name
-
-
-# ======================================================================
-# handle_people_logic
-# ======================================================================
-class TestHandlePeople:
-    def test_creates_person(self, mock_notion):
-        data = {"Name": "Arun Mehta", "Company": "Vantage Senior Associate"}
-        url = handle_people_logic("people", data)
-        mock_notion.pages.create.assert_called_once()
-        assert url is not None
 
 
 # ======================================================================

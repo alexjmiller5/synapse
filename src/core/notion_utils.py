@@ -1,7 +1,6 @@
 import json
 import re
 from datetime import datetime
-from urllib.parse import urlparse
 from core.config import DATABASES, PROPERTY_IDS
 from core.secrets import get_db_id
 from core.clients import get_notion
@@ -169,30 +168,8 @@ def create_page(category, props):
     # Build the base arguments for the API call
     body_params = {"parent": {"database_id": get_db_id(category)}, "properties": props}
 
-    # --- ICON LOGIC ---
-    if category == "podcasts":
-        body_params["icon"] = {"type": "emoji", "emoji": "🎧"}
-    elif category == "bookmarks":
-        bookmark_url = props.get("URL", {}).get("url")
-        if bookmark_url:
-            parsed = urlparse(bookmark_url)
-            domain = parsed.netloc or bookmark_url
-            if domain and "github.com" in domain:
-                # Use custom "github-light" emoji for GitHub URLs
-                body_params["icon"] = {
-                    "type": "custom_emoji",
-                    "custom_emoji": {"id": "2d103953-a8af-8072-b828-007aa3901d27"},
-                }
-            elif domain:
-                body_params["icon"] = {
-                    "type": "external",
-                    "external": {
-                        "url": f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{domain}&size=128"
-                    },
-                }
-
-    # Re-key by stable property id at the write boundary (after the name-based icon
-    # logic above) so a renamed property still writes correctly.
+    # Re-key by stable property id at the write boundary so a renamed property
+    # still writes correctly.
     body_params["properties"] = keys_to_ids(category, props)
 
     try:
@@ -201,72 +178,6 @@ def create_page(category, props):
     except Exception as e:
         print(f"❌ Notion Create Error: {e}")
         raise e
-
-
-def update_status(page_id, status, category=None):
-    print(f"🔄 Updating status for {page_id} to '{status}'...")
-    # Status property id differs per DB — key by id when the category is known.
-    status_key = prop_id(category, "Status") if category else "Status"
-    try:
-        return get_notion().pages.update(
-            page_id=page_id, properties={status_key: {"status": {"name": status}}}
-        )
-    except Exception as e:
-        print(f"   ❌ Update Status Failed: {e}")
-        return None
-
-
-def append_note(page_id, text):
-    print(f"📎 Appending note to {page_id}...")
-
-    def get_utf16_split(content, limit=2000):
-        chunks = []
-        current_chunk = []
-        current_len = 0
-
-        for char in content:
-            char_len = len(char.encode("utf-16-le")) // 2
-
-            if current_len + char_len > limit:
-                chunks.append("".join(current_chunk))
-                current_chunk = []
-                current_len = 0
-
-            current_chunk.append(char)
-            current_len += char_len
-
-        if current_chunk:
-            chunks.append("".join(current_chunk))
-        return chunks
-
-    try:
-        page = get_notion().pages.retrieve(page_id)
-        current_notes = page["properties"].get("Notes", {}).get("rich_text", [])
-
-        safe_notes = []
-
-        for note_obj in current_notes:
-            content = note_obj.get("text", {}).get("content", "")
-            anns = note_obj.get("annotations", {})
-
-            chunks = get_utf16_split(content)
-            for chunk in chunks:
-                safe_notes.append({"type": "text", "text": {"content": chunk}, "annotations": anns})
-
-        new_chunks = get_utf16_split(f"{text}")
-        for chunk in new_chunks:
-            safe_notes.append(
-                {
-                    "type": "text",
-                    "text": {"content": chunk if chunk != new_chunks[0] else f"\n{chunk}"},
-                }
-            )
-
-        get_notion().pages.update(page_id=page_id, properties={"Notes": {"rich_text": safe_notes}})
-        print("   ✅ Note appended successfully.")
-
-    except Exception as e:
-        print(f"   ❌ Append Note Failed: {e}")
 
 
 def create_project_task(project_id, extracted_data):
@@ -421,40 +332,3 @@ def log_job_outcome(
             create(props)
         except Exception as e2:
             print(f"Log failed: {e2}")
-
-
-def fetch_existing_page(category, value, key="Name"):
-    db_id = get_db_id(category)
-    if not get_notion() or not db_id:
-        return None
-
-    # 1. Clean the search term for better matching
-    clean_val = value.replace("The ", "").strip()
-
-    try:
-        print(f"🔍 Searching {category} for '{value}' (Smart Search: '{clean_val}')...")
-
-        # FIX: Use raw get_notion().request() to bypass SDK version issues
-        resp = get_notion().request(
-            path=f"databases/{db_id}/query",
-            method="POST",
-            body={"filter": {"property": key, "title": {"contains": clean_val}}},
-        )
-
-        results = resp.get("results", [])
-
-        if results:
-            found_page = results[0]
-
-            # Safely extract title
-            title_prop = found_page["properties"].get(key, {}).get("title", [])
-            found_title = title_prop[0]["plain_text"] if title_prop else "Unknown"
-            found_id = found_page["id"]
-
-            print(f"   ✅ Found match: '{found_title}' (ID: {found_id})")
-            return found_id
-
-        print(f"   🔸 No match found for '{clean_val}'")
-    except Exception as e:
-        print(f"   ❌ Search failed for '{value}': {e}")
-    return None

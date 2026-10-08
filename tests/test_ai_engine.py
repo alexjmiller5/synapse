@@ -154,13 +154,9 @@ class TestGenerateClassificationPrompt:
         assert '"logs"' not in prompt
 
     def test_excludes_helper_dbs(self):
-        """Helper DBs (trips/logs/youtube-channels) must not be classification targets.
-
-        They exist only to be *related to* by other categories. A 'plan a trip'
-        thought is a task, not a trips-DB write. Regression for pages 35e0…/3650…/36d0….
-        """
+        """Helper DBs (logs/youtube-channels) must not be classification targets:
+        they exist only to be *related to* by other categories."""
         prompt = generate_classification_prompt("None")
-        assert '"trips"' not in prompt
         assert '"logs"' not in prompt
         assert '"youtube-channels"' not in prompt
 
@@ -173,6 +169,12 @@ class TestGenerateClassificationPrompt:
         prompt = generate_classification_prompt("None")
         assert '"places"' not in prompt
         assert '"tasks"' in prompt
+
+    def test_trips_stanza_retired(self):
+        """Trips live in life-data; nothing writes a trips Notion DB."""
+        from core.config import DATABASES
+
+        assert "trips" not in DATABASES["databases"]
 
     def test_none_projects(self):
         prompt = generate_classification_prompt("None")
@@ -209,12 +211,6 @@ class TestGenerateExtractionPrompt:
         )
         assert "EXISTING INVENTORY" in prompt
         assert "Eggs" in prompt
-
-    def test_trips_dates_instruction_present(self):
-        """trips.Dates must carry extraction guidance so the AI emits ISO 8601 (or omits)."""
-        prompt = generate_extraction_prompt("trips", "Miami trip in September")
-        assert "Dates" in prompt
-        assert "YYYY-MM-DD" in prompt
 
     def test_includes_user_context(self):
         prompt = generate_extraction_prompt("tasks", "Do thing", user_context="urgent due friday")
