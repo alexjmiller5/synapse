@@ -130,8 +130,14 @@ class TestApplyBusinessLogic:
 
     def test_unhandled_category_passthrough(self):
         data = {"Name": "Something"}
-        result = apply_business_logic("people", data)
+        result = apply_business_logic("quotes", data)
         assert result == data
+
+    def test_people_route_retired(self):
+        """People live in life-data; Synapse never writes them."""
+        from core.business_logic import LOGIC_HANDLERS
+
+        assert "people" not in LOGIC_HANDLERS
 
 
 # ======================================================================

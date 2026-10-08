@@ -56,18 +56,6 @@ logs:
   "\U0001F464\u274C User Error": fake-49
   "\U0001F9EA Test Execution": fake-50
   "\U0001FAB2 Bug": fake-51
-notes:
-  Created time: fake-52
-  Job Application Notes: fake-53
-  Linked Event: fake-54
-  Linked Meal: fake-55
-  Project: fake-56
-  Related Item: fake-57
-  Related Trip: fake-58
-  Status: fake-59
-  Tags: fake-60
-  Tech: fake-61
-  Title: title
 podcasts:
   Date Listened To: fake-63
   Episode: fake-64
@@ -117,19 +105,3 @@ tasks:
   Tag & Date History: fake-106
   Tags: fake-107
   Workspace: fake-108
-trips:
-  Budget: fake-109
-  Cities: fake-110
-  Continents: fake-111
-  Cost: fake-112
-  Cost (New Rollup Sum): fake-113
-  Countries: fake-114
-  Created time: fake-115
-  Dates: fake-116
-  Expenses: fake-117
-  Name: title
-  Notes: fake-119
-  Places: fake-120
-  Status: fake-121
-  Tags: fake-122
-  Travel Companions: fake-123

@@ -296,10 +296,6 @@ def handle_movies_tv_logic(
     )
 
 
-def handle_people_logic(category, data):
-    return create_page(category, build_notion_properties(category, data)).get("url")
-
-
 def handle_default_logic(category, data):
     return create_page(category, build_notion_properties(category, data)).get("url")
 

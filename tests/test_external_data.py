@@ -13,7 +13,6 @@ from core.external_data import (
     get_tal_metadata,
     sanitize_youtube_url,
     resolve_tmdb_id,
-    map_genres,
     TMDB_MIN_VOTES,
 )
 
@@ -389,27 +388,6 @@ class TestResolveTmdbId:
         responses.add(responses.GET, MOVIE_SEARCH, status=500)
         with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
             assert resolve_tmdb_id("movie", "The Matrix") is None
-
-
-# ======================================================================
-# map_genres
-# ======================================================================
-class TestMapGenres:
-    def test_science_fiction_alias_to_existing_sci_fi(self):
-        assert map_genres(["Science Fiction"], ["Sci-Fi", "Action"]) == ["Sci-Fi"]
-
-    def test_unknown_genre_passes_through(self):
-        assert map_genres(["Mumblecore"], ["Sci-Fi", "Action"]) == ["Mumblecore"]
-
-    def test_case_insensitive_uses_existing_casing(self):
-        assert map_genres(["documentary"], ["Documentary"]) == ["Documentary"]
-
-    def test_alias_target_absent_keeps_tmdb_name(self):
-        # No "Sci-Fi" option exists -> the TMDB name is kept (multi_select auto-creates)
-        assert map_genres(["Science Fiction"], ["Drama"]) == ["Science Fiction"]
-
-    def test_dedupes(self):
-        assert map_genres(["Action", "Action"], ["Action"]) == ["Action"]
 
 
 # ======================================================================

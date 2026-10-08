@@ -176,39 +176,6 @@ def get_youtube_metadata(url):
 
 TMDB_BASE = "https://api.themoviedb.org/3"
 
-# TMDB genre names that DON'T match Alex's Notion options 1:1. Only genuine
-# spelling differences belong here — exact/case-insensitive matches are handled
-# generically by map_genres. Aliases resolve only if the target option exists;
-# otherwise the raw TMDB name is kept (multi_select auto-creates it).
-TMDB_GENRE_ALIASES = {
-    "science fiction": "Sci-Fi",
-    "sci-fi & fantasy": "Sci-Fi",  # TMDB's combined TV bucket
-    "action & adventure": "Action",  # TMDB's combined TV bucket
-    "war & politics": "War",
-}
-
-
-def map_genres(tmdb_genres, existing_options):
-    """Map TMDB genre names to Alex's existing Notion 'Genres' options.
-
-    - Case-insensitive match to an existing option → use that option's casing.
-    - Known alias whose target exists → use the target.
-    - Otherwise pass the TMDB name through (multi_select auto-creates on write).
-    """
-    by_lower = {o.lower(): o for o in (existing_options or [])}
-    out = []
-    for name in tmdb_genres:
-        key = name.lower()
-        if key in by_lower:
-            mapped = by_lower[key]
-        elif key in TMDB_GENRE_ALIASES and TMDB_GENRE_ALIASES[key].lower() in by_lower:
-            mapped = by_lower[TMDB_GENRE_ALIASES[key].lower()]
-        else:
-            mapped = name
-        if mapped not in out:
-            out.append(mapped)
-    return out
-
 
 def tmdb_search(kind, title, tmdb_key):
     """Search TMDB; return all results as [{id, title, year}, ...] (empty on none)."""
@@ -230,42 +197,6 @@ def tmdb_search(kind, title, tmdb_key):
             }
         )
     return out
-
-
-def tmdb_details(kind, tmdb_id, tmdb_key):
-    """Fetch genres/director/cast for a specific TMDB id."""
-    r = requests.get(
-        f"{TMDB_BASE}/{kind}/{tmdb_id}",
-        params={"api_key": tmdb_key, "append_to_response": "credits"},
-        timeout=12,
-    )
-    r.raise_for_status()
-    data = r.json()
-
-    genres = [g["name"] for g in data.get("genres", []) if g.get("name")]
-    credits = data.get("credits", {}) or {}
-    crew = credits.get("crew") or []
-    cast = [c["name"] for c in (credits.get("cast") or [])[:5] if c.get("name")]
-
-    director = ""
-    if kind == "movie":
-        director = next(
-            (c["name"] for c in crew if c.get("job") == "Director" and c.get("name")), ""
-        )
-    else:
-        # TV: prefer the show's creator(s); fall back to a crew director/EP.
-        creators = data.get("created_by") or []
-        if creators:
-            director = creators[0].get("name", "")
-        if not director:
-            for job in ("Director", "Executive Producer"):
-                director = next(
-                    (c["name"] for c in crew if c.get("job") == job and c.get("name")), ""
-                )
-                if director:
-                    break
-
-    return {"genres": genres, "director": director, "cast": cast}
 
 
 # A top search hit with almost no votes is fan-content/junk, not the film Alex

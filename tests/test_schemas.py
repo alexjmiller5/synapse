@@ -38,8 +38,6 @@ class TestCategorySchemaClassify:
                 assert cat not in enum_values, f"Helper DB leaked into classifier enum: {cat}"
             else:
                 assert cat in enum_values, f"Missing category: {cat}"
-        # The helper DBs behind the trips date bug must be unselectable.
-        assert "trips" not in enum_values
         assert "logs" not in enum_values
         assert "youtube-channels" not in enum_values
 

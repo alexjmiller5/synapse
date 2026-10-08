@@ -86,10 +86,10 @@ def test_unconfigured_calendar_keeps_legacy_behavior(calendar_workspace):
 
 
 def test_other_categories_do_not_inherit_task_day(calendar_workspace):
-    calendar_workspace.databases["databases"]["trips"]["properties"]["Name"]["instruction"] = (
-        "TRIP_DAY={current_date}"
-    )
-    assert "TRIP_DAY=2040-01-01" in ai_engine.generate_extraction_prompt("trips", "A trip")
+    calendar_workspace.databases["databases"]["bucket-list"]["properties"]["Item"][
+        "instruction"
+    ] = "OTHER_DAY={current_date}"
+    assert "OTHER_DAY=2040-01-01" in ai_engine.generate_extraction_prompt("bucket-list", "A goal")
 
 
 @pytest.mark.parametrize("name", ["create_cleanup_task", "create_high_priority_task"])

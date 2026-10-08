@@ -1,4 +1,7 @@
 set shell := ["bash", "-cu"]
+# Keep the venv out of the iCloud-synced checkout: iCloud stalls reads of
+# venv files and hides editable-install .pth files.
+export UV_PROJECT_ENVIRONMENT := env_var("HOME") + "/.cache/uv-venvs/synapse"
 
 default:
     @just --list

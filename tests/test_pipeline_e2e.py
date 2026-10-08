@@ -592,24 +592,6 @@ class TestBookmarkPipeline:
 
 
 # ======================================================================
-# People Tests
-# ======================================================================
-class TestPeoplePipeline:
-    def test_new_person(self, mock_gemini, mock_notion):
-        _setup_classify_extract(
-            mock_gemini,
-            "people",
-            {
-                "Name": "Arun Mehta",
-                "Company": "Vantage Senior Associate",
-            },
-        )
-
-        _run(_item("Arun Vantage senior associate"))
-        mock_notion.pages.create.assert_called()
-
-
-# ======================================================================
 # Quote Tests
 # ======================================================================
 class TestQuotePipeline:
