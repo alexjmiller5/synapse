@@ -1,8 +1,8 @@
 # Project Synapse 🧠
 
-> An intelligent middleware for capturing thoughts and organizing them in life-data and Notion.
+> An intelligent middleware for capturing thoughts and organizing them in soma and Notion.
 
-Synapse eliminates the friction of manual data entry. It accepts unstructured, natural-language text, uses a multi-step AI chain (parse → classify → extract) to understand and structure the content, and then routes it to the right life-data table (groceries, media, bookmarks, ideas, activities) or, for tasks, the Notion Tasks DB. The entire project is written in **Python** and deployed on **Modal**.
+Synapse eliminates the friction of manual data entry. It accepts unstructured, natural-language text, uses a multi-step AI chain (parse → classify → extract) to understand and structure the content, and then routes it to the right soma table (groceries, media, bookmarks, ideas, activities) or, for tasks, the Notion Tasks DB. The entire project is written in **Python** and deployed on **Modal**.
 
 ---
 
@@ -13,7 +13,7 @@ Synapse eliminates the friction of manual data entry. It accepts unstructured, n
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1` to serialize runs since Notion dedupe is query-then-create, retries with backoff). Runs `core.pipeline.run`.
 - **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
 - **App secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — the app's own provider keys only.
-- **Workspaces** hold everything that belongs to one user: their Notion ids, allowlists and wording, place tags, property-id map, and their Notion + life-data credentials. They live in the `synapse-state` Volume, edited with `just workspace ...`; each device token files its captures into one workspace. The repo carries only the generic template.
+- **Workspaces** hold everything that belongs to one user: their Notion ids, allowlists and wording, place tags, property-id map, and their Notion + soma credentials. They live in the `synapse-state` Volume, edited with `just workspace ...`; each device token files its captures into one workspace. The repo carries only the generic template.
 
 ```mermaid
 flowchart LR
@@ -21,7 +21,7 @@ flowchart LR
     W -->|"process.spawn()"| P["process worker<br/>(core.pipeline.run)"]
     P -->|"parse / classify / extract"| G["Gemini"]
     P -->|"enrichment"| X["Spotify · YouTube · TMDB ·<br/>web scrape"]
-    P -->|"rows (most categories)"| H["life-data hub tables"]
+    P -->|"rows (most categories)"| H["soma hub tables"]
     P -->|"tasks"| N["Notion Tasks DB"]
     P -->|"outcome logs"| L["Notion Executions DB"]
 ```
@@ -53,7 +53,7 @@ Everything else is code; these are one-time console/dashboard actions:
 3. **Google API key:** mint a **YouTube Data API v3 key** in the Google Cloud console (APIs & Services → Credentials) and put them on the 1Password item that `.env.tpl` references.
 4. **CI secret:** `gh secret set OP_SERVICE_ACCOUNT_TOKEN` with a 1Password service-account token that can read the project's vault (the one `.env.tpl` references).
 5. **Push secrets to Modal:** `just sync-secrets` (reads `.env.tpl`, injects via `op`, creates/updates the `synapse` Modal secret).
-6. **Notion select options:** every `allowlist` value of a Notion-backed stanza (one with a `db_id`: `tasks`, `logs`) must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value. `hub_table` stanzas are checked by the life-data catalog instead: keep their allowlists in step with `life property list <table>`. Personal allowlists (the Fun Activities `Location` cities) go in the workspace overlay.
+6. **Notion select options:** every `allowlist` value of a Notion-backed stanza (one with a `db_id`: `tasks`, `logs`) must exist as an option on the live Notion select/multi_select/status property (add missing ones in the Notion UI). Hydration intersects allowlists with live options and prints a `⚠️ ... allowlist options missing from Notion select` warning for any value it had to drop; the AI can never pick a dropped value. `hub_table` stanzas are checked by the soma catalog instead: keep their allowlists in step with `soma property list <table>`. Personal allowlists (the Fun Activities `Location` cities) go in the workspace overlay.
 7. **Executions DB `Tags` property:** a `Tags` multi_select with the `project-append` option must exist on the Executions DB.
 
 ## Configuration: `src/core/template/databases.yaml` + a workspace overlay
@@ -126,7 +126,7 @@ syncing a replacement key; listing models does not verify billing credits.
 
 ## Workflow capture and retained execution content
 
-A workspace can select Life Data Tasks and Executions together through its
+A workspace can select Soma Tasks and Executions together through its
 `workflow` mappings; absent mappings retain Notion behavior. Selected captures
 require a canonical UUID `capture_id`, persisted by the caller across retries.
 Authentication fixes the workspace. The server rejects a workspace mismatch or
@@ -137,7 +137,7 @@ The operational journal freezes parser/extractor decisions, output mappings,
 row IDs and bodies before delivery. Retry uses checked insert-only writes, so
 completed, reviewed and tombstoned output rows remain unchanged. Logging failure
 after a task write retains the task ID for recovery. Execution text is never
-limited to Notion's 2,000-character property size on the Life Data path.
+limited to Notion's 2,000-character property size on the Soma path.
 
 Execution bindings may specify `retained_fields` (logical mapped property names),
 `max_inline_bytes` (default 131072 UTF-8 bytes), and a dedicated `files_prefix`.

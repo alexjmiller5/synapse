@@ -25,9 +25,9 @@ FAKE_SECRETS = {
     "spotify-client-id": "fake-spotify-id",
     "spotify-client-secret": "fake-spotify-secret",
     "google-youtube-api-key": "fake-youtube-key",
-    # life-data hub (movies/tv-shows)
-    "life-hub-url": "https://hub.test.invalid",
-    "life-hub-token": "fake-hub-token",
+    # soma hub (movies/tv-shows)
+    "soma-hub-url": "https://hub.test.invalid",
+    "soma-hub-token": "fake-hub-token",
 }
 
 for _sid, _val in FAKE_SECRETS.items():
@@ -130,8 +130,8 @@ def mock_youtube():
 @pytest.fixture
 def media_hub(monkeypatch):
     from media_hub import SyntheticHub
-    from core import life_hub
+    from core import soma_hub
 
     hub = SyntheticHub()
-    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    monkeypatch.setattr(soma_hub.requests, "post", hub.post)
     return hub

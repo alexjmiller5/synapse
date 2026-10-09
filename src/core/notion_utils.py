@@ -322,7 +322,7 @@ def log_job_outcome(
         if "Created Item" not in props:
             print(f"Log failed: {e}")
             return
-        # Created Item is a url property, but a life-data reference is
+        # Created Item is a url property, but a soma reference is
         # "movies/335984". Losing the whole execution row over it is worse than
         # losing the link, so retry once with the ref moved into the text.
         print(f"Log create failed ({e}) - retrying with Created Item as text")

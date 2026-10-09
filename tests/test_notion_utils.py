@@ -319,7 +319,7 @@ class TestCreatePage:
 
     @pytest.mark.parametrize("category", ["tasks", "podcasts", "bookmarks"])
     def test_no_icon(self, mock_notion, category):
-        """Podcasts and bookmarks are life-data tables; no Notion page gets an icon."""
+        """Podcasts and bookmarks are soma tables; no Notion page gets an icon."""
         create_page(category, {"URL": _notion_url("https://github.com/a/b")})
         assert "icon" not in mock_notion.pages.create.call_args.kwargs
 
@@ -342,7 +342,7 @@ class TestLogJobOutcome:
         assert props["Created Item"]["url"] == "https://notion.so/x"
 
     def test_retries_without_created_item_when_notion_rejects_it(self, mock_notion):
-        """Created Item is a url property, but a life-data ref is "movies/335984".
+        """Created Item is a url property, but a soma ref is "movies/335984".
         If Notion 400s on it the row must still land, carrying the ref as text."""
         mock_notion.pages.create.side_effect = [
             Exception("400 Bad Request: Created Item is not a valid URL"),

@@ -20,7 +20,7 @@ def today_eastern():
 
 
 def now_utc_iso_ms() -> str:
-    """Now as ISO 8601 UTC with milliseconds - life-data's timestamp format.
+    """Now as ISO 8601 UTC with milliseconds - soma's timestamp format.
 
     Sync ordering there is a lexicographic compare of these strings, so the
     shape (millisecond precision, trailing 'Z') is load-bearing, not cosmetic.

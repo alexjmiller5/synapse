@@ -10,7 +10,7 @@ from core.handlers import (
     handle_movies_tv_logic,
     handle_default_logic,
 )
-from core.life_hub import pull_rows
+from core.soma_hub import pull_rows
 
 
 def query_notion_db(category_key, query_body=None):
@@ -136,7 +136,7 @@ def validate_all():
     report = {}
     for category, details in DATABASES.get("databases", {}).items():
         if details.get("helper") or details.get("hub_table"):
-            continue  # a life-data table has no live Notion schema to drift from
+            continue  # a soma table has no live Notion schema to drift from
         db_id = get_db_id(category)
         if not db_id:
             report[category] = ["no db_id configured"]
@@ -163,7 +163,7 @@ def hydrate_dynamic_options(only_category=None):
         if only_category and category != only_category:
             continue
         if details.get("helper") or details.get("hub_table"):
-            continue  # hub_table = a life-data table: no live Notion options to read
+            continue  # hub_table = a soma table: no live Notion options to read
         db_id = get_db_id(category)
         if not db_id:
             print(f"   ⚠️ Skipping {category} (No DB ID)")

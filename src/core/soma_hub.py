@@ -1,4 +1,4 @@
-"""Life Data transport for sparse updates, complete reads and stable-ID creation."""
+"""Soma transport for sparse updates, complete reads and stable-ID creation."""
 
 from datetime import datetime
 import hashlib
@@ -28,13 +28,13 @@ def retain_text(key, value, *, settings=None, client=None):
     """
     key = file_key(key)
     settings = settings or _hub()
-    if not settings.life_hub_url or not settings.life_hub_token:
-        raise RuntimeError("Life Data files require configured workspace auth")
+    if not settings.soma_hub_url or not settings.soma_hub_token:
+        raise RuntimeError("Soma files require configured workspace auth")
     raw = value.encode("utf-8")
     digest = hashlib.sha256(raw).hexdigest()
     path = f"/v1/files/{key}"
-    url = settings.life_hub_url.rstrip("/") + path
-    headers = {"Authorization": f"Bearer {settings.life_hub_token}", "User-Agent": "synapse"}
+    url = settings.soma_hub_url.rstrip("/") + path
+    headers = {"Authorization": f"Bearer {settings.soma_hub_token}", "User-Agent": "synapse"}
     transport = client or requests
     response = transport.put(
         url,
@@ -66,23 +66,23 @@ def retain_text(key, value, *, settings=None, client=None):
 
 
 def _hub():
-    """The active workspace's Life Data hub (URL and dedicated token)."""
+    """The active workspace's Soma hub (URL and dedicated token)."""
     settings = current().secrets
     return SimpleNamespace(
-        life_hub_url=settings.get("life_hub_url"),
-        life_hub_token=settings.get("life_hub_token"),
+        soma_hub_url=settings.get("soma_hub_url"),
+        soma_hub_token=settings.get("soma_hub_token"),
     )
 
 
 def _post(path, body, *, settings=None, client=None):
     settings = settings or _hub()
-    if not settings.life_hub_url or not settings.life_hub_token:
-        raise RuntimeError("LIFE_HUB_URL / LIFE_HUB_TOKEN are not configured")
+    if not settings.soma_hub_url or not settings.soma_hub_token:
+        raise RuntimeError("SOMA_HUB_URL / SOMA_HUB_TOKEN are not configured")
     response = (client or requests).post(
-        f"{settings.life_hub_url.rstrip('/')}{path}",
+        f"{settings.soma_hub_url.rstrip('/')}{path}",
         json=body,
         headers={
-            "Authorization": f"Bearer {settings.life_hub_token}",
+            "Authorization": f"Bearer {settings.soma_hub_token}",
             "User-Agent": "synapse",
             "Content-Type": "application/json",
         },
@@ -91,7 +91,7 @@ def _post(path, body, *, settings=None, client=None):
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
-        raise RuntimeError("Life Data returned an invalid response")
+        raise RuntimeError("Soma returned an invalid response")
     return payload
 
 
@@ -118,15 +118,15 @@ def pull_rows(table, columns, *, settings=None, client=None):
         page = _post("/v1/rows/pull", dict(body), settings=settings, client=client)
         batch = page.get("rows")
         if "next_cursor" not in page or not isinstance(batch, list):
-            raise RuntimeError("Life Data returned an incomplete page or missing cursor")
+            raise RuntimeError("Soma returned an incomplete page or missing cursor")
         if any(not isinstance(row, dict) or not _identity(row.get("id")) for row in batch):
-            raise RuntimeError("Life Data returned an invalid row identity")
+            raise RuntimeError("Soma returned an invalid row identity")
         rows.update((row["id"], row) for row in batch)
         cursor = page["next_cursor"]
         if cursor is None:
             return [row for row in rows.values() if not row.get("deleted_at")]
         if not isinstance(cursor, str) or not cursor or cursor in cursors:
-            raise RuntimeError("Life Data returned an invalid or repeated cursor")
+            raise RuntimeError("Soma returned an invalid or repeated cursor")
         cursors.add(cursor)
         body["after"] = cursor
 
@@ -162,9 +162,9 @@ def insert_rows(table, rows, *, settings=None, client=None):
         client=client,
     )
     if not all(isinstance(out.get(key), list) for key in ("inserted", "existing", "rejected")):
-        raise RuntimeError("Life Data returned an invalid insert receipt")
+        raise RuntimeError("Soma returned an invalid insert receipt")
     if out["rejected"]:
-        raise InsertRejected(f"Life Data rejected {len(out['rejected'])} rows")
+        raise InsertRejected(f"Soma rejected {len(out['rejected'])} rows")
     accepted = out["inserted"] + out["existing"]
     if (
         not all(_identity(value) for value in accepted)
@@ -172,7 +172,7 @@ def insert_rows(table, rows, *, settings=None, client=None):
         or len(set(accepted)) != len(accepted)
         or set(accepted) != set(expected)
     ):
-        raise RuntimeError("Life Data returned an incomplete or ambiguous insert receipt")
+        raise RuntimeError("Soma returned an incomplete or ambiguous insert receipt")
     return out
 
 
@@ -204,7 +204,7 @@ def patch_row(table, row_id, values, expected_revision, *, settings=None, client
         or "hub_at" not in revision
         or (revision["hub_at"] is not None and not _stamp(revision["hub_at"]))
     ):
-        raise RuntimeError("Life Data returned an invalid patch receipt")
+        raise RuntimeError("Soma returned an invalid patch receipt")
     return out
 
 

@@ -202,7 +202,7 @@ def tmdb_search(kind, title, tmdb_key):
 # A top search hit with almost no votes is fan-content/junk, not the film Alex
 # means (TMDB matched "The Backrooms" to a 1-vote short while the real film sat
 # under "Backrooms"). Below the floor we resolve nothing → the cleanup-task
-# path, instead of pinning a life-data row to a junk match's id.
+# path, instead of pinning a soma row to a junk match's id.
 TMDB_MIN_VOTES = 20
 
 
@@ -240,7 +240,7 @@ def _pick(results, query, year, *, strict=False):
 
 def resolve_tmdb_id(kind, title, *, strict=False):
     """The TMDB id (as a string) for a movie/TV title, or None if nothing matched
-    confidently. That id IS the life-data row id, so a wrong match is worse than
+    confidently. That id IS the soma row id, so a wrong match is worse than
     no match - the caller files a cleanup task instead.
 
     A trailing '(YYYY)' pins a specific remake; it is dropped from the query TMDB

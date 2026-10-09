@@ -23,7 +23,7 @@ class TestGetDbId:
             assert get_db_id("projects") is None
 
     def test_hub_backed_category_has_no_db_id(self):
-        """movies/tv-shows live in life-data - no Notion DB, so no id to find."""
+        """movies/tv-shows live in soma - no Notion DB, so no id to find."""
         assert get_db_id("movies") is None
 
     def test_unknown_category_returns_none(self):

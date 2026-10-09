@@ -1,10 +1,10 @@
-"""Workspaces: whose Notion, life-data hub and taxonomy a capture is filed into.
+"""Workspaces: whose Notion, soma hub and taxonomy a capture is filed into.
 
 The repo ships only the product: `template/databases.yaml` (categories,
 properties, extraction instructions, generic allowlists) and
 `template/prompts.yaml`. Everything that belongs to one user - their Notion
 ids, their allowlists and wording, their place tags, their Notion and
-life-data credentials, their property-id map - is a workspace, stored by the
+soma credentials, their property-id map - is a workspace, stored by the
 running service (a store.VolumeStore in production) and edited with
 `scripts/workspace.py`, never committed.
 
@@ -34,9 +34,20 @@ import yaml
 TEMPLATE_DIR = Path(__file__).parent / "template"
 ID = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 DEFAULT_ID = "default"
-# A workspace's credentials: its own Notion connection and life-data hub.
+# A workspace's credentials: its own Notion connection and soma hub.
 # The app's own provider keys (Gemini, TMDB, Spotify, YouTube) stay in env.
-SECRET_NAMES = ("notion_integration_token", "life_hub_url", "life_hub_token")
+SECRET_NAMES = ("notion_integration_token", "soma_hub_url", "soma_hub_token")
+# Workspaces saved before the hub was named Soma hold its credentials under
+# these keys; they are read as the current names and rewritten on the next save.
+LEGACY_SECRET_NAMES = {"life_hub_url": "soma_hub_url", "life_hub_token": "soma_hub_token"}
+
+
+def _adopt(secrets: dict) -> dict:
+    out = dict(secrets)
+    for old, new in LEGACY_SECRET_NAMES.items():
+        if old in out:
+            out.setdefault(new, out.pop(old))
+    return out
 
 
 class InvalidOverlay(ValueError):
@@ -122,7 +133,7 @@ def save(store, id: str, overlay=None, property_ids=None, secrets=None) -> None:
     if property_ids is not None:
         record["property_ids"] = property_ids
     if secrets is not None:
-        record["secrets"] = {**record["secrets"], **secrets}
+        record["secrets"] = {**_adopt(record["secrets"]), **secrets}
     record["updated_at"] = int(time.time())
     store[f"workspace:{id}"] = record
 
@@ -131,7 +142,7 @@ def load(store, id: str) -> Workspace:
     record = store.get(f"workspace:{id}")
     if not record:
         raise UnknownWorkspace(id)
-    return build(id, record["overlay"], record["property_ids"], record["secrets"])
+    return build(id, record["overlay"], record["property_ids"], _adopt(record["secrets"]))
 
 
 def summary(store, id: str) -> dict:
@@ -142,7 +153,7 @@ def summary(store, id: str) -> dict:
         "id": id,
         "overlay": record["overlay"],
         "property_ids": sorted(record["property_ids"]),
-        "secrets_set": sorted(k for k, v in record["secrets"].items() if v),
+        "secrets_set": sorted(k for k, v in _adopt(record["secrets"]).items() if v),
         "updated_at": record.get("updated_at"),
     }
 

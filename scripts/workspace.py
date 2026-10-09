@@ -10,8 +10,8 @@ credentials, kept in the deployed app's state (operator tool).
 An overlay only lists what differs from src/core/template/databases.yaml: the
 workspace's Notion ids (`db_ids`, per-category `db_id`), its allowlists and
 instruction wording, `tasks.place_tags`. Secrets are the workspace's own Notion
-connection and life-data hub: NOTION_INTEGRATION_TOKEN, LIFE_HUB_URL,
-LIFE_HUB_TOKEN - pipe them in (`op inject`, `op read`), never as arguments.
+connection and soma hub: NOTION_INTEGRATION_TOKEN, SOMA_HUB_URL,
+SOMA_HUB_TOKEN - pipe them in (`op inject`, `op read`), never as arguments.
 A new person = push an overlay + set-secrets, then
 `just clients issue "<device>" <id>` for each device.
 """

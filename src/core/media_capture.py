@@ -9,7 +9,7 @@ from copy import deepcopy
 from hashlib import sha256
 from uuid import UUID
 
-from core import capture_clients, life_hub
+from core import capture_clients, soma_hub
 from core.media_save import same_value
 
 
@@ -131,7 +131,7 @@ def process_capture(store, caller, request_id, *, resolver=None):
         plan = job.get("resolution")
         if plan:
             try:
-                row = life_hub.read_row(plan["table"], plan["identity"], list(plan["values"]))
+                row = soma_hub.read_row(plan["table"], plan["identity"], list(plan["values"]))
                 if row and row.get("deleted_at"):
                     job["state"] = "needs_review"
                 elif row and all(

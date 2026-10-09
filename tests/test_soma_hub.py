@@ -1,15 +1,15 @@
-"""Tests for core.life_hub — the life-data hub row push."""
+"""Tests for core.soma_hub — the soma hub row push."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from core.life_hub import pull_ids, push_rows
+from core.soma_hub import pull_ids, push_rows
 from types import SimpleNamespace
 
 
 def _settings():
-    return SimpleNamespace(life_hub_url="https://hub.example/", life_hub_token="tok")
+    return SimpleNamespace(soma_hub_url="https://hub.example/", soma_hub_token="tok")
 
 
 def _client(payload=None, status=200):
@@ -66,11 +66,11 @@ class TestPushRows:
             push_rows("movies", [{"id": "1"}], settings=_settings(), client=client)
 
     def test_unconfigured_hub_raises(self):
-        with pytest.raises(RuntimeError, match="LIFE_HUB_URL"):
+        with pytest.raises(RuntimeError, match="SOMA_HUB_URL"):
             push_rows(
                 "movies",
                 [{"id": "1"}],
-                settings=SimpleNamespace(life_hub_url=None, life_hub_token=None),
+                settings=SimpleNamespace(soma_hub_url=None, soma_hub_token=None),
                 client=_client(),
             )
 
@@ -110,16 +110,16 @@ class TestPullIds:
         assert out == {"UC1"}
 
     def test_unconfigured_hub_raises(self):
-        with pytest.raises(RuntimeError, match="LIFE_HUB_URL"):
+        with pytest.raises(RuntimeError, match="SOMA_HUB_URL"):
             pull_ids(
                 "youtube_channels",
-                settings=SimpleNamespace(life_hub_url=None, life_hub_token=None),
+                settings=SimpleNamespace(soma_hub_url=None, soma_hub_token=None),
                 client=_client(),
             )
 
 
 def test_identity_read_is_bounded_and_preserves_tombstones():
-    from core.life_hub import read_row
+    from core.soma_hub import read_row
 
     row = {"id": "item", "updated_at": "revision", "hub_at": "hub", "deleted_at": "gone"}
     client = _client({"rows": [row], "next_cursor": None})
@@ -138,7 +138,7 @@ def test_identity_read_is_bounded_and_preserves_tombstones():
     ],
 )
 def test_invalid_insert_receipts_never_become_success_or_push_fallback(payload):
-    from core.life_hub import insert_rows
+    from core.soma_hub import insert_rows
 
     client = _client(payload)
     with pytest.raises(RuntimeError):
@@ -148,7 +148,7 @@ def test_invalid_insert_receipts_never_become_success_or_push_fallback(payload):
 
 
 def test_patch_requires_matching_receipt_identity_and_revision():
-    from core.life_hub import patch_row
+    from core.soma_hub import patch_row
 
     client = _client({"id": "other", "revision": {"updated_at": "new", "hub_at": "new"}})
     revision = {"updated_at": "old", "hub_at": "old"}
