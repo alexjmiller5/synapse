@@ -88,7 +88,7 @@ class TestYamlFixGuards:
         assert "Best Movies" not in allow
 
     def test_media_categories_are_hub_backed_not_notion(self):
-        """movies/tv-shows write to life-data: they carry a hub_table and NO db_id
+        """movies/tv-shows write to soma: they carry a hub_table and NO db_id
         (a db_id would put them back on the Notion hydrate/validate/write paths)."""
         for cat, table in (("movies", "movies"), ("tv-shows", "tv_shows")):
             stanza = DATABASES["databases"][cat]
@@ -102,7 +102,7 @@ class TestYamlFixGuards:
             props = DATABASES["databases"][cat]["properties"]
             assert not {"Genres", "Director", "Famous Cast Members"}.intersection(props)
 
-    def test_media_tags_allowlists_match_the_life_data_catalog(self):
+    def test_media_tags_allowlists_match_the_soma_catalog(self):
         assert set(DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]) == {
             "Favorite",
             "Sequel",
@@ -141,7 +141,7 @@ class TestYamlFixGuards:
         assert "need to watch" in instr.lower()
 
     def test_tv_status_allowlist_matches_live_options(self):
-        """The allowlist is exactly the tv_shows.status options in the life-data
+        """The allowlist is exactly the tv_shows.status options in the soma
         catalog; any other word is rejected by the hub."""
         allow = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["allowlist"]
         assert set(allow) == {

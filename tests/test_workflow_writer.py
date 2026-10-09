@@ -160,7 +160,7 @@ def test_project_backend_is_selected_from_workspace_without_notion(monkeypatch):
     )
     pull = Mock(return_value=[{"id": "a", "name": "Alpha", "phase": "Open"}])
     notion = Mock(side_effect=AssertionError("Notion must not be queried"))
-    monkeypatch.setattr("core.life_hub.pull_rows", pull)
+    monkeypatch.setattr("core.soma_hub.pull_rows", pull)
     monkeypatch.setattr(business_logic, "query_notion_db", notion)
     with workspace.use(ws):
         assert business_logic.fetch_active_projects() == (["Alpha"], {"Alpha": "a"})

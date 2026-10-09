@@ -5,7 +5,7 @@ the correct Notion API calls are made with proper data.
 """
 
 import pytest
-from core import life_hub
+from core import soma_hub
 
 
 import time
@@ -358,7 +358,7 @@ class TestGroceryPipeline:
 
 
 # ======================================================================
-# YouTube Tests - life-data, not Notion (see handlers.TestYouTubeToLifeData)
+# YouTube Tests - soma, not Notion (see handlers.TestYouTubeToSomaData)
 # ======================================================================
 @pytest.mark.usefixtures("media_hub")
 class TestYouTubePipeline:
@@ -392,7 +392,7 @@ class TestYouTubePipeline:
         yt.channels().list().execute.return_value = self.CHANNEL
         return yt
 
-    def test_new_video_pushed_to_life_data(self, mock_gemini, mock_notion):
+    def test_new_video_pushed_to_soma(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
             "youtube-videos",
@@ -405,7 +405,7 @@ class TestYouTubePipeline:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt()),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             _run(_item("https://youtu.be/abc123"))
 
@@ -448,7 +448,7 @@ class TestYouTubePipeline:
 # ======================================================================
 @pytest.mark.usefixtures("media_hub")
 class TestMovieTvPipeline:
-    def test_movie_pushed_to_life_data_and_logged_by_row_ref(self, mock_gemini, mock_notion):
+    def test_movie_pushed_to_soma_and_logged_by_row_ref(self, mock_gemini, mock_notion):
         _setup_classify_extract(
             mock_gemini,
             "movies",
@@ -456,14 +456,14 @@ class TestMovieTvPipeline:
         )
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             _run(_item("Inception"))
 
         assert push.call_args.args[0] == "movies"
         assert push.call_args.args[1][0]["id"] == "27205"
         # No movie page in Notion - only the Executions log row, carrying the
-        # life-data row reference as Created Item.
+        # soma row reference as Created Item.
         log_props = props_of(mock_notion.pages.create.call_args, "logs")
         assert log_props["Created Item"]["url"] == "movies/27205"
         assert log_props["Category"]["select"]["name"] == "movies"
@@ -668,7 +668,7 @@ class TestPodcastPipeline:
                 "core.external_data.get_spotify_metadata",
                 return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
             ),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             _run(_item("https://open.spotify.com/episode/abc"))
         row = push.call_args.args[1][0]

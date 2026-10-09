@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from media_hub import SyntheticHub
 
-from core import life_hub
+from core import soma_hub
 from core.pipeline import run_pipeline
 from helpers import make_gemini_response
 
@@ -47,7 +47,7 @@ def test_pipeline_resave_keeps_finished_and_unrequested_fields(mock_gemini, mock
         ]
     }
     with (
-        patch("core.life_hub.requests.post", hub.post),
+        patch("core.soma_hub.requests.post", hub.post),
         patch("core.pipeline.enrich_context", return_value="Synthetic video"),
     ):
         run_pipeline({"core_text": "save https://youtu.be/abc123 for later"}, [], {}, {}, [])
@@ -67,9 +67,9 @@ BINDING = {
 def save(hub, requested=None, **kwargs):
     from core.media_save import save_media
 
-    with patch("core.life_hub.requests.post", hub.post):
+    with patch("core.soma_hub.requests.post", hub.post):
         return save_media(
-            life_hub,
+            soma_hub,
             BINDING,
             "abc123",
             {"status": "Not Started"},
@@ -154,7 +154,7 @@ def test_podcast_url_reuses_legacy_id_and_preserves_consumption(monkeypatch):
         "url": "https://open.spotify.com/episode/example?si=tracking",
     }
     hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
-    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    monkeypatch.setattr(soma_hub.requests, "post", hub.post)
     result = handle_url_media(
         "podcasts",
         {
@@ -173,7 +173,7 @@ def test_article_capture_uses_the_pollers_canonical_url_identity(monkeypatch):
     from core.handlers import handle_url_media
 
     hub = SyntheticHub()
-    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    monkeypatch.setattr(soma_hub.requests, "post", hub.post)
     data = {
         "URL": "https://example.test/story/?utm_source=test&b=2&a=1",
         "Title": "Example",
@@ -194,7 +194,7 @@ def test_tombstoned_legacy_podcast_never_gets_a_new_url_identity(monkeypatch):
         "deleted_at": "gone",
     }
     hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
-    monkeypatch.setattr(life_hub.requests, "post", hub.post)
+    monkeypatch.setattr(soma_hub.requests, "post", hub.post)
     result = handle_url_media(
         "podcasts", {"URL": row["url"], "Episode Title": "Example", "Capture Intent": "save"}
     )

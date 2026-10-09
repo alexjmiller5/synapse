@@ -161,7 +161,7 @@ class TestGenerateClassificationPrompt:
         assert '"youtube-channels"' not in prompt
 
     def test_places_route_retired(self):
-        """Places moved to life-data (captured via Google Maps lists): the category
+        """Places moved to soma (captured via Google Maps lists): the category
         must be gone from the yaml and from the classifier's menu."""
         from core.config import DATABASES
 
@@ -171,7 +171,7 @@ class TestGenerateClassificationPrompt:
         assert '"tasks"' in prompt
 
     def test_trips_stanza_retired(self):
-        """Trips live in life-data; nothing writes a trips Notion DB."""
+        """Trips live in soma; nothing writes a trips Notion DB."""
         from core.config import DATABASES
 
         assert "trips" not in DATABASES["databases"]

@@ -73,7 +73,7 @@ def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
             "rejected": [],
         }
 
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     mock_gemini.models.generate_content.side_effect = [
         make_gemini_response({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})
     ]
@@ -137,7 +137,7 @@ def test_project_context_is_frozen_across_restart(workflow, monkeypatch, mock_ge
         sent.append((table, copy.deepcopy(rows)))
         raise requests.Timeout()
 
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     store = {}
     payload = {"raw_text": "Alpha task", "workspace": workflow.id, "capture_id": CAPTURE}
     with pytest.raises(requests.Timeout):
@@ -163,7 +163,7 @@ def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(
     from core.workflow import capture_scope
 
     send = Mock(return_value={})
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     payload = {"raw_text": "One", "workspace": workflow.id, "capture_id": CAPTURE}
     store = {}
     for _ in range(2):
@@ -179,7 +179,7 @@ def test_identical_text_with_distinct_capture_ids_remains_two_operations(
     workflow, monkeypatch, mock_gemini
 ):
     send = Mock(return_value={})
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     mock_gemini.models.generate_content.return_value = make_gemini_response(
         {"Name": "Do a thing", "Tags": ["Chore"]}
     )
@@ -202,7 +202,7 @@ def test_large_unicode_and_ai_metadata_survive_capture_logging(workflow, monkeyp
         {"Name": body, "Tags": ["Chore"], "Notes": body}
     )
     send = Mock(return_value={})
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     pipeline.run({"raw_text": body, "workspace": workflow.id, "capture_id": CAPTURE}, store={})
     task = next(c.args[1][0] for c in send.call_args_list if c.args[0] == "work_items")
     log = next(c.args[1][0] for c in send.call_args_list if c.args[0] == "capture_logs")
@@ -232,7 +232,7 @@ def test_preparation_failure_freezes_one_actionable_error_across_logging_retry(
             raise requests.Timeout("response lost")
         return {}
 
-    monkeypatch.setattr("core.life_hub.insert_rows", send)
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
     failure = Mock(side_effect=ValueError("Invalid model output"))
     monkeypatch.setattr(pipeline, "generate_with_retry", failure)
     payload = {"raw_text": "Do a thing", "workspace": workflow.id, "capture_id": CAPTURE}

@@ -134,7 +134,7 @@ class TestApplyBusinessLogic:
         assert result == data
 
     def test_people_route_retired(self):
-        """People live in life-data; Synapse never writes them."""
+        """People live in soma; Synapse never writes them."""
         from core.business_logic import LOGIC_HANDLERS
 
         assert "people" not in LOGIC_HANDLERS
@@ -263,7 +263,7 @@ class TestHydrateDynamicOptions:
                     rules.pop("_runtime_options", None)
 
     def test_hub_backed_categories_are_never_hydrated(self, mock_notion, monkeypatch):
-        """movies/tv-shows live in life-data - there is no Notion DB to read
+        """movies/tv-shows live in soma - there is no Notion DB to read
         options from, and their yaml allowlists ARE the catalog options. The
         env override supplies a db_id, so only the hub_table guard can stop it."""
         monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
@@ -413,7 +413,7 @@ class TestValidateConfig:
         assert issues and "could not fetch live schema" in issues[0]
 
     def test_validate_all_skips_hub_backed_categories(self, mock_notion, monkeypatch):
-        """A life-data category has no live Notion schema to drift from."""
+        """A soma category has no live Notion schema to drift from."""
         monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
         mock_notion.databases.retrieve.return_value = {"properties": {}}
         report = validate_all()

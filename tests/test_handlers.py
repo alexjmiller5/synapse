@@ -1,6 +1,6 @@
 """Tests for handlers.py — category-specific logic for all Notion DB categories."""
 
-from core import life_hub
+from core import soma_hub
 
 
 import re
@@ -172,10 +172,10 @@ class TestToHubDatetime:
 
 
 # ======================================================================
-# handle_youtube_logic - YouTube captures live in life-data, not Notion
+# handle_youtube_logic - YouTube captures live in soma, not Notion
 # ======================================================================
 @pytest.mark.usefixtures("media_hub")
-class TestYouTubeToLifeData:
+class TestYouTubeToSomaData:
     SNIPPET = {
         "items": [
             {
@@ -210,7 +210,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(False)),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             ref = handle_youtube_logic(
                 "youtube-videos",
@@ -241,7 +241,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(True)),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             handle_youtube_logic(
                 "youtube-videos",
@@ -261,7 +261,7 @@ class TestYouTubeToLifeData:
             patch("core.handlers.get_youtube", return_value=self._yt(True)),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
             patch(
-                "core.life_hub.insert_rows",
+                "core.soma_hub.insert_rows",
                 return_value={
                     "inserted": [],
                     "existing": [],
@@ -303,7 +303,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=yt),
             patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.life_hub.insert_rows") as push,
+            patch("core.soma_hub.insert_rows") as push,
         ):
             out = handle_youtube_logic(
                 "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
@@ -321,7 +321,7 @@ class TestYouTubeToLifeData:
         with (
             patch("core.handlers.get_youtube", return_value=yt),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             handle_youtube_logic(
                 "youtube-videos",
@@ -332,7 +332,7 @@ class TestYouTubeToLifeData:
 
 
 # ======================================================================
-# handle_movies_tv_logic - movies/TV live in life-data, not Notion
+# handle_movies_tv_logic - movies/TV live in soma, not Notion
 # ======================================================================
 ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
@@ -343,7 +343,7 @@ class TestHandleMoviesTv:
         data = {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]}
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205") as resolve,
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             ref = handle_movies_tv_logic("movies", data)
 
@@ -357,7 +357,7 @@ class TestHandleMoviesTv:
         assert row["status"] == "Not Started"
         assert row["tags"] == ["Favorite"]
         assert ISO_MS.match(row["updated_at"])
-        # Created Item is the life-data row reference, not a Notion URL
+        # Created Item is the soma row reference, not a Notion URL
         assert ref == "movies/27205"
         # Nothing goes to Notion for these categories any more
         mock_notion.pages.create.assert_not_called()
@@ -368,7 +368,7 @@ class TestHandleMoviesTv:
         status update must not blank an existing row's tags."""
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             handle_movies_tv_logic("movies", {"Title": "Inception", "Status": "Finished"})
         assert set(push.call_args.args[1][0]) == {"id", "status", "updated_at"}
@@ -378,7 +378,7 @@ class TestHandleMoviesTv:
         never go out empty."""
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             handle_movies_tv_logic("movies", {"Title": "Inception", "Status": ""})
         assert push.call_args.args[1][0]["status"] == "Not Started"
@@ -386,7 +386,7 @@ class TestHandleMoviesTv:
     def test_tv_shows_push_to_tv_shows_table(self):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="1396") as resolve,
-            patch("core.life_hub.insert_rows", wraps=life_hub.insert_rows) as push,
+            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
         ):
             ref = handle_movies_tv_logic(
                 "tv-shows", {"Title": "Breaking Bad", "Status": "Finished"}
@@ -398,7 +398,7 @@ class TestHandleMoviesTv:
     def test_no_tmdb_match_files_cleanup_task_and_pushes_nothing(self, mock_notion):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value=None),
-            patch("core.life_hub.insert_rows") as push,
+            patch("core.soma_hub.insert_rows") as push,
         ):
             out = handle_movies_tv_logic(
                 "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
@@ -423,7 +423,7 @@ class TestHandleMoviesTv:
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205"),
             patch(
-                "core.life_hub.insert_rows",
+                "core.soma_hub.insert_rows",
                 return_value={"inserted": [], "existing": [], "rejected": [rejected]},
             ),
         ):

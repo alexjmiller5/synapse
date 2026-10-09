@@ -396,7 +396,7 @@ class TestResolveTmdbId:
 class TestGetTalMetadata:
     @responses.activate
     def test_success(self):
-        html = "<html><body><p>This American Life episode content here</p></body></html>"
+        html = "<html><body><p>This American Soma episode content here</p></body></html>"
         responses.add(responses.GET, "https://www.thisamericanlife.org/123", body=html, status=200)
         result = get_tal_metadata("https://www.thisamericanlife.org/123")
         assert "Content:" in result

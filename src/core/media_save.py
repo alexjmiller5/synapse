@@ -7,7 +7,7 @@ from typing import Literal
 import requests
 
 from core.timeutils import now_utc_iso_ms
-from core.life_hub import InsertRejected
+from core.soma_hub import InsertRejected
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Synapse: AI middleware that captures natural-language text and routes it to
-life-data (most categories) or to Notion (tasks, plus the Executions log).
+soma (most categories) or to Notion (tasks, plus the Executions log).
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
 ## Architecture rule (the one that matters)
@@ -51,7 +51,7 @@ classifier call), token stripped from the task name.
    the LLM round-trip has mangled URLs it was meant to copy
 2. Classify → category (+ optional `related_project` / `project_action`)
 3. Extract structured fields per the workspace's category schema
-4. `apply_business_logic` + category handler → Notion writes (or a life-data
+4. `apply_business_logic` + category handler → Notion writes (or a soma
    row push); every outcome logged to the Notion Logs DB; failures create a
    High-priority task
 
@@ -63,7 +63,7 @@ the active workspace's overlay (below).
 ## Workspaces (no personal config in the repo)
 
 The repo ships only the product. One user's Notion ids, allowlists and wording,
-place tags, Notion property-id map, and Notion + life-data credentials are a
+place tags, Notion property-id map, and Notion + soma credentials are a
 **workspace** (`core/workspace.py`), stored in the app's `synapse-state` Volume
 (`store.VolumeStore`, one JSON file per key; a modal.Dict is NOT used because
 its entries expire after 7 idle days) and edited with `just workspace ...`.
@@ -78,7 +78,7 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   endpoint takes it from the token, never the body. The operator webhook takes
   an optional `workspace` field (default `default`). Dedup is per workspace.
 - App credentials (Gemini, TMDB, Spotify, YouTube) stay in `.env.tpl`; a
-  workspace's Notion token and life-data hub are workspace secrets
+  workspace's Notion token and soma hub are workspace secrets
   (`just workspace set-secrets <id>`, KEY=VALUE on stdin). Rotating one =
   re-run set-secrets from its 1Password item.
 - Without an active workspace (tests, local scripts) `current()` is the local
@@ -103,10 +103,10 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   `get_gemini_client()`, etc. (lru_cached, built on first use, `None` if the
   key is absent) — nothing is instantiated at import. `core/secrets.py`'s
   `core/secrets.get_db_id` is the one Notion DB-id lookup (active workspace).
-- **Most categories are life-data tables, not Notion DBs.** A stanza with
-  `hub_table` is one: `core/life_hub.py: push_rows` POSTs `{table, columns,
-  rows}` to the hub's `/v1/rows/push` with the `LIFE_HUB_URL` /
-  `LIFE_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
+- **Most categories are soma tables, not Notion DBs.** A stanza with
+  `hub_table` is one: `core/soma_hub.py: push_rows` POSTs `{table, columns,
+  rows}` to the hub's `/v1/rows/push` with the `SOMA_HUB_URL` /
+  `SOMA_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
   also pull rows). Push ONLY the columns you know - the hub's upsert touches
   exactly the columns sent, so a status capture never blanks tags.
   `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
@@ -140,7 +140,7 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   A `hub_table` stanza carries no `db_id` and is skipped by
   `hydrate_dynamic_options`, `validate_all`, and
   `scripts/fetch_property_ids.py`, so its yaml allowlists ARE the prompt's
-  options - keep them in step with life-data's catalog (`life property list
+  options - keep them in step with soma's catalog (`soma property list
   <table>`). The grocery inventory the extraction prompt sees comes from the
   hub too (`fetch_inventory_map`). `Created Item` on the Executions log holds
   `<table>/<id>`, not a URL - it is a Notion url property, so `log_job_outcome`
@@ -148,7 +148,7 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   whole row. A handler that wrote nothing returns `handlers.Failed(detail)`,
   which the pipeline logs as `Error(s)`; returning None there would log a
   Success over an empty result.
-- `workflow.projects` in a workspace overlay selects Life Data project reads:
+- `workflow.projects` in a workspace overlay selects Soma project reads:
   `table`, `title_column`, `status_column`, and `active_statuses` are runtime
   values. Omission retains Notion; malformed selected configuration fails
   closed. Duplicate active titles are rejected because the prompt-to-ID map
@@ -194,7 +194,7 @@ Both files are `add_local_file`d into the image at `/root/core/`.
 - All "today"/date creation goes through `core/timeutils.py`
   (`today_eastern()` / `now_eastern()`) — never `date.today()` /
   `datetime.now()` (server is UTC; late-night captures would date-shift).
-  life-data timestamps are the exception and use `now_utc_iso_ms()`: sync
+  soma timestamps are the exception and use `now_utc_iso_ms()`: sync
   ordering there is a lexicographic string compare, so UTC with milliseconds
   and a trailing `Z` is load-bearing.
 - Gemini calls go through `core.ai_engine.generate_with_retry` (tenacity on
@@ -274,7 +274,7 @@ the configured model before deployment. Never reuse another app's key.
 
 ## Media gateway contract
 
-Life Data is an approved consumer of Synapse's media-capture endpoint. Its
+Soma is an approved consumer of Synapse's media-capture endpoint. Its
 stateless gateway holds an independently minted, workspace-bound media-gateway
 credential. It delegates opaque caller subjects and an approved logical field
 set; a device bearer is never forwarded. Gateway credentials cannot invoke the

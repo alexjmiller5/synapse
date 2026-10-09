@@ -6,10 +6,10 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from core.life_hub import retain_text
+from core.soma_hub import retain_text
 from core.workflow import WorkflowWriter
 
-SETTINGS = SimpleNamespace(life_hub_url="https://hub.example", life_hub_token="synthetic")
+SETTINGS = SimpleNamespace(soma_hub_url="https://hub.example", soma_hub_token="synthetic")
 
 
 @pytest.mark.parametrize("status", [201, 412])

@@ -31,7 +31,7 @@ secrets = [modal.Secret.from_name(APP_NAME)]
 seen_inputs = modal.Dict.from_name(f"{APP_NAME}-seen-inputs", create_if_missing=True)
 
 # Durable state (store.VolumeStore over this Volume): workspaces (core.workspace:
-# each user's overlay, property ids and Notion / life-data credentials) and
+# each user's overlay, property ids and Notion / soma credentials) and
 # per-device capture tokens (core.capture_clients: hashes only, each bound to a
 # workspace). The operator edits both with scripts/workspace.py and
 # scripts/capture_clients.py.

@@ -2,7 +2,7 @@
 # Local dev:       op run --env-file=.env.tpl -- <cmd>   (see justfile)
 # Push to Modal:   just sync-secrets
 #
-# These are the APP's own provider keys. A user's Notion connection, life-data
+# These are the APP's own provider keys. A user's Notion connection, soma
 # hub and Notion ids are workspace data (src/core/workspace.py), set with
 # `just workspace set-secrets <id>` / `just workspace push <id> <dir>`.
 

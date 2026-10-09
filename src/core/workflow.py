@@ -2,7 +2,7 @@
 
 The caller supplies a persisted capture identity and a stable item/role path.
 One serialized worker owns writes to this journal. The store is the existing
-Synapse operational store, never a Life Data user table. Remote insert preserves
+Synapse operational store, never a Soma user table. Remote insert preserves
 any existing ID, including a reviewed, completed or tombstoned row.
 """
 
@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from core import life_hub
+from core import soma_hub
 from core.workspace import current
 
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -87,8 +87,8 @@ class WorkflowWriter:
         self.store = store
         self.workspace_id = _identity(workspace_id)
         self.operation_id = _identity(operation_id)
-        self.send = send or life_hub.insert_rows
-        self.retain = retain or life_hub.retain_text
+        self.send = send or soma_hub.insert_rows
+        self.retain = retain or soma_hub.retain_text
 
     def create(self, binding, role, values):
         """Freeze first intent, then deliver it without ever upserting a retry.
@@ -135,7 +135,7 @@ class WorkflowWriter:
                 text = row.get(column)
                 if not isinstance(text, str) or len(text.encode("utf-8")) <= limit:
                     continue
-                prefix = life_hub.file_key(binding["files_prefix"])
+                prefix = soma_hub.file_key(binding["files_prefix"])
                 digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 file_key = f"{prefix}/{hashlib.sha256(identity.encode()).hexdigest()}/{column}-{digest}.txt"
                 files.append({"key": file_key, "text": text, "verified": False})
@@ -183,7 +183,7 @@ def active_projects(binding, *, pull=None):
     allowed = binding["active_statuses"]
     if not isinstance(allowed, list) or not allowed or any(not isinstance(x, str) for x in allowed):
         raise ValueError("Active project status labels are required")
-    rows = (pull or life_hub.pull_rows)(table, [title, status])
+    rows = (pull or soma_hub.pull_rows)(table, [title, status])
     names, ids = [], {}
     for row in rows:
         if row.get("deleted_at") or row.get(status) not in allowed:
@@ -324,7 +324,7 @@ def prepare_item(prepare):
 def create_task(data, project_id=None, *, role="task"):
     binding = binding_for("tasks")
     if binding is None:
-        raise ValueError("Life Data tasks are not configured")
+        raise ValueError("Soma tasks are not configured")
     active = current_capture()
     if active is None:
         raise ValueError("Workflow tasks require a durable capture context")

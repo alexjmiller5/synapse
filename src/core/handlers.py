@@ -15,8 +15,8 @@ from core.external_data import (
     resolve_tmdb_id,
     sanitize_youtube_url,
 )
-from core.life_hub import pull_ids, pull_rows, push_rows
-from core import life_hub
+from core.soma_hub import pull_ids, pull_rows, push_rows
+from core import soma_hub
 from core.media_save import save_media
 from core.timeutils import now_utc_iso_ms
 
@@ -64,7 +64,7 @@ def _empty(value):
 
 
 def handle_hub_logic(category, data):
-    """A capture for any category whose stanza names a life-data `hub_table`.
+    """A capture for any category whose stanza names a soma `hub_table`.
 
     The stanza's `columns` map extracted Notion-style property names to catalog
     columns; `constants` are fixed columns (things_to_do.kind); `match_on` names
@@ -115,8 +115,8 @@ def handle_hub_logic(category, data):
     if rejected:
         message = rejected[0].get("message")
         label = row.get(match) if match else next(iter(row.values()))
-        create_cleanup_task(f"life-data rejected {label!r}: {message}")
-        return Failed(f"life-data rejected {table}/{row['id']}: {message}")
+        create_cleanup_task(f"soma rejected {label!r}: {message}")
+        return Failed(f"soma rejected {table}/{row['id']}: {message}")
 
     print(f"   ✅ Pushed {table}/{row['id']}")
     return f"{table}/{row['id']}"
@@ -147,7 +147,7 @@ def _capture_media(
             return Failed("Explicit saves require a configured saved field")
         requested[saved_column] = 1
     result = save_media(
-        life_hub,
+        soma_hub,
         {
             "table": stanza["hub_table"],
             "editable_columns": [*mapping.values(), *([saved_column] if saved_column else [])],
@@ -166,7 +166,7 @@ def _capture_media(
 def handle_youtube_logic(
     category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
 ):
-    """YouTube captures are a life-data table, not a Notion DB.
+    """YouTube captures are a soma table, not a Notion DB.
 
     A channel is pushed once (on first sight of a video from it), with a
     "Classify new Channel" cleanup task so the user chooses follow by
@@ -216,7 +216,7 @@ def handle_youtube_logic(
             "updated_at": now_utc_iso_ms(),
         }
         channel_receipt = save_media(
-            life_hub,
+            soma_hub,
             {"table": "youtube_channels", "editable_columns": []},
             channel_id,
             channel_row,
@@ -263,7 +263,7 @@ def handle_movies_tv_logic(
     explicit_properties=(),
     strict_identity=False,
 ):
-    """Movies and TV shows are life-data rows, not Notion pages.
+    """Movies and TV shows are soma rows, not Notion pages.
 
     The TMDB id IS the row id, so an unconfident match is worse than none: we
     file a cleanup task and write nothing rather than pin a row to the wrong
@@ -331,11 +331,11 @@ def handle_url_media(
         raw_url = (data.get("URL") or "").strip()
         url = canonical_media_url(raw_url)
         if category == "podcasts":
-            identity = life_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
+            identity = soma_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
         else:
             # Some producer IDs deliberately retain fragments and trailing slashes.
             # Check exact identity before applying ordinary URL normalization.
-            exact = life_hub.read_row(stanza["hub_table"], raw_url, ["id"])
+            exact = soma_hub.read_row(stanza["hub_table"], raw_url, ["id"])
             if exact:
                 identity = raw_url
             elif "#" in raw_url:

@@ -52,7 +52,7 @@ def test_store_round_trip_keeps_secrets_out_of_the_summary():
     ws.save(
         store,
         "alpha",
-        secrets={"notion_integration_token": "secret-n", "life_hub_url": "https://hub"},
+        secrets={"notion_integration_token": "secret-n", "soma_hub_url": "https://hub"},
     )
     loaded = ws.load(store, "alpha")
     assert loaded.id == "alpha"
@@ -61,7 +61,7 @@ def test_store_round_trip_keeps_secrets_out_of_the_summary():
     assert loaded.secrets["notion_integration_token"] == "secret-n"
     summary = ws.summary(store, "alpha")
     assert "secret-n" not in repr(summary)
-    assert summary["secrets_set"] == ["life_hub_url", "notion_integration_token"]
+    assert summary["secrets_set"] == ["notion_integration_token", "soma_hub_url"]
 
 
 def test_unknown_secret_names_are_refused():
@@ -89,3 +89,22 @@ def test_template_ships_no_notion_ids():
     template = ws.template()
     assert "db_ids" not in template or not any(template["db_ids"].values())
     assert not [c for c, d in template["databases"].items() if d.get("db_id")]
+
+
+def test_hub_credentials_saved_under_the_pre_soma_keys_still_load():
+    store = {
+        "workspace:alex": {
+            "overlay": {},
+            "property_ids": {},
+            "secrets": {"life_hub_url": "https://hub.example", "life_hub_token": "t"},
+        }
+    }
+    loaded = ws.load(store, "alex")
+    assert loaded.secrets == {"soma_hub_url": "https://hub.example", "soma_hub_token": "t"}
+    assert ws.summary(store, "alex")["secrets_set"] == ["soma_hub_token", "soma_hub_url"]
+    ws.save(store, "alex", secrets={"notion_integration_token": "n"})
+    assert store["workspace:alex"]["secrets"] == {
+        "soma_hub_url": "https://hub.example",
+        "soma_hub_token": "t",
+        "notion_integration_token": "n",
+    }
