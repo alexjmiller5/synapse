@@ -1,7 +1,12 @@
-"""Stateful synthetic HTTP boundary for media capture tests."""
+"""Stateful synthetic HTTP boundary for media and workflow capture tests."""
 
 from copy import deepcopy
+import re
 import requests
+
+# The real hub's rows/insert contract: a new row carries its own UTC
+# millisecond edit clock, or the hub rejects it (validate.js validEditTimestamp).
+EDIT_CLOCK = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z")
 
 
 class SyntheticHub:
@@ -30,11 +35,21 @@ class SyntheticHub:
             if self.before_insert and route == "insert":
                 self.before_insert(rows)
                 self.before_insert = None
-            inserted, existing = [], []
+            inserted, existing, rejected = [], [], []
             for row in body["rows"]:
                 key = row["id"]
                 if route == "insert" and key in rows:
                     existing.append(key)
+                    continue
+                if route == "insert" and not EDIT_CLOCK.fullmatch(str(row.get("updated_at"))):
+                    rejected.append(
+                        {
+                            "id": key,
+                            "col": "updated_at",
+                            "rule": "required" if row.get("updated_at") is None else "type",
+                            "message": "updated_at must be a valid UTC millisecond timestamp.",
+                        }
+                    )
                     continue
                 rows.setdefault(key, {}).update(row)
                 rows[key]["hub_at"] = "2026-01-01T00:00:00.001Z"
@@ -42,7 +57,7 @@ class SyntheticHub:
                 inserted.append(key)
             self.writes.append((route, deepcopy(body)))
             result = (
-                {"inserted": inserted, "existing": existing, "rejected": []}
+                {"inserted": inserted, "existing": existing, "rejected": rejected}
                 if route == "insert"
                 else {"upserted": len(inserted), "rejected": []}
             )

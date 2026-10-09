@@ -112,7 +112,11 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
   failed scan never returns a partial inventory. Workflow adapters use
   `insert_rows` for stable-ID creation (preserves existing/tombstoned rows and
-  verifies exhaustive receipts) and `patch_row` for revision-guarded edits.
+  verifies exhaustive receipts; stamps the `updated_at` the hub requires on
+  every inserted row, and names each rejection's column and rule in
+  `InsertRejected`) and `patch_row` for revision-guarded edits. Test fakes
+  of the hub (`tests/media_hub.py`) enforce that insert contract: a fake that
+  accepts what the real hub rejects hides a 100% production failure.
   Neither helper retries ambiguous writes or falls back to upsert. The
   CATALOG enforces what this yaml used to (required fields, option
   vocabularies, uniqueness, defaults); a rejected row files a cleanup task

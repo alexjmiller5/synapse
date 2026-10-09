@@ -73,12 +73,38 @@ def test_second_page_failure_is_not_partial_success():
 def test_insert_receipt_covers_created_and_preexisting_without_upsert():
     receipt = {"inserted": ["a"], "existing": ["b"], "rejected": []}
     client = client_for(receipt)
-    rows = [{"id": "a", "title": "New"}, {"id": "b", "title": "Must preserve completed"}]
+    rows = [
+        {"id": "a", "title": "New", "updated_at": STAMP},
+        {"id": "b", "title": "Must preserve completed", "updated_at": STAMP},
+    ]
     assert soma_hub.insert_rows("tasks", rows, settings=SETTINGS, client=client) == receipt
     assert client.post.call_count == 1
     call = client.post.call_args
     assert call.args[0] == "https://hub.example/v1/rows/insert"
-    assert call.kwargs["json"] == {"table": "tasks", "columns": ["id", "title"], "rows": rows}
+    assert call.kwargs["json"] == {
+        "table": "tasks",
+        "columns": ["id", "title", "updated_at"],
+        "rows": rows,
+    }
+
+
+def test_insert_supplies_the_edit_clock_the_hub_requires_without_touching_the_caller():
+    client = client_for({"inserted": ["a", "b"], "existing": [], "rejected": []})
+    frozen = {"id": "a", "title": "Frozen intent"}
+    rows = [frozen, {"id": "b", "title": "Own clock", "updated_at": STAMP}]
+    soma_hub.insert_rows("tasks", rows, settings=SETTINGS, client=client)
+    sent = client.post.call_args.kwargs["json"]
+    assert "updated_at" in sent["columns"]
+    assert soma_hub._stamp(sent["rows"][0]["updated_at"])
+    assert sent["rows"][1]["updated_at"] == STAMP
+    assert "updated_at" not in frozen
+
+
+def test_rejection_names_each_row_and_reason():
+    rejected = {"id": "a", "col": "tags", "rule": "options", "message": "Not an option."}
+    client = client_for({"inserted": [], "existing": [], "rejected": [rejected]})
+    with pytest.raises(soma_hub.InsertRejected, match=r"a: tags options \(Not an option\.\)"):
+        soma_hub.insert_rows("tasks", [{"id": "a"}], settings=SETTINGS, client=client)
 
 
 @pytest.mark.parametrize(

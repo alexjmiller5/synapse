@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import requests
 
+from core.timeutils import now_utc_iso_ms
 from core.workspace import current
 
 
@@ -149,12 +150,16 @@ def insert_rows(table, rows, *, settings=None, client=None):
 
     The caller persists and reuses its original IDs on an ambiguous outcome.
     Partial rejection or an incomplete receipt raises; there is no blind retry.
+    The hub rejects an insert row without its own UTC millisecond `updated_at`,
+    so a row that lacks one is sent stamped with the attempt time.
     """
     expected = [row.get("id") for row in rows]
     if not all(_identity(value) for value in expected) or len(set(expected)) != len(expected):
         raise ValueError("Rows require distinct, nonempty string IDs")
     if not rows:
         return {"inserted": [], "existing": [], "rejected": []}
+    stamp = now_utc_iso_ms()
+    rows = [row if "updated_at" in row else {**row, "updated_at": stamp} for row in rows]
     out = _post(
         "/v1/rows/insert",
         {"table": table, "columns": sorted({k for row in rows for k in row}), "rows": rows},
@@ -164,7 +169,13 @@ def insert_rows(table, rows, *, settings=None, client=None):
     if not all(isinstance(out.get(key), list) for key in ("inserted", "existing", "rejected")):
         raise RuntimeError("Soma returned an invalid insert receipt")
     if out["rejected"]:
-        raise InsertRejected(f"Soma rejected {len(out['rejected'])} rows")
+        reasons = "; ".join(
+            f"{r.get('id')}: {r.get('col')} {r.get('rule')} ({r.get('message')})"
+            if isinstance(r, dict)
+            else repr(r)
+            for r in out["rejected"]
+        )
+        raise InsertRejected(f"Soma rejected {len(out['rejected'])} rows: {reasons}")
     accepted = out["inserted"] + out["existing"]
     if (
         not all(_identity(value) for value in accepted)
