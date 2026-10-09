@@ -92,8 +92,8 @@ databases:
         instruction: "The user's full original text."
       Tags:
         type: "multi_select"
-        allowlist: ["Animation", "Business", "Coding", "Counting Apps", "Dating Apps", "Desktop Applications", "Educational", "Embedded", "Games", "Google Workspace", "LLM-Related", "Music", "Product", "Productivity", "Social Media", "Tech Consulting", "Web Scrapers"]
-        instruction: "Select relevant tags from the list."
+        allowlist: ["Animation", "Business", "Coding", "Counting Apps", "Dating Apps", "Desktop Applications", "Educational", "Embedded", "Games", "Google Workspace", "LLM-Related", "Music", "Product", "Productivity", "Social Media", "Tech Consulting", "Web Scrapers", "Hobby"]
+        instruction: "Select relevant tags from the list. Add 'Hobby' when the user calls it a hobby idea, something to do for fun, or says it has no business case (keep the domain tags too)."
       Status:
         type: "status"
         required: true

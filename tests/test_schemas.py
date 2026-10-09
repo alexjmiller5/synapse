@@ -135,6 +135,34 @@ class TestYamlFixGuards:
             "Educational",
         }
 
+    def test_ideas_tags_allowlist_matches_the_life_data_catalog(self):
+        assert set(DATABASES["databases"]["ideas"]["properties"]["Tags"]["allowlist"]) == {
+            "Animation",
+            "Business",
+            "Coding",
+            "Counting Apps",
+            "Dating Apps",
+            "Desktop Applications",
+            "Educational",
+            "Embedded",
+            "Games",
+            "Google Workspace",
+            "LLM-Related",
+            "Music",
+            "Product",
+            "Productivity",
+            "Social Media",
+            "Tech Consulting",
+            "Web Scrapers",
+            "Hobby",
+        }
+
+    def test_ideas_hobby_context_maps_to_hobby_tag(self):
+        """A fun idea with no business case is Someday + Hobby, never Canceled."""
+        instr = DATABASES["databases"]["ideas"]["properties"]["Tags"]["instruction"].lower()
+        for cue in ("hobby", "for fun", "no business case"):
+            assert cue in instr
+
     def test_movies_status_priority_keywords(self):
         instr = DATABASES["databases"]["movies"]["properties"]["Status"]["instruction"]
         assert "priority movie" in instr.lower()
