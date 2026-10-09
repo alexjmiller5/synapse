@@ -102,6 +102,29 @@ def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
     mock_notion.pages.create.assert_not_called()
 
 
+def test_capture_lands_task_and_execution_through_the_real_insert_transport(
+    workflow, media_hub, mock_gemini, mock_notion
+):
+    """The hub rejects insert rows without an edit clock; every capture must still land."""
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})
+    ]
+    store = {}
+    payload = {
+        "raw_text": "Do a thing",
+        "source": "test-client",
+        "workspace": workflow.id,
+        "capture_id": CAPTURE,
+    }
+    pipeline.run(payload, store=store)
+    (task,) = media_hub.rows["work_items"].values()
+    (execution,) = media_hub.rows["capture_logs"].values()
+    assert task["title"] == "Do a thing"
+    assert execution["created_item"] == f"work_items/{task['id']}"
+    assert execution["code_execution"] == "Success"
+    assert next(v for k, v in store.items() if k.startswith("capture:"))["completed"]
+
+
 def test_missing_durable_identity_or_store_fails_before_any_capture_effect(
     workflow, mock_gemini, mock_notion
 ):
