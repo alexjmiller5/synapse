@@ -80,7 +80,10 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
 - App credentials (Gemini, TMDB, Spotify, YouTube) stay in `.env.tpl`; a
   workspace's Notion token and soma hub are workspace secrets
   (`just workspace set-secrets <id>`, KEY=VALUE on stdin). Rotating one =
-  re-run set-secrets from its 1Password item.
+  re-run set-secrets from its 1Password item. The `default` workspace's hub
+  token is its own enrollment with the Soma profile `synapse-workspace-v1`
+  (broad `tables:read`/`tables:write` plus read/write `raw/synapse-executions/`;
+  copy in the Synapse ENV field `SOMA_HUB_TOKEN`).
 - Without an active workspace (tests, local scripts) `current()` is the local
   one: overlay + property ids from `$SYNAPSE_WORKSPACE_DIR`, credentials from
   env. Tests use `tests/fixtures/workspace` (fake ids). Local tools take
@@ -106,8 +109,9 @@ Both files are `add_local_file`d into the image at `/root/core/`.
 - **Most categories are soma tables, not Notion DBs.** A stanza with
   `hub_table` is one: `core/soma_hub.py: push_rows` POSTs `{table, columns,
   rows}` to the hub's `/v1/rows/push` with the `SOMA_HUB_URL` /
-  `SOMA_HUB_TOKEN` settings (a `tables:read,tables:write` token: the handlers
-  also pull rows). Push ONLY the columns you know - the hub's upsert touches
+  `SOMA_HUB_TOKEN` settings (broad `tables:read,tables:write`: the handlers
+  also pull rows, and the hub refuses table-scoped writes to `groceries`,
+  `ideas`, `movies` and `tv_shows`). Push ONLY the columns you know - the hub's upsert touches
   exactly the columns sent, so a status capture never blanks tags.
   `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
   failed scan never returns a partial inventory. Workflow adapters use
