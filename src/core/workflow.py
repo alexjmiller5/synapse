@@ -14,10 +14,11 @@ import re
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core import soma_hub
+from core.timeutils import today_eastern
 from core.workspace import current
 
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -38,7 +39,7 @@ def _identity(value):
 
 def binding_for(kind):
     active = _ACTIVE.get()
-    config = active.bindings if active is not None else current().databases.get("workflow", {})
+    config = active.bindings if active is not None else current().config.get("workflow", {})
     if not isinstance(config, dict):
         raise ValueError("Invalid workflow configuration")
     if kind not in config:
@@ -199,17 +200,16 @@ def active_projects(binding, *, pull=None):
     return names, ids
 
 
-def accepted_capture(payload, workspace_id, *, require_identity=False):
+def accepted_capture(payload, workspace_id):
     """The durable queue payload carries identity across worker retries.
 
-    Clients preserve capture_id across HTTP retries. Legacy clients may omit
-    it, but cannot obtain HTTP retry deduplication from a text hash on the new
-    workflow path. Authentication supplies workspace_id; body workspace is
-    deliberately ignored here.
+    Clients preserve capture_id across HTTP retries; identical text with a new
+    ID is a new capture. Authentication supplies workspace_id; body workspace
+    is deliberately ignored here.
     """
-    if require_identity and "capture_id" not in payload:
-        raise ValueError("capture_id is required for workflow capture retries")
-    capture_id = payload["capture_id"] if "capture_id" in payload else str(uuid4())
+    if "capture_id" not in payload:
+        raise ValueError("capture_id is required for capture retries")
+    capture_id = payload["capture_id"]
     try:
         if not isinstance(capture_id, str) or str(UUID(capture_id)) != capture_id:
             raise ValueError
@@ -232,8 +232,6 @@ class CaptureJournal:
 
     def __init__(self, store, payload):
         accepted = accepted_capture(payload, payload["workspace"])
-        if "capture_id" not in payload:
-            raise ValueError("Capture identity must already be durable at acceptance")
         self.store = store
         identity = json.dumps(
             [accepted["workspace"], accepted["capture_id"]], separators=(",", ":")
@@ -279,7 +277,7 @@ def capture_scope(store, payload):
     if payload.get("workspace") != current().id:
         raise ValueError("Capture workspace does not match the authenticated context")
     journal = CaptureJournal(store, payload)
-    bindings = journal.checkpoint("bindings", lambda: current().databases.get("workflow", {}))
+    bindings = journal.checkpoint("bindings", lambda: current().config.get("workflow", {}))
     task_binding = bindings.get("tasks")
     day = (
         journal.checkpoint("task_day", lambda: _task_day(task_binding))
@@ -370,3 +368,28 @@ def log_execution(
     if source is not None:
         values["Source"] = source
     return active.writer.create(binding, f"item/{active.item_index}/execution", values)
+
+
+def _followup(name, priority, link_url, role):
+    values = {
+        "Name": name,
+        "Status": "To Do",
+        "Tags": ["Chore"],
+        "Due Date": task_day() or today_eastern().isoformat(),
+        "Priority": priority,
+    }
+    if link_url:
+        values["Links"] = link_url
+    return create_task(values, role=role)
+
+
+def create_cleanup_task(desc, link_url=None):
+    """A low-priority task asking the user to finish what Synapse could not."""
+    print(f"🧹 Creating cleanup task: {desc}")
+    return _followup(desc, "Low", link_url, "cleanup")
+
+
+def create_high_priority_task(desc, link_url=None):
+    """The capture failed before anything was written: ask the user to file it."""
+    prefix = "Classify the following thought (it failed due to pipeline errors): "
+    return _followup(prefix + desc, "High", link_url, "error-task")

@@ -1,5 +1,6 @@
-# Test workspace overlay: fake Notion ids over the product template.
-databases:
+# Test workspace overlay over the product template: the workflow bindings a
+# real workspace carries, against the fixture catalog's tables.
+categories:
   podcasts:
     saved_column: saved
   articles:
@@ -10,9 +11,36 @@ databases:
     saved_column: saved
   youtube-videos:
     saved_column: saved
-  logs:
-    db_id: fake-logs-db-id
+workflow:
   tasks:
-    db_id: fake-tasks-db-id
-db_ids:
-  projects: fake-projects-db-id
+    table: tasks
+    columns:
+      Name: title
+      Status: status
+      Priority: priority
+      Due Date: due_date
+      Tags: tags
+      Links: links
+      Notes: notes
+      Project: project_ids
+    defaults:
+      Status: To Do
+  executions:
+    table: synapse_executions
+    columns:
+      Raw Input: raw_input
+      Category: category
+      Code Execution: code_execution
+      Error Details: error_details
+      AI Summary: ai_summary
+      Created Item: created_item
+      Tags: tags
+      Source: source
+      Outcome: outcome
+    defaults:
+      Outcome: To Review
+  projects:
+    table: projects
+    title_column: title
+    status_column: status
+    active_statuses: [To Do, In progress]

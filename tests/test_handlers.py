@@ -1,4 +1,4 @@
-"""Tests for handlers.py — category-specific logic for all Notion DB categories."""
+"""Tests for handlers.py — category-specific logic for the Soma-backed categories."""
 
 from core import soma_hub
 
@@ -14,14 +14,19 @@ from core.handlers import (
     handle_hub_logic,
     handle_youtube_logic,
     handle_movies_tv_logic,
-    handle_default_logic,
 )
-from core.config import DATABASES
-from helpers import sent_props
+from core.config import CATEGORIES
+
+
+@pytest.fixture
+def cleanup():
+    """The cleanup task a handler files (a Soma task row in a real capture)."""
+    with patch("core.handlers.create_cleanup_task") as filed:
+        yield filed
 
 
 # ======================================================================
-# handle_hub_logic - every yaml stanza with hub_table + columns
+# handle_hub_logic - every category stanza with a table + columns
 # ======================================================================
 class TestHubHandler:
     def _push(self):
@@ -70,7 +75,7 @@ class TestHubHandler:
         row = push.call_args.args[1][0]
         assert row["kind"] == "Ambition" and row["tags"] == ["Adventure"]
 
-    def test_rejected_row_files_a_cleanup_task_and_fails(self, mock_notion):
+    def test_rejected_row_files_a_cleanup_task_and_fails(self, cleanup):
         with (
             patch("core.handlers.pull_rows", return_value=[]),
             patch(
@@ -82,8 +87,8 @@ class TestHubHandler:
         ):
             out = handle_hub_logic("groceries", {"Name": "Quinoa", "Status": "On List"})
         assert isinstance(out, Failed) and "category is required" in out.detail
-        mock_notion.pages.create.assert_called_once()
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        cleanup.assert_called_once()
+        name = cleanup.call_args.args[0]
         assert "Quinoa" in name and "rejected" in name
 
     def test_bookmark_matches_on_url(self):
@@ -110,7 +115,7 @@ class TestHubHandler:
         "Tags": ["Money"],
         "_fill_only": ["Description", "Tags"],
     }
-    REASON = DATABASES["databases"]["bookmarks"]["review_if_missing"]["Title"]
+    REASON = CATEGORIES["bookmarks"]["review_if_missing"]["Title"]
 
     def _known(self, **cols):
         row = {"id": "bm1", "url": "https://x.com", "title": None, "description": None}
@@ -206,7 +211,7 @@ class TestYouTubeToSomaData:
         yt.channels().list().execute.return_value = self.CHANNEL
         return yt
 
-    def test_new_channel_and_video_are_pushed(self, mock_notion):
+    def test_new_channel_and_video_are_pushed(self, cleanup):
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(False)),
             patch("core.handlers.known_channel_ids", return_value=set()),
@@ -233,8 +238,8 @@ class TestYouTubeToSomaData:
         assert vid["status"] == "Not Started" and vid["tags"] == ["Classic"]
         assert vid["duration_s"] == 213 and vid["is_short"] == 0
         assert vid["published_at"] == "2009-10-25T06:57:33.000Z"
-        mock_notion.pages.create.assert_called_once()  # the "Classify new Channel" cleanup task
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        cleanup.assert_called_once()  # the "Classify new Channel" cleanup task
+        name = cleanup.call_args.args[0]
         assert "Rick Astley" in name
 
     def test_known_channel_pushes_only_the_video(self):
@@ -250,13 +255,15 @@ class TestYouTubeToSomaData:
         assert [c.args[0] for c in push.call_args_list] == ["youtube_videos"]
         assert push.call_args.args[1][0]["status"] == "Finished"
 
-    def test_no_video_id_raises(self):
-        with pytest.raises(ValueError):
-            handle_youtube_logic(
-                "youtube-videos", {"Video URL": "https://www.youtube.com/@fireship"}
-            )
+    def test_no_video_id_files_cleanup_task_and_fails(self, cleanup):
+        """Deterministic, nothing written: a retry could never succeed."""
+        out = handle_youtube_logic(
+            "youtube-videos", {"Video URL": "https://www.youtube.com/@fireship"}
+        )
+        assert isinstance(out, Failed) and "No YouTube video ID" in out.detail
+        assert "youtube.com/@fireship" in cleanup.call_args.args[0]
 
-    def test_rejected_push_files_cleanup_task_and_fails(self, mock_notion):
+    def test_rejected_push_files_cleanup_task_and_fails(self, cleanup):
         with (
             patch("core.handlers.get_youtube", return_value=self._yt(True)),
             patch("core.handlers.known_channel_ids", return_value={"UCuAXFkgsw1L7xaCfnd5JJOw"}),
@@ -277,16 +284,16 @@ class TestYouTubeToSomaData:
             )
         assert isinstance(out, Failed) and "insert_rejected" in out.detail
 
-    def test_no_youtube_client_files_cleanup_task_and_fails(self, mock_notion):
+    def test_no_youtube_client_files_cleanup_task_and_fails(self, cleanup):
         with patch("core.handlers.get_youtube", return_value=None):
             out = handle_youtube_logic(
                 "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
             )
         assert isinstance(out, Failed)
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        name = cleanup.call_args.args[0]
         assert "dQw4w9WgXcQ" in name
 
-    def test_video_not_found_files_cleanup_task_and_fails(self, mock_notion):
+    def test_video_not_found_files_cleanup_task_and_fails(self, cleanup):
         yt = MagicMock()
         yt.videos().list().execute.return_value = {"items": []}
         with patch("core.handlers.get_youtube", return_value=yt):
@@ -294,10 +301,10 @@ class TestYouTubeToSomaData:
                 "youtube-videos", {"Video URL": "https://youtu.be/dQw4w9WgXcQ"}
             )
         assert isinstance(out, Failed)
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        name = cleanup.call_args.args[0]
         assert "dQw4w9WgXcQ" in name
 
-    def test_channel_not_found_files_cleanup_task_and_fails(self, mock_notion):
+    def test_channel_not_found_files_cleanup_task_and_fails(self, cleanup):
         yt = self._yt(False)
         yt.channels().list().execute.return_value = {"items": []}
         with (
@@ -310,7 +317,7 @@ class TestYouTubeToSomaData:
             )
         assert isinstance(out, Failed)
         assert push.call_count == 0  # no half-written video row without its channel
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        name = cleanup.call_args.args[0]
         assert "UCuAXFkgsw1L7xaCfnd5JJOw" in name
 
     def test_missing_duration_pushes_row_with_no_short_flag(self):
@@ -339,7 +346,7 @@ ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 @pytest.mark.usefixtures("media_hub")
 class TestHandleMoviesTv:
-    def test_confident_match_pushes_one_row(self, mock_notion):
+    def test_confident_match_pushes_one_row(self, cleanup):
         data = {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]}
         with (
             patch("core.handlers.resolve_tmdb_id", return_value="27205") as resolve,
@@ -360,8 +367,7 @@ class TestHandleMoviesTv:
         # Created Item is the soma row reference, not a Notion URL
         assert ref == "movies/27205"
         # Nothing goes to Notion for these categories any more
-        mock_notion.pages.create.assert_not_called()
-        mock_notion.pages.update.assert_not_called()
+        cleanup.assert_not_called()
 
     def test_tags_omitted_when_not_extracted(self):
         """Push only the columns you have - the hub upsert touches only those, so a
@@ -395,7 +401,7 @@ class TestHandleMoviesTv:
         assert push.call_args.args[0] == "tv_shows"
         assert ref == "tv_shows/1396"
 
-    def test_no_tmdb_match_files_cleanup_task_and_pushes_nothing(self, mock_notion):
+    def test_no_tmdb_match_files_cleanup_task_and_pushes_nothing(self, cleanup):
         with (
             patch("core.handlers.resolve_tmdb_id", return_value=None),
             patch("core.soma_hub.insert_rows") as push,
@@ -408,12 +414,11 @@ class TestHandleMoviesTv:
         # nothing was written: the pipeline must not log this as a Success
         assert isinstance(out, Failed)
         assert "Some Obscure Film" in out.detail
-        mock_notion.pages.create.assert_called_once()
-        props = sent_props(mock_notion.pages.create, "tasks")
-        assert "Some Obscure Film" in props["Name"]["title"][0]["text"]["content"]
-        assert "TMDB" in props["Name"]["title"][0]["text"]["content"]
+        cleanup.assert_called_once()
+        name = cleanup.call_args.args[0]
+        assert "Some Obscure Film" in name and "TMDB" in name
 
-    def test_rejected_row_files_cleanup_task_with_the_rule_message(self, mock_notion):
+    def test_rejected_row_files_cleanup_task_with_the_rule_message(self, cleanup):
         rejected = {
             "id": "27205",
             "col": "status",
@@ -431,16 +436,6 @@ class TestHandleMoviesTv:
 
         assert isinstance(out, Failed)
         assert "insert_rejected" in out.detail
-        mock_notion.pages.create.assert_called_once()
-        name = sent_props(mock_notion.pages.create, "tasks")["Name"]["title"][0]["text"]["content"]
+        cleanup.assert_called_once()
+        name = cleanup.call_args.args[0]
         assert "insert_rejected" in name
-
-
-# ======================================================================
-# handle_default_logic
-# ======================================================================
-class TestHandleDefault:
-    def test_creates_page(self, mock_notion):
-        data = {"Description": "Random idea", "Tags": ["Tech"]}
-        handle_default_logic("ideas", data)
-        mock_notion.pages.create.assert_called_once()

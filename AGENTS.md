@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Synapse: AI middleware that captures natural-language text and routes it to
-soma (most categories) or to Notion (tasks, plus the Executions log).
+Synapse: AI middleware that captures natural-language text and files it as
+Soma rows: a task or a category row per item, plus one execution log row.
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
 ## Architecture rule (the one that matters)
@@ -13,14 +13,14 @@ tests or on any future platform.
 
 - Webhook → worker handoff is `process.spawn(payload)` — Modal's spawn IS the
   queue. Do not add Pub/Sub/Redis/celery.
-- `process` runs with `max_containers=1`: Notion dedupe is query-then-create,
-  not atomic, so runs must be serialized. Don't raise it.
-- Exact resends are dropped server-side: `run(payload, seen=...)` hashes the
-  stripped `raw_text` and skips it when the same hash was processed inside
-  `pipeline.DEDUP_WINDOW_S` (24h). The store is the `synapse-seen-inputs`
-  `modal.Dict` (app.py); the key is written only AFTER a run completes, so a
-  crashed run still gets its Modal retry. Receptor's iOS background uploads
-  re-send when a success callback is lost - this is the backstop for that.
+- `process` runs with `max_containers=1`: one serialized worker owns the
+  capture journals and media receipts in the operational store, and
+  name/url dedupe (groceries, bookmarks) is query-then-write, not atomic.
+  Don't raise it.
+- Resends are idempotent by `capture_id`: every capture carries a client
+  UUID, and `run(payload, store)` journals it (`core.workflow`), so a
+  Receptor upload re-sent after a lost success callback replays the frozen
+  result instead of writing twice.
 - Authenticated entrypoints:
   - `webhook` (`requires_proxy_auth=True`): the OPERATOR path (`just recept`,
     agents) - `Modal-Key` + `Modal-Secret` headers, workspace credentials.
@@ -38,60 +38,84 @@ tests or on any future platform.
 
 ## The pipeline (`core/pipeline.py: run`)
 
-Payload: `{"raw_text": str, "source": str | null}`. `source` is a free-form
-caller label naming the surface that captured it (Receptor's table is in its
-AGENTS.md: `ios-app`, `macos-panel`, `share-send`, `app-shortcut`,
-`hammerspoon-hyper-r`, ...; plus `agent`, `cli`) logged as the execution's
-`Source` select (new labels auto-create options); Synapse never parses it. A standalone `pj` token in text or context forces a project task
+Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
+`source` is a free-form caller label naming the surface that captured it
+(Receptor's table is in its AGENTS.md: `ios-app`, `macos-panel`,
+`share-send`, `app-shortcut`, `hammerspoon-hyper-r`, ...; plus `agent`,
+`cli`) logged as the execution's free-text `source`; Synapse never parses it. A standalone `pj` token in text or context forces a project task
 (`PJ_KEYWORD`): category tasks, project linked (contains-match, else one
 classifier call), token stripped from the task name.
 
 1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
    skipped entirely (verbatim pass-through) when the text has no `@`/`$` —
    the LLM round-trip has mangled URLs it was meant to copy
-2. Classify → category (+ optional `related_project` / `project_action`)
-3. Extract structured fields per the workspace's category schema
-4. `apply_business_logic` + category handler → Notion writes (or a soma
-   row push); every outcome logged to the Notion Logs DB; failures create a
-   High-priority task
+2. Classify → category (+ optional `related_project`)
+3. Extract structured fields: the prompt and JSON schema are built from the
+   category's `prompts.yaml` stanza over its table's Soma catalog (below)
+4. `apply_business_logic` + category handler → Soma rows; every outcome is
+   an execution row; a failed preparation files a High-priority task
 
-Everything is YAML-driven: `src/core/template/databases.yaml` (schemas,
-generic allowlists, per-field extraction instructions) and
-`src/core/template/prompts.yaml` (system prompts), each run's copy merged with
-the active workspace's overlay (below).
+## The catalog enforces, Synapse interprets
+
+Soma's catalog owns each column's contract: type, required, select options
+and their `d` meanings, defaults, enforced invariants. `core/catalog.py`
+fetches `GET /v1/catalog`, keeps the slice for the tables the workspace config
+names, and caches it in the operational store (`catalog:<workspace>`): reread
+after `TTL_S` (1 h) with ETag revalidation, dropped when the hub rejects a
+write (a `rejected` list, or HTTP 400/422 - the contract may have changed),
+served stale when the hub is unreachable. `ai_engine.fields(category)` joins
+it with `src/core/template/prompts.yaml`, which holds only interpretation:
+classifier descriptions and precedence, each category's `table` / `columns`
+/ `capture_columns` wiring and per-field `instruction`s. A field `allowlist`
+narrows the catalog's options to the values Synapse may choose (values the
+catalog lacks are dropped with a warning) and its instruction then owns their
+meaning - tasks need one because their catalog options are the preserved
+historical vocabulary; `required: true` makes the extractor always answer a
+field the catalog leaves optional. Capture fields are never forced and get no
+default, so a neutral mention never resets a stored status. The prompt lists
+un-narrowed options with their meanings, the catalog default of fields the
+row needs, and the table's enforced invariant texts. Never copy a type,
+option list or default into the yaml: change the catalog (`soma property
+set`).
 
 ## Workspaces (no personal config in the repo)
 
-The repo ships only the product. One user's Notion ids, allowlists and wording,
-place tags, Notion property-id map, and Notion + soma credentials are a
+The repo ships only the product. One user's workflow table bindings, wording
+and allowlist overrides, place tags and Soma hub credentials are a
 **workspace** (`core/workspace.py`), stored in the app's `synapse-state` Volume
 (`store.VolumeStore`, one JSON file per key; a modal.Dict is NOT used because
 its entries expire after 7 idle days) and edited with `just workspace ...`.
 
-- A workspace's config = template deep-merged with its overlay (dicts merge,
-  lists and scalars replace). The overlay may only touch categories and
-  properties the template has. `tasks.place_tags` join the Tags allowlist.
-- `core.config.DATABASES` / `PROMPTS` / `PROPERTY_IDS` are live views of
+- A workspace's config = `prompts.yaml` deep-merged with its overlay (dicts
+  merge, lists and scalars replace). The overlay may only touch categories
+  and properties the template has (under `categories`), plus its `workflow`
+  bindings. `categories.tasks.place_tags` join the Tags allowlist.
+- `core.config.PROMPTS` / `CATEGORIES` are live views of
   `workspace.current()`; the worker wraps each capture in
-  `workspace.use(workspace.load(...))`, so the pipeline code is workspace-blind.
+  `workspace.use(workspace.load(store, ...))`, so the pipeline code is
+  workspace-blind and the catalog cache lands in that store.
 - Device tokens (`core/capture_clients.py`) carry their workspace; the capture
   endpoint takes it from the token, never the body. The operator webhook takes
-  an optional `workspace` field (default `default`). Dedup is per workspace.
+  an optional `workspace` field (default `default`). Capture journals are
+  per workspace.
 - App credentials (Gemini, TMDB, Spotify, YouTube) stay in `.env.tpl`; a
-  workspace's Notion token and soma hub are workspace secrets
+  workspace's Soma hub URL and token are workspace secrets
   (`just workspace set-secrets <id>`, KEY=VALUE on stdin). Rotating one =
   re-run set-secrets from its 1Password item. The `default` workspace's hub
   token is its own enrollment with the Soma profile `synapse-workspace-v1`
   (broad `tables:read`/`tables:write` plus read/write `raw/synapse-executions/`;
   copy in the Synapse ENV field `SOMA_HUB_TOKEN`).
 - Without an active workspace (tests, local scripts) `current()` is the local
-  one: overlay + property ids from `$SYNAPSE_WORKSPACE_DIR`, credentials from
-  env. Tests use `tests/fixtures/workspace` (fake ids). Local tools take
+  one: the overlay from `$SYNAPSE_WORKSPACE_DIR`, credentials from env.
+  Tests use `tests/fixtures/workspace` (workflow bindings) and
+  `tests/fixtures/catalog.json` (a generic catalog). Local tools take
   `SYNAPSE_WORKSPACE=<id>` (the just recipes set it) to run in a stored one.
-- **Onboarding someone**: `just workspace push <id> <dir>` (their overlay),
-  `just workspace set-secrets <id>` (their Notion + hub), `just sync-prop-ids
-  <id>`, then `just clients issue "<device>" <id>` and send the link.
-Both files are `add_local_file`d into the image at `/root/core/`.
+- **Onboarding someone**: `just workspace push <id> <dir>` (their overlay
+  with `workflow.tasks` / `executions` / `projects` bindings), `just
+  workspace set-secrets <id>` (their hub), then `just clients issue
+  "<device>" <id>` and send the link.
+`src/core` (with `template/prompts.yaml`) is mounted into the image at
+`/root/core/`.
 
 ## Conventions
 
@@ -102,13 +126,13 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   `get_settings()`. **Only ever call `get_settings()` inside a function, never
   at module import** — Modal injects secrets at container start, so an
   import-time read caches stale `None`s (this bit TMDB once). External clients
-  follow the same rule: `core/clients.py` exposes lazy `get_notion()`,
-  `get_gemini_client()`, etc. (lru_cached, built on first use, `None` if the
-  key is absent) — nothing is instantiated at import. `core/secrets.py`'s
-  `core/secrets.get_db_id` is the one Notion DB-id lookup (active workspace).
-- **Most categories are soma tables, not Notion DBs.** A stanza with
-  `hub_table` is one: `core/soma_hub.py: push_rows` POSTs `{table, columns,
-  rows}` to the hub's `/v1/rows/push` with the `SOMA_HUB_URL` /
+  follow the same rule: `core/clients.py` exposes lazy
+  `get_gemini_client()`, `get_spotify()`, `get_youtube()` (lru_cached, built
+  on first use, `None` if the key is absent) — nothing is instantiated at
+  import.
+- **Every category is a Soma table.** A stanza's `table` names it:
+  `core/soma_hub.py: push_rows` POSTs `{table, columns, rows}` to the hub's
+  `/v1/rows/push` with the workspace's `SOMA_HUB_URL` /
   `SOMA_HUB_TOKEN` settings (broad `tables:read,tables:write`: the handlers
   also pull rows, and the hub refuses table-scoped writes to `groceries`,
   `ideas`, `movies` and `tv_shows`). Push ONLY the columns you know - the hub's upsert touches
@@ -122,9 +146,8 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   of the hub (`tests/media_hub.py`) enforce that insert contract: a fake that
   accepts what the real hub rejects hides a 100% production failure.
   Neither helper retries ambiguous writes or falls back to upsert. The
-  CATALOG enforces what this yaml used to (required fields, option
-  vocabularies, uniqueness, defaults); a rejected row files a cleanup task
-  and writes nothing. Two handler shapes:
+  catalog enforces the contract; a rejected row files a cleanup task and
+  writes nothing. Two handler shapes:
   - `handle_hub_logic` (groceries, ideas, fun-activities, bucket-list,
     podcasts, bookmarks): driven entirely by the stanza - `columns` maps
     extracted property names to catalog columns, `constants` adds fixed
@@ -145,22 +168,19 @@ Both files are `add_local_file`d into the image at `/root/core/`.
     guessed value gets the row rejected for missing provenance. A YouTube
     channel is pushed once, gated by `known_channel_ids()` against the hub's
     actual state, with a "Classify new Channel" cleanup task.
-  A `hub_table` stanza carries no `db_id` and is skipped by
-  `hydrate_dynamic_options`, `validate_all`, and
-  `scripts/fetch_property_ids.py`, so its yaml allowlists ARE the prompt's
-  options - keep them in step with soma's catalog (`soma property list
-  <table>`). The grocery inventory the extraction prompt sees comes from the
-  hub too (`fetch_inventory_map`). `Created Item` on the Executions log holds
-  `<table>/<id>`, not a URL - it is a Notion url property, so `log_job_outcome`
-  retries once without it (ref moved into `AI Summary`) rather than lose the
-  whole row. A handler that wrote nothing returns `handlers.Failed(detail)`,
-  which the pipeline logs as `Error(s)`; returning None there would log a
-  Success over an empty result.
+  The grocery inventory the extraction prompt sees comes from the hub too
+  (`fetch_inventory_map`). An execution's `Created Item` holds
+  `<table>/<id>`. A handler that wrote nothing returns
+  `handlers.Failed(detail)` (with a cleanup task when the user must finish
+  it), which the pipeline logs as `Error(s)`; returning None there would log
+  a Success over an empty result, and raising inside the journaled write
+  step would make Modal retry a deterministic failure until the capture is
+  lost.
 - `workflow.projects` in a workspace overlay selects Soma project reads:
   `table`, `title_column`, `status_column`, and `active_statuses` are runtime
-  values. Omission retains Notion; malformed selected configuration fails
-  closed. Duplicate active titles are rejected because the prompt-to-ID map
-  cannot represent them safely.
+  values. Omission means no project linking; malformed selected configuration
+  fails closed. Duplicate active titles are rejected because the prompt-to-ID
+  map cannot represent them safely.
 - `workflow.tasks.calendar` optionally sets `timeZone` and `dayStartMinutes`
   (integer 0..1439, absent boundary means midnight). Task extraction and generated
   followups use that civil day. The capture journal freezes it before extraction
@@ -175,30 +195,17 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   insert, keyed by workspace, persisted capture identity, and item/role path.
   One serialized worker owns its operational store. Retries reuse the original
   table, ID, and body, and never overwrite an existing user row. Capture
-  acceptance requires a canonical UUID `capture_id` when workflow Tasks and
-  Executions are selected. Clients persist that ID for the submission and reuse
-  it for HTTP retries; identical text with a new ID is a new capture. The worker
+  acceptance requires a canonical UUID `capture_id`. Clients persist that ID
+  for the submission and reuse it for HTTP retries; identical text with a new
+  ID is a new capture. The worker
   freezes its bindings, project/inventory context, parsed items, prepared item
   data, and successful result before marking the capture complete. Changed
   input under the same workspace/capture ID is rejected. Failures propagate to
   Modal retries without creating a second error task over an ambiguous write.
-  Tasks and Executions switch together; project reads can be selected earlier.
-  Omitted workflow configuration retains the legacy Notion behavior. Mappings
-  use `table`, `columns`, and optional missing-value `defaults`, all runtime
-  state. Execution text/JSON is preserved without the Notion length truncation.
-- Notion DB ids are workspace data: a category stanza's `db_id` and the
-  top-level `db_ids` mapping (logs, projects) in the workspace
-  overlay, read through `get_db_id`. The template carries none.
-- Notion **properties** are written/hydrated by their stable **id**, not name
-  (rename-safe). `databases.yaml` keeps human names (the AI needs them); the
-  name→id map is the workspace's `property_ids` (generated by
-  `scripts/fetch_property_ids.py` — `just sync-prop-ids [workspace]`). `build_notion_properties`
-  stays name-keyed; `keys_to_ids`/`prop_id` translate at the write boundary
-  (`create_page`, relation writes, `log_job_outcome`) and
-  hydration matches by id. Re-run the generator after ADDING a property (a
-  rename alone keeps working). Option VALUES (select/status/multi_select) stay
-  by NAME — new options auto-create by name and Notion's select-write is
-  name-first. Read-side query filters/sorts still reference names (fail-safe).
+  A workspace without `workflow.tasks` and `workflow.executions` bindings is
+  refused before any side effect. Mappings use `table`, `columns`, and
+  optional missing-value `defaults`, all runtime state. Execution text/JSON is
+  preserved untruncated.
 - All "today"/date creation goes through `core/timeutils.py`
   (`today_eastern()` / `now_eastern()`) — never `date.today()` /
   `datetime.now()` (server is UTC; late-night captures would date-shift).
@@ -213,8 +220,8 @@ Both files are `add_local_file`d into the image at `/root/core/`.
   Gemini 400s (INVALID_ARGUMENT) when an enum of distinct real-world names
   compiles to too large a constrained-decoding grammar (~150+). Past the cap
   a field silently loses its enum + prompt options dump. Open-world fields
-  (e.g. podcasts `Podcast Name` / `Producer`) are `create_new: true` so they
-  never enum at all.
+  (e.g. podcasts `Podcast Name` / `Producer`) are catalog `text` columns, so
+  they never enum at all.
 
 ## Commands
 
@@ -232,8 +239,7 @@ The justfile is the interface, not a script catalog; one-offs go in
 | `just deploy` | test + sync-secrets + `modal deploy` — CI's job, not yours (below) |
 | `just recept "text"` | POST one thought to the deployed webhook |
 | `just clients issue "<device>" [workspace]` / `list` / `revoke <id>` | Per-device capture tokens; `issue` prints the enrollment link |
-| `just workspace list\|show\|pull\|push\|set-secrets` | Workspaces: a user's overlay, property ids, credentials |
-| `just validate [ws]` / `just sync-prop-ids [ws]` | Drift check / property-id refresh against a stored workspace's Notion |
+| `just workspace list\|show\|pull\|push\|set-secrets` | Workspaces: a user's overlay and hub credentials |
 
 **Deploying = commit + push to `main`.** `.github/workflows/deploy.yml` runs
 tests, syncs secrets, and `modal deploy`s — never run `just deploy` locally
@@ -247,14 +253,17 @@ on failure `gh run view <id> --log-failed`) — never assume it succeeded.
 Write the test in `tests/` first, then the `src/core/` code. `app.py` shim
 functions stay thin enough to not need tests (webhook validation is the pure
 `core.pipeline.payload_error`, tested in `tests/test_webhook.py`).
-`tests/conftest.py` seeds fake secrets as env vars and swaps all external
+`tests/conftest.py` seeds fake secrets as env vars, serves
+`tests/fixtures/catalog.json` as the hub's catalog and swaps all external
 clients (`core.clients` globals) for MagicMocks — no test touches the network.
+`tests/media_hub.py`'s `SyntheticHub` stands in for the hub's row routes;
+end-to-end tests run captures through the real journal and assert on its rows.
 
 ## Receptor
 
 The iOS/macOS companion app lives at https://github.com/alexjmiller5/receptor.
-It POSTs `{"raw_text": ..., "source": ...}` to `capture` with its own bearer
-token (from an enrollment link) and expects 200.
+It POSTs `{"raw_text": ..., "source": ..., "capture_id": ...}` to `capture`
+with its own bearer token (from an enrollment link) and expects 200.
 
 ## Media capture writes
 
@@ -267,7 +276,8 @@ No save path falls back to row push. Channel discovery no longer initializes
 external subscription tracking and preserves existing source rows.
 
 `Capture Intent` separates explicit saves from consumption reports. Per-category
-`capture_columns` and optional `saved_column` are workspace configuration.
+`capture_columns` and optional `saved_column` are template configuration a
+workspace overlay may set.
 Configure saved_column only after its cataloged field exists; explicit saves
 without that mapping require review. Consumer/provider credentials remain outside
 the capture result and never enter native apps.

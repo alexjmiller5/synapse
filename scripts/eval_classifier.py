@@ -4,12 +4,12 @@
 # dependencies = [
 #     "google-genai~=1.49.0",
 #     "PyYAML~=6.0.3",
+#     "requests~=2.32.3",
 #     "tenacity>=9.1.2",
-#     "notion-client~=2.7.0",
 #     "spotipy~=2.25.1",
-#     "googlemaps>=4.10.0",
 #     "google-api-python-client>=2.187.0",
 #     "pydantic-settings~=2.14.2",
+#     "modal>=1.0",
 # ]
 # ///
 """Eval the classification prompt against scripts/eval_cases.yaml with real Gemini calls.
@@ -21,7 +21,7 @@ or control-set accuracy < 95%.
 
 Usage:
     op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
-    ... --core-dir /path/to/old/src/core   # eval an alternate prompts/databases yaml pair
+    ... --core-dir /path/to/old/src/core/template   # eval an alternate prompts.yaml
 """
 
 import argparse
@@ -43,6 +43,7 @@ if not os.environ.get("GEMINI_API_KEY"):
 from google.genai import types  # noqa: E402
 
 import core.ai_engine as ai_engine  # noqa: E402
+from core import workspace  # noqa: E402
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
 
 
@@ -94,20 +95,17 @@ def run_set(prompt: str, name: str, cases: list[dict], repeats: int) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--core-dir", help="Alternate dir with template-format prompts.yaml + databases.yaml"
-    )
+    parser.add_argument("--core-dir", help="Alternate dir with a template-format prompts.yaml")
     parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
 
     if args.core_dir:
-        core_dir = Path(args.core_dir)
-        # generate_classification_prompt reads its module globals — patch them.
-        ai_engine.PROMPTS = yaml.safe_load((core_dir / "prompts.yaml").read_text())
-        ai_engine.DATABASES = yaml.safe_load((core_dir / "databases.yaml").read_text())
-        print(f"Using prompts/databases from: {core_dir}")
-
-    prompt = ai_engine.generate_classification_prompt("None")
+        template = yaml.safe_load((Path(args.core_dir) / "prompts.yaml").read_text())
+        with workspace.use(workspace.build("eval", template=template)):
+            prompt = ai_engine.generate_classification_prompt("None")
+        print(f"Using prompts.yaml from: {args.core_dir}")
+    else:
+        prompt = ai_engine.generate_classification_prompt("None")
     cases = yaml.safe_load((ROOT / "scripts" / "eval_cases.yaml").read_text())
 
     misclass_acc = run_set(

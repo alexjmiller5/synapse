@@ -7,6 +7,7 @@ from media_hub import SyntheticHub
 
 from core import soma_hub
 from core.pipeline import run_pipeline
+from core.workflow import capture_scope
 from helpers import make_gemini_response
 
 
@@ -21,6 +22,9 @@ def existing(status="Finished"):
         "hub_at": "2026-01-01T00:00:00.001Z",
         "deleted_at": None,
     }
+
+
+CAPTURE = "5b0bf1f8-8d63-4c43-9a0a-4f7d0fb6a4f2"
 
 
 def test_pipeline_resave_keeps_finished_and_unrequested_fields(mock_gemini, mock_youtube):
@@ -46,11 +50,14 @@ def test_pipeline_resave_keeps_finished_and_unrequested_fields(mock_gemini, mock
             }
         ]
     }
+    text = "save https://youtu.be/abc123 for later"
+    capture = {"raw_text": text, "workspace": "default", "capture_id": CAPTURE}
     with (
         patch("core.soma_hub.requests.post", hub.post),
         patch("core.pipeline.enrich_context", return_value="Synthetic video"),
+        capture_scope({}, capture),
     ):
-        run_pipeline({"core_text": "save https://youtu.be/abc123 for later"}, [], {}, {}, [])
+        run_pipeline({"core_text": text}, [], {}, {}, [])
     row = hub.rows["youtube_videos"]["abc123"]
     assert row["status"] == "Finished"
     assert row["saved"] == 1
@@ -155,6 +162,7 @@ def test_podcast_url_reuses_legacy_id_and_preserves_consumption(monkeypatch):
     }
     hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
     monkeypatch.setattr(soma_hub.requests, "post", hub.post)
+    monkeypatch.setattr("core.handlers.create_cleanup_task", lambda *a, **k: None)
     result = handle_url_media(
         "podcasts",
         {
@@ -195,6 +203,7 @@ def test_tombstoned_legacy_podcast_never_gets_a_new_url_identity(monkeypatch):
     }
     hub = SyntheticHub({"podcast_episodes": {row["id"]: row}})
     monkeypatch.setattr(soma_hub.requests, "post", hub.post)
+    monkeypatch.setattr("core.handlers.create_cleanup_task", lambda *a, **k: None)
     result = handle_url_media(
         "podcasts", {"URL": row["url"], "Episode Title": "Example", "Capture Intent": "save"}
     )

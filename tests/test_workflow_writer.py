@@ -142,7 +142,7 @@ def test_ambiguous_project_names_fail_instead_of_linking_arbitrary_project():
         active_projects(config, pull=pull)
 
 
-def test_project_backend_is_selected_from_workspace_without_notion(monkeypatch):
+def test_project_table_and_columns_come_from_the_workspace(monkeypatch):
     from core import business_logic, workspace
 
     ws = workspace.build(
@@ -159,23 +159,18 @@ def test_project_backend_is_selected_from_workspace_without_notion(monkeypatch):
         },
     )
     pull = Mock(return_value=[{"id": "a", "name": "Alpha", "phase": "Open"}])
-    notion = Mock(side_effect=AssertionError("Notion must not be queried"))
     monkeypatch.setattr("core.soma_hub.pull_rows", pull)
-    monkeypatch.setattr(business_logic, "query_notion_db", notion)
     with workspace.use(ws):
         assert business_logic.fetch_active_projects() == (["Alpha"], {"Alpha": "a"})
-    notion.assert_not_called()
+    assert pull.call_args.args == ("initiatives", ["name", "phase"])
 
 
-def test_invalid_selected_project_backend_does_not_fall_back(monkeypatch):
+def test_invalid_selected_project_binding_fails_closed():
     from core import business_logic, workspace
 
     ws = workspace.build("sample", {"workflow": {"projects": {}}})
-    notion = Mock(side_effect=AssertionError("No fallback"))
-    monkeypatch.setattr(business_logic, "query_notion_db", notion)
     with workspace.use(ws), pytest.raises(ValueError):
         business_logic.fetch_active_projects()
-    notion.assert_not_called()
 
 
 def test_delivered_output_is_not_sent_again_after_human_review():

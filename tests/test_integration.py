@@ -1,13 +1,13 @@
-"""Integration tests — real Gemini AI calls, mock Notion writes.
+"""Integration tests — real Gemini AI calls, no writes.
 
 These tests send actual user inputs through the real Gemini parsing,
-classification, and extraction pipeline, then verify the final Notion
-payloads are correct (right database, right properties, right values).
+classification, and extraction prompts (built over the fixture Soma catalog),
+then verify the extracted fields (right category, right values).
 
-Notion writes are mocked — no real pages are created/modified/deleted.
-Uses direct REST calls to the same model as production (bypasses conftest SDK mocks).
+Nothing is written anywhere. Uses direct REST calls to the same model as
+production (bypasses conftest SDK mocks).
 
-Test fixtures are drawn from real Synapse Executions DB entries.
+Test inputs are drawn from real Synapse executions.
 
 Run with: just test-integration
 Requires: GEMINI_API_KEY env var or 1Password access
@@ -319,12 +319,13 @@ class TestMovieClassification:
     def test_movie_neutral_mention(self):
         cat, data, _ = full_pipeline("The traitor")
         assert cat == "movies"
-        assert data["Status"] == "Not Started"
+        # a neutral mention claims no consumption state (a new row starts Not Started)
+        assert data.get("Status") in (None, "", "Not Started")
 
     def test_movie_watched_all_time_favorite(self):
         cat, data, _ = full_pipeline("Marty supreme", "watched all time favorite")
         assert cat == "movies"
-        assert "All Time Favorite" in data.get("Tags", [])
+        assert "Favorite" in data.get("Tags", [])
 
     def test_analyze_this_is_movie(self):
         cat, _, _ = full_pipeline("Analyze This", "movie")
@@ -409,7 +410,7 @@ class TestIdeaClassification:
             "Idea",
         )
         assert cat == "ideas"
-        assert data.get("Status") == "Ideated"
+        assert data.get("Status") == "Someday"
 
     def test_good_idea(self):
         cat, data, _ = full_pipeline(
@@ -417,7 +418,7 @@ class TestIdeaClassification:
             "idea good idea",
         )
         assert cat == "ideas"
-        assert data.get("Status") == "Good Idea"
+        assert data.get("Status") == "Priority"
 
     def test_quick_sms_idea(self):
         cat, _, _ = full_pipeline("quick sms for sms abroad", "Idea")

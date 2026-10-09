@@ -1,9 +1,9 @@
-"""The active workspace's config, under the names the pipeline has always used.
+"""The active workspace's config, as live views.
 
-DATABASES, PROMPTS and PROPERTY_IDS are live views of `workspace.current()`:
-every read goes to whichever workspace is active (see core/workspace.py), so
-`from core.config import DATABASES` keeps working while one process serves
-many workspaces.
+PROMPTS (prompts.yaml merged with the workspace overlay) and CATEGORIES (its
+`categories` section) are views of `workspace.current()`: every read goes to
+whichever workspace is active (see core/workspace.py), so one process can
+serve many workspaces.
 """
 
 from collections.abc import MutableMapping
@@ -12,11 +12,8 @@ from core import workspace
 
 
 class _View(MutableMapping):
-    def __init__(self, attr: str):
-        self._attr = attr
-
-    def _data(self) -> dict:
-        return getattr(workspace.current(), self._attr)
+    def __init__(self, data):
+        self._data = data
 
     def __getitem__(self, key):
         return self._data()[key]
@@ -34,11 +31,8 @@ class _View(MutableMapping):
         return len(self._data())
 
     def __repr__(self):
-        return f"<{self._attr} of workspace {workspace.current().id!r}>"
+        return f"<config view of workspace {workspace.current().id!r}>"
 
 
-DATABASES = _View("databases")
-PROMPTS = _View("prompts")
-# {category: {prop_name: stable_prop_id}} — generated per workspace by
-# scripts/fetch_property_ids.py. Missing entries fall back to the name (prop_id).
-PROPERTY_IDS = _View("property_ids")
+PROMPTS = _View(lambda: workspace.current().config)
+CATEGORIES = _View(lambda: workspace.current().config.setdefault("categories", {}))

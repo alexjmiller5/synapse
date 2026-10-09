@@ -10,11 +10,12 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from core.config import DATABASES, PROMPTS
+from core import catalog
+from core.config import CATEGORIES, PROMPTS
 from core.clients import get_gemini_client
 from core.schemas import PARSER_SCHEMA
 from core.timeutils import today_eastern
-from core.workflow import task_day
+from core.workflow import binding_for, task_day
 
 # The ONE place the model names live — overridable via env.
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
@@ -119,19 +120,69 @@ def parse_raw_input(raw_text):
 
 def generate_classification_prompt(active_projects_str):
     """Builds classification prompt dynamically from descriptions."""
-    category_lines = []
-    for cat, details in DATABASES.get("databases", {}).items():
-        # Helper DBs (trips, logs, youtube-channels) are not classification targets;
-        # they exist only to be related to by other categories.
-        if details.get("helper"):
-            continue
-        desc = details.get("description", "No description.")
-        category_lines.append(f'- "{cat}": {desc}')
-
+    category_lines = [
+        f'- "{cat}": {details.get("description", "No description.")}'
+        for cat, details in CATEGORIES.items()
+    ]
     return PROMPTS["categorize_template"].format(
         active_projects_list=active_projects_str,
         category_list="\n".join(category_lines),
     )
+
+
+def fields(category):
+    """(table, [field]) for a category: its prompts.yaml phrasing over the Soma
+    catalog's contract for the column each field writes.
+
+    The catalog supplies type, required, default and the options with their
+    meanings. A field's `allowlist` narrows those options to the values Synapse
+    may choose (a value the catalog lacks is dropped - the hub would reject it)
+    and its instruction then owns their meaning; a field with no column (Capture
+    Intent, a resolver's Title) is Synapse's own and takes its allowlist as is.
+    Capture fields (`capture_columns`) edit an existing row only when the user
+    asked, so they are never forced and get no default.
+    """
+    stanza = CATEGORIES[category]
+    if category == "tasks":
+        binding = binding_for("tasks") or {}
+        table, columns = binding.get("table"), binding.get("columns", {})
+    else:
+        table = stanza.get("table")
+        columns = {**stanza.get("columns", {}), **stanza.get("capture_columns", {})}
+    contract = catalog.table(table)["columns"] if table else {}
+    capture = set(stanza.get("capture_columns", {}))
+    out = []
+    for name, spec in (stanza.get("properties") or {}).items():
+        spec = spec or {}
+        column = contract.get(columns.get(name)) or {}
+        options = column.get("options") or []
+        if spec.get("allowlist") is not None:
+            known = {o["v"] for o in options}
+            if dropped := [v for v in spec["allowlist"] if options and v not in known]:
+                print(f"   ⚠️ {category}.{name}: not catalog options, dropped: {dropped}")
+            options = [{"v": v} for v in spec["allowlist"] if not options or v in known]
+        out.append(
+            {
+                "name": name,
+                "type": column.get("type") or "text",
+                "required": name not in capture
+                and bool(spec.get("required") or column.get("required")),
+                "default": None if name in capture else column.get("default"),
+                "options": options,
+                "instruction": spec.get("instruction"),
+            }
+        )
+    return table, out
+
+
+def _options_block(field):
+    header = f"--- VALID {field['name'].upper()} (STRICT) ---"
+    if not any(o.get("d") for o in field["options"]):
+        return f"{header}\n{json.dumps([o['v'] for o in field['options']])}"
+    lines = [
+        f"- {json.dumps(o['v'])}" + (f": {o['d']}" if o.get("d") else "") for o in field["options"]
+    ]
+    return "\n".join([header, *lines])
 
 
 def generate_extraction_prompt(
@@ -144,23 +195,12 @@ def generate_extraction_prompt(
     """
     Builds extraction prompt using instructions, valid options, and contexts.
     """
-    db_config = DATABASES.get("databases", {}).get(category)
-    if not db_config:
-        return "Error: Unknown category"
+    table, spec = fields(category)
 
-    # 1. Valid Options Section
-    valid_opts_lines = []
-    for prop_name, rules in db_config.get("properties", {}).items():
-        options = rules.get("_runtime_options") or rules.get("allowlist")
-        if options and len(options) <= MAX_ENUM_OPTIONS:
-            # CHECK THE FLAG
-            is_strict = not rules.get("create_new", False)
-            header = (
-                f"--- VALID {prop_name.upper()} (STRICT) ---"
-                if is_strict
-                else f"--- EXISTING {prop_name.upper()} (CREATE NEW IF NEEDED) ---"
-            )
-            valid_opts_lines.append(f"{header}\n{json.dumps(options)}")
+    # 1. Valid Options Section (the catalog's options and their meanings)
+    valid_opts_lines = [
+        _options_block(f) for f in spec if f["options"] and len(f["options"]) <= MAX_ENUM_OPTIONS
+    ]
 
     # 2. Inventory Section
     inventory_section = ""
@@ -180,74 +220,53 @@ def generate_extraction_prompt(
             f"Use this to determine Due Dates, Status, or specific Tags.\n"
         )
 
-    # 4. Instructions Section
+    # 4. The store's enforced rules for this table
+    rules = catalog.table(table)["rules"] if table else []
+    rules_section = (
+        "--- STORE RULES (a row that breaks one is rejected) ---\n"
+        + "\n".join(f"- {rule}" for rule in rules)
+        if rules
+        else ""
+    )
+
+    # 5. Instructions Section
     # {place_tags}: the category's personal place tags (the workspace overlay's
     # tasks.place_tags, see core/workspace.py) - kept out of the committed template.
-    place_tags_json = json.dumps(db_config.get("place_tags", []))
+    place_tags_json = json.dumps(CATEGORIES[category].get("place_tags", []))
     extraction_day = task_day() if category == "tasks" else None
     extraction_day = extraction_day or today_eastern().isoformat()
     instr_lines = []
-    for prop_name, rules in db_config.get("properties", {}).items():
-        instr = rules.get("instruction")
-        is_virtual = rules.get("virtual")
-        if instr and not is_virtual:
-            formatted_instr = instr.replace("{current_date}", extraction_day)
-            formatted_instr = formatted_instr.replace("{raw_text}", raw_text)
-            formatted_instr = formatted_instr.replace("{place_tags}", place_tags_json)
-            instr_lines.append(f"- `{prop_name}`: {formatted_instr}")
+    for f in spec:
+        parts = []
+        if f["default"] is not None:
+            parts.append(f"(default when the text gives none: {json.dumps(f['default'])})")
+        if f["instruction"]:
+            instr = f["instruction"].replace("{current_date}", extraction_day)
+            instr = instr.replace("{raw_text}", raw_text)
+            parts.append(instr.replace("{place_tags}", place_tags_json))
+        if parts:
+            instr_lines.append(f"- `{f['name']}`: " + " ".join(parts))
 
     return PROMPTS["extraction_template"].format(
         category=category,
         context_section=combined_context.strip(),
         valid_options_section="\n\n".join(valid_opts_lines),
         inventory_section=inventory_section,
+        rules_section=rules_section,
         instructions_section="\n".join(instr_lines),
     )
 
 
 def get_gemini_schema(category):
-    """Generates JSON Schema from YAML + Runtime Options."""
-    db_config = DATABASES.get("databases", {}).get(category)
-    if not db_config:
-        return {"type": "object", "properties": {"Name": {"type": "string"}}}
-
-    schema_props = {}
-    required_fields = []
-
-    for prop_name, rules in db_config.get("properties", {}).items():
-        prop_type = rules.get("type")
-        if rules.get("virtual"):
-            continue
-
-        # Check if we allow creating new options
-        allow_new = rules.get("create_new", False)
-
-        field_def = {"type": "string"}
-
-        if prop_type in ("boolean", "checkbox"):
-            field_def = {"type": "boolean"}
-
-        elif prop_type in ["multi_select", "array"]:
-            opts = rules.get("_runtime_options") or rules.get("allowlist") or []
-            # IF allow_new is True, we remove 'enum' so AI can write anything
-            if opts and not allow_new and len(opts) <= MAX_ENUM_OPTIONS:
-                field_def = {"type": "array", "items": {"type": "string", "enum": opts}}
-            else:
-                field_def = {"type": "array", "items": {"type": "string"}}
-
-        elif prop_type in ["select", "status"]:
-            opts = rules.get("_runtime_options") or rules.get("allowlist") or []
-            # IF allow_new is True, we remove 'enum' so AI can write anything
-            # Note: Notion 'status' properties usually require specific IDs, but 'select' allows creation.
-            allow_new = rules.get("create_new", False)
-
-            if opts and not allow_new and len(opts) <= MAX_ENUM_OPTIONS:
-                field_def = {"type": "string", "enum": opts}
-            else:
-                field_def = {"type": "string"}
-
-        schema_props[prop_name] = field_def
-        if rules.get("required"):
-            required_fields.append(prop_name)
-
+    """The extraction's JSON Schema: catalog types and options per field."""
+    schema_props, required_fields = {}, []
+    for f in fields(category)[1]:
+        values = [o["v"] for o in f["options"]]
+        string = {"type": "string"}
+        if values and len(values) <= MAX_ENUM_OPTIONS:
+            string["enum"] = values
+        multi = f["type"] in ("multi_select", "multi_ref")
+        schema_props[f["name"]] = {"type": "array", "items": string} if multi else string
+        if f["required"]:
+            required_fields.append(f["name"])
     return {"type": "object", "properties": schema_props, "required": required_fields}

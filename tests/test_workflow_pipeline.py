@@ -16,7 +16,7 @@ CAPTURE = "e8bfc1e9-6f0e-4c15-8764-7c98d4b3a2ab"
 @pytest.fixture
 def workflow(monkeypatch):
     base = copy.deepcopy(workspace.current())
-    base.databases["workflow"] = {
+    base.config["workflow"] = {
         "tasks": {
             "table": "work_items",
             "columns": {
@@ -50,13 +50,12 @@ def workflow(monkeypatch):
         "parse_raw_input",
         Mock(return_value=[{"core_text": "Do a thing", "context_notes": "task"}]),
     )
-    monkeypatch.setattr(pipeline, "hydrate_dynamic_options", Mock())
     with workspace.use(base):
         yield base
 
 
 def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
-    workflow, monkeypatch, mock_gemini, mock_notion
+    workflow, monkeypatch, mock_gemini
 ):
     remote, store = {}, {}
 
@@ -99,11 +98,10 @@ def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
     assert execution["source"] == "test-client"
     assert pipeline.parse_raw_input.call_count == 1
     assert mock_gemini.models.generate_content.call_count == 1
-    mock_notion.pages.create.assert_not_called()
 
 
 def test_capture_lands_task_and_execution_through_the_real_insert_transport(
-    workflow, media_hub, mock_gemini, mock_notion
+    workflow, media_hub, mock_gemini
 ):
     """The hub rejects insert rows without an edit clock; every capture must still land."""
     mock_gemini.models.generate_content.side_effect = [
@@ -125,13 +123,10 @@ def test_capture_lands_task_and_execution_through_the_real_insert_transport(
     assert next(v for k, v in store.items() if k.startswith("capture:"))["completed"]
 
 
-def test_missing_durable_identity_or_store_fails_before_any_capture_effect(
-    workflow, mock_gemini, mock_notion
-):
+def test_missing_durable_identity_or_store_fails_before_any_capture_effect(workflow, mock_gemini):
     with pytest.raises(ValueError):
-        pipeline.run({"raw_text": "One"})
+        pipeline.run({"raw_text": "One"}, store={})
     assert not mock_gemini.models.generate_content.called
-    mock_notion.pages.create.assert_not_called()
 
 
 def test_missing_model_config_does_not_mark_capture_complete(workflow, monkeypatch):
@@ -172,17 +167,8 @@ def test_project_context_is_frozen_across_restart(workflow, monkeypatch, mock_ge
     assert sent[0][1][0]["project_ids"] == ["project-a"]
 
 
-def test_selected_task_hydration_does_not_read_notion(workflow, mock_notion):
-    from core.business_logic import hydrate_dynamic_options
-
-    hydrate_dynamic_options(only_category="tasks")
-    mock_notion.databases.retrieve.assert_not_called()
-
-
-def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(
-    workflow, monkeypatch, mock_notion
-):
-    from core.notion_utils import create_cleanup_task, create_high_priority_task
+def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(workflow, monkeypatch):
+    from core.workflow import create_cleanup_task, create_high_priority_task
     from core.workflow import capture_scope
 
     send = Mock(return_value={})
@@ -195,7 +181,6 @@ def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(
             create_high_priority_task("Review capture")
     assert send.call_count == 2
     assert {c.args[1][0]["priority"] for c in send.call_args_list} == {"Low", "High"}
-    mock_notion.pages.create.assert_not_called()
 
 
 def test_identical_text_with_distinct_capture_ids_remains_two_operations(
@@ -207,15 +192,12 @@ def test_identical_text_with_distinct_capture_ids_remains_two_operations(
         {"Name": "Do a thing", "Tags": ["Chore"]}
     )
     store = {}
-    seen = {}
     for identity in [CAPTURE, "12a98ba3-7951-48a2-9712-3a1a28d5de02"]:
         pipeline.run(
             {"raw_text": "Do a thing", "workspace": workflow.id, "capture_id": identity},
-            seen=seen,
             store=store,
         )
     assert len({call.args[1][0]["id"] for call in send.call_args_list}) == 4
-    assert seen == {}
 
 
 def test_large_unicode_and_ai_metadata_survive_capture_logging(workflow, monkeypatch, mock_gemini):
@@ -234,11 +216,10 @@ def test_large_unicode_and_ai_metadata_survive_capture_logging(workflow, monkeyp
     assert body in log["ai_summary"]
 
 
-def test_partial_workflow_switch_is_rejected_before_notion_side_effects(workflow, mock_notion):
-    del workflow.databases["workflow"]["tasks"]
-    with pytest.raises(ValueError, match="together"):
+def test_a_workspace_without_a_tasks_binding_is_rejected_before_side_effects(workflow):
+    del workflow.config["workflow"]["tasks"]
+    with pytest.raises(ValueError, match="workflow.tasks"):
         pipeline.run({"raw_text": "One", "workspace": workflow.id, "capture_id": CAPTURE}, store={})
-    mock_notion.pages.create.assert_not_called()
 
 
 def test_preparation_failure_freezes_one_actionable_error_across_logging_retry(

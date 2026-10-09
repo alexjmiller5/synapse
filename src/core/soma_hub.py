@@ -75,6 +75,13 @@ def _hub():
     )
 
 
+def _stale_catalog():
+    """A validation rejection may mean the catalog changed: reread it next load."""
+    from core import catalog
+
+    catalog.invalidate()
+
+
 def _post(path, body, *, settings=None, client=None):
     settings = settings or _hub()
     if not settings.soma_hub_url or not settings.soma_hub_token:
@@ -89,10 +96,14 @@ def _post(path, body, *, settings=None, client=None):
         },
         timeout=30,
     )
+    if response.status_code in (400, 422):
+        _stale_catalog()
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
         raise RuntimeError("Soma returned an invalid response")
+    if payload.get("rejected"):
+        _stale_catalog()
     return payload
 
 

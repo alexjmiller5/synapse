@@ -4,28 +4,33 @@ Shared test fixtures for the Synapse test suite.
 Mocking strategy:
 - Fake secrets are seeded as env vars BEFORE core modules import, and the
   local workspace (core.workspace.local) is tests/fixtures/workspace: the
-  product template plus fake Notion ids and property ids - never real ones
-- core.clients module globals (notion, gemini_client, spotify, youtube)
-  are patched at the module level
+  product template plus the workflow bindings a real workspace carries
+- The Soma catalog is tests/fixtures/catalog.json (generic values only),
+  served by a fake `GET /v1/catalog`
+- core.clients module globals (gemini_client, spotify, youtube) are patched
+  at the module level
 - All external API calls are intercepted before any real network I/O
 """
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
+
+CATALOG = Path(__file__).parent / "fixtures" / "catalog.json"
 
 # ---------------------------------------------------------------------------
 # Fake secrets — seeded into the environment before core modules import
 # ---------------------------------------------------------------------------
 FAKE_SECRETS = {
     "gemini-api-key": "fake-gemini-key",
-    "notion-integration-token": "fake-notion-token",
     "spotify-client-id": "fake-spotify-id",
     "spotify-client-secret": "fake-spotify-secret",
     "google-youtube-api-key": "fake-youtube-key",
-    # soma hub (movies/tv-shows)
+    # the workspace's Soma hub
     "soma-hub-url": "https://hub.test.invalid",
     "soma-hub-token": "fake-hub-token",
 }
@@ -38,7 +43,6 @@ os.environ["SYNAPSE_WORKSPACE_DIR"] = os.path.join(
 
 # Patch external client constructors BEFORE core.clients is imported
 patch("google.genai.Client", return_value=MagicMock()).start()
-patch("notion_client.Client", return_value=MagicMock()).start()
 patch("spotipy.Spotify", return_value=MagicMock()).start()
 patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 
@@ -46,18 +50,6 @@ patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 # lazy getters build MOCK clients. Each getter is lru_cached, so calling it here
 # returns the same instance the code-under-test will get.
 import core.clients as _clients_mod  # noqa: E402
-
-_mock_notion = _clients_mod.get_notion()
-_mock_notion.pages.create.return_value = {
-    "id": "new-page-id-000",
-    "url": "https://www.notion.so/New-Page-newpageid000",
-}
-_mock_notion.pages.update.return_value = {
-    "id": "updated-page-id",
-    "url": "https://www.notion.so/Updated-Page-updatedpageid",
-}
-_mock_notion.request.return_value = {"results": []}
-_mock_notion.databases.retrieve.return_value = {"properties": {}}
 
 _mock_gemini = _clients_mod.get_gemini_client()
 _mock_spotify = _clients_mod.get_spotify()
@@ -71,21 +63,6 @@ _mock_youtube = _clients_mod.get_youtube()
 @pytest.fixture(autouse=True)
 def _reset_all_mocks():
     """Auto-reset all mocks before every test to prevent state bleed."""
-    _mock_notion.reset_mock()
-    _mock_notion.pages.create.return_value = {
-        "id": "new-page-id-000",
-        "url": "https://www.notion.so/New-Page-newpageid000",
-    }
-    _mock_notion.pages.update.return_value = {
-        "id": "updated-page-id",
-        "url": "https://www.notion.so/Updated-Page-updatedpageid",
-    }
-    _mock_notion.request.return_value = {"results": []}
-    _mock_notion.request.side_effect = None
-    _mock_notion.databases.retrieve.return_value = {"properties": {}}
-    _mock_notion.pages.create.side_effect = None
-    _mock_notion.pages.update.side_effect = None
-
     _mock_gemini.reset_mock()
     _mock_gemini.models.generate_content.side_effect = None
     _mock_spotify.reset_mock()
@@ -93,10 +70,29 @@ def _reset_all_mocks():
     yield
 
 
-@pytest.fixture
-def mock_notion():
-    """Provides the mock Notion client."""
-    return _mock_notion
+class _CatalogHub:
+    """The hub's `GET /v1/catalog`, serving the fixture catalog."""
+
+    def __init__(self):
+        self.raw = json.loads(CATALOG.read_text())
+
+    def get(self, url, *, headers, timeout):
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(self.raw).encode()
+        response.headers["ETag"] = '"fixture"'
+        return response
+
+
+@pytest.fixture(autouse=True)
+def catalog_hub(monkeypatch):
+    from core import catalog, workspace
+
+    hub = _CatalogHub()
+    monkeypatch.setattr(catalog, "requests", hub)
+    workspace.local().catalog_memo = None
+    yield hub
+    workspace.local().catalog_memo = None
 
 
 @pytest.fixture

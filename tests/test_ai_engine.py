@@ -138,43 +138,19 @@ class TestParseRawInput:
 class TestGenerateClassificationPrompt:
     def test_includes_categories(self):
         prompt = generate_classification_prompt("Synapse, Blueprint")
-        # Should include category descriptions from databases.yaml
-        assert "tasks" in prompt
-        assert "groceries" in prompt
-        assert "movies" in prompt
+        assert '"tasks"' in prompt and '"groceries"' in prompt and '"movies"' in prompt
 
     def test_includes_projects(self):
         prompt = generate_classification_prompt("Synapse, Blueprint")
         assert "Synapse" in prompt
         assert "Blueprint" in prompt
 
-    def test_excludes_internal_categories(self):
+    def test_only_capture_categories_are_offered(self):
+        """Tables written only as a side effect (channels, the execution log) and
+        retired routes are not classification targets."""
         prompt = generate_classification_prompt("None")
-        assert '"youtube-channels"' not in prompt
-        assert '"logs"' not in prompt
-
-    def test_excludes_helper_dbs(self):
-        """Helper DBs (logs/youtube-channels) must not be classification targets:
-        they exist only to be *related to* by other categories."""
-        prompt = generate_classification_prompt("None")
-        assert '"logs"' not in prompt
-        assert '"youtube-channels"' not in prompt
-
-    def test_places_route_retired(self):
-        """Places moved to soma (captured via Google Maps lists): the category
-        must be gone from the yaml and from the classifier's menu."""
-        from core.config import DATABASES
-
-        assert "places" not in DATABASES["databases"]
-        prompt = generate_classification_prompt("None")
-        assert '"places"' not in prompt
-        assert '"tasks"' in prompt
-
-    def test_trips_stanza_retired(self):
-        """Trips live in soma; nothing writes a trips Notion DB."""
-        from core.config import DATABASES
-
-        assert "trips" not in DATABASES["databases"]
+        for gone in ("youtube-channels", "logs", "places", "trips", "quotes"):
+            assert f'"{gone}"' not in prompt
 
     def test_none_projects(self):
         prompt = generate_classification_prompt("None")
@@ -190,9 +166,9 @@ class TestGenerateExtractionPrompt:
         assert "tasks" in prompt
         assert "Name" in prompt
 
-    def test_unknown_category(self):
-        result = generate_extraction_prompt("nonexistent", "text")
-        assert "Error" in result
+    def test_unknown_category_is_an_error(self):
+        with pytest.raises(KeyError):
+            generate_extraction_prompt("nonexistent", "text")
 
     def test_ai_ready_absent_from_prompt(self):
         prompt = generate_extraction_prompt("tasks", "have ai do this")
@@ -217,11 +193,63 @@ class TestGenerateExtractionPrompt:
         assert "USER EXPLICIT CONTEXT" in prompt
         assert "urgent due friday" in prompt
 
-    def test_virtual_fields_excluded(self):
-        """Virtual fields should not appear in extraction instructions."""
+    def test_task_status_is_set_by_synapse_not_extracted(self):
         prompt = generate_extraction_prompt("tasks", "test")
-        # Status is virtual for tasks — no instruction line ("- `Status`: ...") in the prompt
         assert not any(line.strip().startswith("- `Status`:") for line in prompt.split("\n"))
+
+
+# ======================================================================
+# The catalog drives options, meanings, defaults and rules
+# ======================================================================
+class TestCatalogDrivenPrompt:
+    def test_unnarrowed_options_come_from_the_catalog_with_their_meanings(self):
+        prompt = generate_extraction_prompt("movies", "need to watch dune")
+        assert "--- VALID STATUS (STRICT) ---" in prompt
+        assert '- "Priority": Need to watch / must watch / dying to see' in prompt
+        assert '"Mockumentary"' in prompt  # the catalog's spelling, not a stale copy
+
+    def test_an_allowlist_narrows_to_catalog_values_and_its_instruction_owns_meaning(self):
+        prompt = generate_extraction_prompt("groceries", "buy milk")
+        assert '--- VALID STATUS (STRICT) ---\n["On List", "Don\'t Have", "Have"]' in prompt
+        assert "In Cart" not in prompt
+
+    def test_catalog_default_is_stated_for_a_field_the_row_needs(self):
+        prompt = generate_extraction_prompt("groceries", "buy milk")
+        assert '- `Status`: (default when the text gives none: "On List")' in prompt
+
+    def test_capture_fields_get_no_default_so_a_neutral_mention_resets_nothing(self):
+        prompt = generate_extraction_prompt("movies", "dune")
+        assert "default when the text gives none" not in prompt
+
+    def test_enforced_table_rules_are_stated(self):
+        prompt = generate_extraction_prompt("bookmarks", "https://example.com")
+        assert "--- STORE RULES (a row that breaks one is rejected) ---" in prompt
+        assert "- description never ends with a period." in prompt
+        assert "STORE RULES" not in generate_extraction_prompt("tasks", "x")
+
+    def test_allowlist_values_the_catalog_lacks_are_dropped(self, monkeypatch):
+        from core.config import CATEGORIES
+
+        status = CATEGORIES["groceries"]["properties"]["Status"]
+        monkeypatch.setitem(status, "allowlist", ["On List", "Gone Forever"])
+        schema = get_gemini_schema("groceries")
+        assert schema["properties"]["Status"]["enum"] == ["On List"]
+
+    def test_a_column_the_catalog_does_not_know_keeps_its_allowlist(self, monkeypatch):
+        from core import catalog
+
+        monkeypatch.setattr(catalog, "table", lambda name: {"columns": {}, "rules": []})
+        assert get_gemini_schema("groceries")["properties"]["Status"]["enum"] == [
+            "On List",
+            "Don't Have",
+            "Have",
+        ]
+
+    def test_task_fields_resolve_through_the_workflow_binding(self):
+        table, spec = ai_engine.fields("tasks")
+        assert table == "tasks"
+        tags = next(f for f in spec if f["name"] == "Tags")
+        assert tags["type"] == "multi_select" and "Chore" in [o["v"] for o in tags["options"]]
 
 
 # ======================================================================
@@ -231,56 +259,53 @@ class TestGetGeminiSchema:
     def test_tasks_schema(self):
         schema = get_gemini_schema("tasks")
         assert schema["type"] == "object"
-        props = schema["properties"]
-        assert "Name" in props
-        assert "Tags" in props
-        assert "Due Date" in props
-        # Name is required
-        assert "Name" in schema["required"]
+        assert {"Name", "Tags", "Due Date", "Priority", "Links"} == set(schema["properties"])
+        assert set(schema["required"]) == {"Name", "Tags", "Due Date"}
 
-    def test_virtual_fields_excluded(self):
-        """Virtual fields like tasks.Status should not be in the schema."""
-        schema = get_gemini_schema("tasks")
-        assert "Status" not in schema["properties"]
-
-    def test_multi_select_with_allowlist(self):
-        schema = get_gemini_schema("tasks")
-        tags = schema["properties"]["Tags"]
+    def test_multi_select_is_an_array_of_catalog_options(self):
+        tags = get_gemini_schema("ideas")["properties"]["Tags"]
         assert tags["type"] == "array"
-        assert "items" in tags
+        assert "Hobby" in tags["items"]["enum"]
 
-    def test_select_with_allowlist(self):
-        schema = get_gemini_schema("movies")
-        status = schema["properties"]["Status"]
-        assert status["type"] == "string"
-        assert "enum" in status
-        assert "Not Started" in status["enum"]
+    def test_select_options_come_from_the_catalog(self):
+        status = get_gemini_schema("movies")["properties"]["Status"]
+        assert status == {
+            "type": "string",
+            "enum": [
+                "Priority",
+                "Not Started",
+                "In Progress",
+                "Finished",
+                "Watched Parts",
+                "Gave Up",
+            ],
+        }
 
-    def test_create_new_removes_enum(self):
-        """Properties with create_new: true should not have enum constraints."""
-        schema = get_gemini_schema("podcasts")
-        # Podcast Name has create_new: true
-        podcast_name = schema["properties"]["Podcast Name"]
-        assert "enum" not in podcast_name
+    def test_text_columns_are_open(self):
+        props = get_gemini_schema("podcasts")["properties"]
+        assert props["Podcast Name"] == {"type": "string"}
+        assert props["Producer"] == {"type": "string"}
 
-    def test_unknown_category_fallback(self):
-        schema = get_gemini_schema("nonexistent_category")
-        assert schema == {"type": "object", "properties": {"Name": {"type": "string"}}}
+    def test_fields_without_a_column_keep_synapse_vocabulary(self):
+        intent = get_gemini_schema("movies")["properties"]["Capture Intent"]
+        assert intent["enum"] == ["save", "record_consumption", "none"]
 
-    def test_required_fields(self):
+    def test_catalog_required_columns_are_required(self):
         schema = get_gemini_schema("groceries")
-        assert "Name" in schema["required"]
-        assert "Category" in schema["required"]
-        assert "Status" in schema["required"]
+        assert set(schema["required"]) == {"Name", "Category", "Status"}
+
+    def test_capture_fields_are_never_forced_even_when_the_column_is_required(self):
+        schema = get_gemini_schema("podcasts")
+        assert "Status" not in schema["required"]
+        assert {"Episode Title", "Podcast Name", "URL"} <= set(schema["required"])
 
     def test_bookmarks_schema(self):
         schema = get_gemini_schema("bookmarks")
-        assert "Description" in schema["properties"]
-        assert "URL" in schema["properties"]
-        assert "Title" in schema["properties"]
+        assert set(schema["properties"]) == {"Description", "Title", "URL", "Tags"}
+        assert set(schema["required"]) == {"Description", "Title", "URL"}
 
     def test_tasks_schema_has_no_ai_ready(self):
-        """Synapse must never tick 'AI Ready' - only Alex sets it, by hand."""
+        """Synapse must never tick 'AI Ready' - only the user sets it, by hand."""
         schema = get_gemini_schema("tasks")
         assert "AI Ready" not in schema["properties"]
 
@@ -290,49 +315,35 @@ class TestGetGeminiSchema:
 # ======================================================================
 class TestEnumCap:
     """Gemini rejects response schemas whose enums exceed its constrained-decoding
-    grammar limit (~150 distinct real-world names). Open-world fields must never
-    be enum-constrained, and any hydrated option list past MAX_ENUM_OPTIONS must
-    drop its enum instead of 400ing every capture in that category."""
+    grammar limit (~150 distinct real-world names); a catalog option list past
+    MAX_ENUM_OPTIONS drops its enum instead of 400ing every capture."""
 
-    def _podcast_props(self):
-        from core.config import DATABASES
+    def _genres(self, monkeypatch, values):
+        from core import catalog
 
-        return DATABASES["databases"]["podcasts"]["properties"]
+        real = catalog.table
 
-    def test_open_world_fields_have_no_enum(self, monkeypatch):
-        """Podcast Name / Producer are create_new - no enum even when hydrated."""
-        props = self._podcast_props()
-        monkeypatch.setitem(props["Podcast Name"], "_runtime_options", ["A Show"])
-        monkeypatch.setitem(props["Producer"], "_runtime_options", ["A Network"])
-        schema = get_gemini_schema("podcasts")
-        assert "enum" not in schema["properties"]["Podcast Name"]
-        assert "enum" not in schema["properties"]["Producer"]
+        def table(name):
+            out = real(name)
+            if name == "podcast_episodes":
+                out = {**out, "columns": dict(out["columns"])}
+                out["columns"]["genres"] = {**out["columns"]["genres"], "options": values}
+            return out
+
+        monkeypatch.setattr(catalog, "table", table)
 
     def test_enum_dropped_above_cap(self, monkeypatch):
-        """A strict field whose live options outgrow the cap loses its enum."""
-        props = self._podcast_props()
-        big = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
-        monkeypatch.setitem(props["Genres"], "_runtime_options", big)
-        schema = get_gemini_schema("podcasts")
-        assert "enum" not in schema["properties"]["Genres"]["items"]
+        big = [{"v": f"Genre Number {i}"} for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
+        self._genres(monkeypatch, big)
+        assert "enum" not in get_gemini_schema("podcasts")["properties"]["Genres"]["items"]
 
     def test_enum_kept_at_cap(self, monkeypatch):
-        props = self._podcast_props()
-        small = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS)]
-        monkeypatch.setitem(props["Genres"], "_runtime_options", small)
-        schema = get_gemini_schema("podcasts")
-        assert schema["properties"]["Genres"]["items"]["enum"] == small
+        small = [{"v": f"Genre Number {i}"} for i in range(ai_engine.MAX_ENUM_OPTIONS)]
+        self._genres(monkeypatch, small)
+        enum = get_gemini_schema("podcasts")["properties"]["Genres"]["items"]["enum"]
+        assert enum == [o["v"] for o in small]
 
     def test_prompt_omits_oversized_option_lists(self, monkeypatch):
-        """The prompt's valid-options dump is capped too (2k names ≈ 30k wasted tokens)."""
-        props = self._podcast_props()
-        big = [f"Genre Number {i}" for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
-        monkeypatch.setitem(props["Genres"], "_runtime_options", big)
-        prompt = generate_extraction_prompt("podcasts", "some podcast")
-        assert "Genre Number 5" not in prompt
-
-    def test_prompt_keeps_small_option_lists(self, monkeypatch):
-        props = self._podcast_props()
-        monkeypatch.setitem(props["Genres"], "_runtime_options", ["Sci-Fi", "Drama"])
-        prompt = generate_extraction_prompt("podcasts", "some podcast")
-        assert "Sci-Fi" in prompt
+        big = [{"v": f"Genre Number {i}"} for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
+        self._genres(monkeypatch, big)
+        assert "Genre Number 5" not in generate_extraction_prompt("podcasts", "some podcast")

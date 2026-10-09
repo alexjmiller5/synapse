@@ -1,20 +1,15 @@
-"""End-to-end pipeline tests — exercise run_pipeline() with mocked external services.
+"""End-to-end pipeline tests: realistic captures through run_pipeline inside a
+real capture journal, landing as rows on a synthetic Soma hub."""
 
-Each test sends realistic input through the full pipeline and verifies
-the correct Notion API calls are made with proper data.
-"""
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
-from core import soma_hub
 
-
-import time
-from unittest.mock import MagicMock, patch
-
-from core.pipeline import run_pipeline, run
+from core.pipeline import run, run_pipeline
 from core.schemas import CATEGORY_SCHEMA_CLASSIFY
-from core.secrets import get_db_id
-from helpers import make_gemini_response, props_of
+from core.workflow import capture_scope
+from helpers import make_gemini_response
 
 
 # ---------------------------------------------------------------------------
@@ -29,27 +24,12 @@ def _setup_classify_extract(mock_gemini, category, extracted, project=None):
     classify_resp = {"category": category}
     if project:
         classify_resp["related_project"] = project
-
-    responses = [
-        make_gemini_response(classify_resp),  # Classification
-        make_gemini_response(extracted),  # Extraction
-    ]
-    mock_gemini.models.generate_content.side_effect = responses
-
-
-def _setup_classify_extract_mobile(mock_gemini, category, extracted, mobile_compat=False):
-    """Configure for tasks with mobile compatibility check (3 Gemini calls)."""
-    responses = [
-        make_gemini_response({"category": category}),
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response(classify_resp),
         make_gemini_response(extracted),
-        make_gemini_response({"mobile_compatible": mobile_compat}),
     ]
-    mock_gemini.models.generate_content.side_effect = responses
 
 
-# ---------------------------------------------------------------------------
-# Pipeline context defaults
-# ---------------------------------------------------------------------------
 DEFAULT_CTX = {
     "project_prompts": ["Synapse"],
     "project_id_map": {"Synapse": "synapse-project-id"},
@@ -58,309 +38,212 @@ DEFAULT_CTX = {
 }
 
 
-def _log_props(mock_notion):
-    """Return the properties of the execution-log page create, identified by its
-    parent = the logs DB (props are id-keyed now, so a shared 'title' id can't
-    distinguish it), re-keyed back to names."""
-    log_db = get_db_id("logs")
-    for call in mock_notion.pages.create.call_args_list:
-        if call.kwargs.get("parent", {}).get("database_id") == log_db:
-            return props_of(call, "logs")
-    raise AssertionError("No execution log page was created")
+@pytest.fixture
+def hub(media_hub):
+    return media_hub
 
 
 def _run(item_data, **overrides):
+    """One parsed item, processed inside its own capture journal."""
     ctx = {**DEFAULT_CTX, **overrides}
-    run_pipeline(
-        item_data,
-        ctx["project_prompts"],
-        ctx["project_id_map"],
-        ctx["inventory_map"],
-        ctx["inventory_list"],
-        source=ctx.get("source"),
-    )
+    payload = {
+        "raw_text": item_data["core_text"],
+        "workspace": "default",
+        "capture_id": str(uuid4()),
+    }
+    with capture_scope({}, payload):
+        run_pipeline(
+            item_data,
+            ctx["project_prompts"],
+            ctx["project_id_map"],
+            ctx["inventory_map"],
+            ctx["inventory_list"],
+            source=ctx.get("source"),
+        )
+
+
+def _rows(hub, table):
+    return list(hub.rows.get(table, {}).values())
+
+
+def _execution(hub):
+    (execution,) = _rows(hub, "synapse_executions")
+    return execution
+
+
+def _task(hub):
+    (task,) = _rows(hub, "tasks")
+    return task
 
 
 # ======================================================================
 # Task Tests
 # ======================================================================
 class TestTaskPipeline:
-    def test_simple_task(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(
+    def test_simple_task(self, hub, mock_gemini):
+        _setup_classify_extract(
             mock_gemini,
             "tasks",
-            {
-                "Name": "Update dating profile",
-                "AI Title": "Update dating profile",
-                "Tags": ["Chore"],
-                "Due Date": "2026-03-29",
-            },
+            {"Name": "Update dating profile", "Tags": ["Chore"], "Due Date": "2026-03-29"},
         )
-
         _run(_item("Update dating profile"))
-        # Should create a task page + log outcome = 2 creates
-        assert mock_notion.pages.create.call_count >= 1
-        # Ordinary execution — log must NOT carry the project-append tag
-        assert "Tags" not in _log_props(mock_notion)
+        task = _task(hub)
+        assert task["title"] == "Update dating profile"
+        assert task["tags"] == ["Chore"] and task["due_date"] == "2026-03-29"
+        assert task["status"] == "To Do" and task["priority"] == "High"
+        execution = _execution(hub)
+        assert execution["created_item"] == f"tasks/{task['id']}"
+        assert execution["code_execution"] == "Success" and execution["category"] == "tasks"
+        assert execution["outcome"] == "To Review"
+        assert "tags" not in execution  # ordinary execution: not a project append
 
-    def test_task_with_context(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(
+    def test_task_name_is_the_verbatim_capture(self, hub, mock_gemini):
+        _setup_classify_extract(
             mock_gemini,
             "tasks",
             {
-                "Name": "Cancel Uber One",
-                "AI Title": "Cancel Uber One subscription",
+                "Name": "Cancel the Uber One subscription",
                 "Tags": ["Chore"],
                 "Due Date": "2027-01-01",
             },
         )
-
         _run(_item("Cancel Uber One", "Jan 1"))
-        assert mock_notion.pages.create.called
-
-    def test_task_mobile_compatible(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(
-            mock_gemini,
-            "tasks",
-            {
-                "Name": "Text mom back",
-                "AI Title": "Text mom back",
-                "Tags": ["Chore"],
-                "Due Date": "2026-03-29",
-            },
-            mobile_compat=True,
-        )
-
-        _run(_item("Text mom back"))
-        # Verify the create call happened
-        assert mock_notion.pages.create.called
-
-    def test_task_not_mobile_compatible(self, mock_gemini, mock_notion):
-        _setup_classify_extract_mobile(
-            mock_gemini,
-            "tasks",
-            {
-                "Name": "Fix production server",
-                "AI Title": "Fix production server",
-                "Tags": ["Work"],
-                "Due Date": "2026-03-29",
-            },
-            mobile_compat=False,
-        )
-
-        _run(_item("Fix production server"))
-        assert mock_notion.pages.create.called
+        task = _task(hub)
+        assert task["title"] == "Cancel Uber One" and task["due_date"] == "2027-01-01"
 
 
 # ======================================================================
 # Deterministic task-context pre-check
 # ======================================================================
 class TestTaskContextPrecheck:
-    def test_task_context_skips_classifier(self, mock_gemini, mock_notion):
+    def test_task_context_skips_classifier(self, hub, mock_gemini):
         """Context containing the word 'task' classifies deterministically — no classify call."""
-        # Only the extraction response is queued: a classification call would
-        # consume it and break the sequence.
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response(
                 {
                     "Name": "Add the full x men series to my movies db",
-                    "AI Title": "Add X-Men series to movies DB",
                     "Tags": ["Chore"],
                     "Due Date": "2026-07-10",
                 }
             ),
         ]
-
         _run(_item("Add the full x men series to my movies db", "med prior task"))
-
         assert mock_gemini.models.generate_content.call_count == 1
         first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
         assert first_cfg.response_json_schema is not CATEGORY_SCHEMA_CLASSIFY
-        assert mock_notion.pages.create.called
+        assert _task(hub)["title"] == "Add the full x men series to my movies db"
 
-    def test_date_context_still_calls_classifier(self, mock_gemini, mock_notion):
+    def test_date_context_still_calls_classifier(self, hub, mock_gemini):
         """A plain date context does NOT trigger the pre-check — classifier runs."""
-        _setup_classify_extract_mobile(
+        _setup_classify_extract(
             mock_gemini,
             "tasks",
             {
                 "Name": "watch Eric Andre's new movie, little brother",
-                "AI Title": "Watch Little Brother",
                 "Tags": ["Chore"],
                 "Due Date": "2026-06-26",
             },
         )
-
         _run(_item("watch Eric Andre's new movie, little brother", "June 26"))
-
         assert mock_gemini.models.generate_content.call_count == 2
         first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
         assert first_cfg.response_json_schema is CATEGORY_SCHEMA_CLASSIFY
-        assert mock_notion.pages.create.called
+        assert _task(hub)["due_date"] == "2026-06-26"
 
 
 # ======================================================================
-# Project Task/Note Tests
+# Project Tasks
 # ======================================================================
 class TestProjectPipeline:
-    def test_project_task(self, mock_gemini, mock_notion):
+    def test_project_task(self, hub, mock_gemini):
         """Task with project context creates a project-linked task."""
-        responses = [
-            make_gemini_response(
-                {
-                    "category": "tasks",
-                    "related_project": "Synapse",
-                }
-            ),
-            make_gemini_response(
-                {
-                    "Name": "Fix login bug",
-                    "Tags": ["Chore"],
-                    "Due Date": "2026-03-29",
-                }
-            ),
-            make_gemini_response({"mobile_compatible": False}),
-        ]
-        mock_gemini.models.generate_content.side_effect = responses
-
-        _run(_item("Fix login bug", "Synapse"))
-        # Should create task with project relation
-        assert mock_notion.pages.create.called
-        # Check that Project relation was added
-        create_calls = mock_notion.pages.create.call_args_list
-        task_create = create_calls[0]
-        props = props_of(task_create, "tasks")
-        assert "Project" in props
-        # Project tasks default to High priority (like regular tasks)
-        assert props["Priority"]["select"]["name"] == "High"
-        # Execution log must be tagged as a project-append execution
-        log_props = _log_props(mock_notion)
-        assert log_props["Tags"]["multi_select"] == [{"name": "project-append"}]
-
-    def test_task_context_links_project(self, mock_gemini, mock_notion):
-        """Deterministic 'task' pre-check still links a referenced project instead
-        of dropping it — even with 'task' in the context, no classifier call runs."""
-        # Only the extraction response is queued (pre-check skips the classifier).
-        mock_gemini.models.generate_content.side_effect = [
-            make_gemini_response(
-                {
-                    "Name": "Fix Synapse login bug",
-                    "Tags": ["Chore"],
-                    "Due Date": "2026-07-10",
-                }
-            ),
-        ]
-
-        _run(_item("Fix Synapse login bug", "high priority task"))
-
-        # Classifier was skipped (1 Gemini call = extraction only)
-        assert mock_gemini.models.generate_content.call_count == 1
-        # Task created with a Project relation to the matched 'Synapse' project
-        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
-        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
-        assert props["Priority"]["select"]["name"] == "High"
-        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
-
-    def test_task_context_typod_project_rescued_by_classifier(self, mock_gemini, mock_notion):
-        """Deterministic 'task' path: when the contains-match misses (typo'd or
-        paraphrased project name) but the text mentions a project ('proj'), one
-        classifier call rescues the link — category stays tasks."""
-        mock_gemini.models.generate_content.side_effect = [
-            # Rescue classification (its category is ignored; only the project is used)
-            make_gemini_response(
-                {"category": "tasks", "related_project": "Notion Task Burndown Chart"}
-            ),
-            make_gemini_response(
-                {
-                    "Name": "add manual markers on dates",
-                    "Tags": ["Chore"],
-                    "Due Date": "2026-08-03",
-                }
-            ),
-        ]
-
-        _run(
-            _item("add manual markers on dates", "notion task burdown chart proj"),
-            project_prompts=["Notion Task Burndown Chart"],
-            project_id_map={"Notion Task Burndown Chart": "burndown-id"},
+        _setup_classify_extract(
+            mock_gemini,
+            "tasks",
+            {"Name": "Fix login bug", "Tags": ["Chore"], "Due Date": "2026-03-29"},
+            project="Synapse",
         )
+        _run(_item("Fix login bug", "Synapse"))
+        task = _task(hub)
+        assert task["project_ids"] == ["synapse-project-id"]
+        assert task["priority"] == "High"
+        assert _execution(hub)["tags"] == ["project-append"]
 
+    def test_task_context_links_project(self, hub, mock_gemini):
+        """The deterministic 'task' pre-check still links a referenced project."""
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": "Fix Synapse login bug", "Tags": ["Chore"], "Due Date": "2026-07-10"}
+            ),
+        ]
+        _run(_item("Fix Synapse login bug", "high priority task"))
+        assert mock_gemini.models.generate_content.call_count == 1
+        assert _task(hub)["project_ids"] == ["synapse-project-id"]
+        assert _execution(hub)["tags"] == ["project-append"]
+
+    def test_task_context_typod_project_rescued_by_classifier(self, hub, mock_gemini):
+        """When the contains-match misses but the text mentions a project ('proj'),
+        one classifier call rescues the link — category stays tasks."""
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks", "related_project": "Task Burndown Chart"}),
+            make_gemini_response(
+                {"Name": "add manual markers on dates", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
+        ]
+        _run(
+            _item("add manual markers on dates", "task burdown chart proj"),
+            project_prompts=["Task Burndown Chart"],
+            project_id_map={"Task Burndown Chart": "burndown-id"},
+        )
         assert mock_gemini.models.generate_content.call_count == 2
-        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
-        assert props["Project"] == {"relation": [{"id": "burndown-id"}]}
-        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
+        assert _task(hub)["project_ids"] == ["burndown-id"]
 
-    def test_task_context_without_proj_mention_skips_rescue(self, mock_gemini, mock_notion):
-        """No project reference in text/context → the deterministic path stays at
-        one Gemini call (extraction only), no rescue classification."""
+    def test_task_context_without_proj_mention_skips_rescue(self, hub, mock_gemini):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response(
                 {"Name": "clean the desk", "Tags": ["Chore"], "Due Date": "2026-08-03"}
             ),
         ]
-
         _run(_item("clean the desk", "low prior task"))
-
         assert mock_gemini.models.generate_content.call_count == 1
 
-    def test_project_not_found_falls_through(self, mock_gemini, mock_notion):
-        """If project name doesn't match, falls back to normal task creation."""
-        responses = [
-            make_gemini_response(
-                {
-                    "category": "tasks",
-                    "related_project": "NonExistentProject",
-                }
-            ),
-            make_gemini_response(
-                {
-                    "Name": "Some task",
-                    "Tags": ["Chore"],
-                    "Due Date": "2026-03-29",
-                }
-            ),
-            make_gemini_response({"mobile_compatible": False}),
-        ]
-        mock_gemini.models.generate_content.side_effect = responses
-
+    def test_project_not_found_falls_through(self, hub, mock_gemini):
+        _setup_classify_extract(
+            mock_gemini,
+            "tasks",
+            {"Name": "Some task", "Tags": ["Chore"], "Due Date": "2026-03-29"},
+            project="NonExistentProject",
+        )
         _run(_item("Some task", "NonExistentProject"))
-        # Should still create via execute_logic fallback
-        assert mock_notion.pages.create.called
-        # Not a project-append execution — log must NOT carry the tag
-        assert "Tags" not in _log_props(mock_notion)
+        assert "project_ids" not in _task(hub)
+        assert "tags" not in _execution(hub)
 
 
 # ======================================================================
-# Grocery Tests
+# Groceries
 # ======================================================================
 class TestGroceryPipeline:
-    def test_new_grocery_is_pushed_to_the_hub(self, mock_gemini, mock_notion):
+    def test_new_grocery_is_pushed_to_the_hub(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini, "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
         )
-        with (
-            patch("core.handlers.pull_rows", return_value=[]),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
-        ):
-            _run(_item("Buy quinoa", "groceries"))
-        assert push.call_args.args[0] == "groceries"
-        assert push.call_args.args[1][0]["name"] == "Quinoa"
-        mock_notion.pages.create.assert_called_once()  # the Executions log only
+        _run(_item("Buy quinoa", "groceries"))
+        (row,) = _rows(hub, "groceries")
+        assert (row["name"], row["category"], row["status"]) == ("Quinoa", "Grains", "On List")
+        assert _execution(hub)["created_item"] == f"groceries/{row['id']}"
+        assert _rows(hub, "tasks") == []
 
-    def test_existing_grocery_updates_that_row(self, mock_gemini, mock_notion):
+    def test_existing_grocery_updates_that_row(self, hub, mock_gemini):
+        hub.rows["groceries"] = {"egg-id": {"id": "egg-id", "name": "Eggs", "status": "Have"}}
         _setup_classify_extract(mock_gemini, "groceries", {"Name": "Eggs", "Status": "On List"})
-        with (
-            patch("core.handlers.pull_rows", return_value=[{"id": "egg-id", "name": "Eggs"}]),
-            patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push,
-        ):
-            _run(_item("Buy eggs", "groceries"))
-        assert push.call_args.args[1][0]["id"] == "egg-id"
+        _run(_item("Buy eggs", "groceries"))
+        (row,) = _rows(hub, "groceries")
+        assert row["id"] == "egg-id" and row["status"] == "On List"
 
 
 # ======================================================================
-# YouTube Tests - soma, not Notion (see handlers.TestYouTubeToSomaData)
+# YouTube
 # ======================================================================
-@pytest.mark.usefixtures("media_hub")
 class TestYouTubePipeline:
     SNIPPET = {
         "items": [
@@ -392,112 +275,73 @@ class TestYouTubePipeline:
         yt.channels().list().execute.return_value = self.CHANNEL
         return yt
 
-    def test_new_video_pushed_to_soma(self, mock_gemini, mock_notion):
+    def test_new_video_pushed_to_soma(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "youtube-videos",
-            {
-                "Title": "Great Video",
-                "Video URL": "https://youtu.be/abc123",
-                "Status": "Finished",
-            },
+            {"Video URL": "https://youtu.be/abc123", "Status": "Finished"},
         )
-        with (
-            patch("core.handlers.get_youtube", return_value=self._yt()),
-            patch("core.handlers.known_channel_ids", return_value=set()),
-            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
-        ):
+        with patch("core.handlers.get_youtube", return_value=self._yt()):
             _run(_item("https://youtu.be/abc123"))
+        assert [r["id"] for r in _rows(hub, "youtube_channels")] == ["UCabc"]
+        (video,) = _rows(hub, "youtube_videos")
+        assert video["id"] == "abc123" and video["status"] == "Finished"
+        execution = _execution(hub)
+        assert execution["created_item"] == "youtube_videos/abc123"
+        assert execution["category"] == "youtube-videos"
+        # the new channel asks the user to classify it
+        assert [t["title"] for t in _rows(hub, "tasks")] == ["Classify new Channel: Test Channel"]
 
-        tables = [c.args[0] for c in push.call_args_list]
-        assert tables == ["youtube_channels", "youtube_videos"]
-        assert push.call_args_list[1].args[1][0]["id"] == "abc123"
-        log_props = _log_props(mock_notion)
-        assert log_props["Created Item"]["url"] == "youtube_videos/abc123"
-        assert log_props["Category"]["select"]["name"] == "youtube-videos"
-
-    def test_youtube_homepage_url_fails_loudly(self, mock_gemini, mock_notion):
-        """A videoless YouTube URL (bare youtube.com/) creates NO video page — the
-        error path logs Error(s) and creates a high-priority triage task instead."""
+    def test_youtube_homepage_url_fails_with_a_review_task(self, hub, mock_gemini):
+        """A videoless YouTube URL writes no video; the execution is an error and
+        a cleanup task asks the user to file it (never a silent retry loop)."""
         _setup_classify_extract(
             mock_gemini,
             "youtube-videos",
-            {
-                "Title": "Could not extract Video ID",
-                "Video URL": "https://youtube.com/",
-                "Status": "Not Started",
-            },
+            {"Video URL": "https://youtube.com/", "Status": "Not Started"},
         )
-        mock_notion.request.return_value = {"results": []}
-
         _run(_item("https://youtube.com/"))
-
-        yt_db = get_db_id("youtube-videos")
-        tasks_db = get_db_id("tasks")
-        parents = [
-            c.kwargs.get("parent", {}).get("database_id")
-            for c in mock_notion.pages.create.call_args_list
-        ]
-        assert yt_db not in parents  # no junk video page
-        assert tasks_db in parents  # high-priority triage task created
-        assert _log_props(mock_notion)["Code Execution"]["status"]["name"] == "Error(s)"
+        assert _rows(hub, "youtube_videos") == []
+        assert _execution(hub)["code_execution"] == "Error(s)"
+        assert "youtube.com" in _task(hub)["title"]
 
 
 # ======================================================================
-# Movie/TV Tests
+# Movies / TV
 # ======================================================================
-@pytest.mark.usefixtures("media_hub")
 class TestMovieTvPipeline:
-    def test_movie_pushed_to_soma_and_logged_by_row_ref(self, mock_gemini, mock_notion):
+    def test_movie_pushed_to_soma_and_logged_by_row_ref(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "movies",
             {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]},
         )
-        with (
-            patch("core.handlers.resolve_tmdb_id", return_value="27205"),
-            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
-        ):
+        with patch("core.handlers.resolve_tmdb_id", return_value="27205"):
             _run(_item("Inception"))
+        (movie,) = _rows(hub, "movies")
+        assert movie["id"] == "27205" and movie["tags"] == ["Favorite"]
+        execution = _execution(hub)
+        assert execution["created_item"] == "movies/27205"
+        assert execution["category"] == "movies"
 
-        assert push.call_args.args[0] == "movies"
-        assert push.call_args.args[1][0]["id"] == "27205"
-        # No movie page in Notion - only the Executions log row, carrying the
-        # soma row reference as Created Item.
-        log_props = props_of(mock_notion.pages.create.call_args, "logs")
-        assert log_props["Created Item"]["url"] == "movies/27205"
-        assert log_props["Category"]["select"]["name"] == "movies"
-
-    def test_unresolvable_movie_files_a_cleanup_task(self, mock_gemini, mock_notion):
+    def test_unresolvable_movie_files_a_cleanup_task(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini, "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
         )
-        with (
-            patch("core.handlers.resolve_tmdb_id", return_value=None),
-            patch("core.handlers.push_rows") as push,
-        ):
+        with patch("core.handlers.resolve_tmdb_id", return_value=None):
             _run(_item("Some Obscure Film"))
-
-        push.assert_not_called()
-        log = _log_props(mock_notion)
-        assert log["Code Execution"]["status"]["name"] == "Error(s)"
-        assert "Created Item" not in log
-        names = [
-            props_of(c, "tasks")["Name"]["title"][0]["text"]["content"]
-            for c in mock_notion.pages.create.call_args_list
-            if "Name" in props_of(c, "tasks")
-        ]
-        assert any("TMDB" in n for n in names)
+        assert _rows(hub, "movies") == []
+        execution = _execution(hub)
+        assert execution["code_execution"] == "Error(s)"
+        assert execution.get("created_item") is None
+        assert "TMDB" in _task(hub)["title"]
 
 
 # ======================================================================
-# Bookmark Tests
+# Bookmarks
 # ======================================================================
 class TestBookmarkPipeline:
-    def _push(self):
-        return patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []})
-
-    def test_new_bookmark(self, mock_gemini, mock_notion):
+    def test_new_bookmark(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "bookmarks",
@@ -508,19 +352,14 @@ class TestBookmarkPipeline:
                 "Tags": [],
             },
         )
-        with (
-            patch(
-                "core.external_data.fetch_web_metadata",
-                return_value="HTML Title: DevTool\nContent...",
-            ),
-            patch("core.handlers.pull_rows", return_value=[]),
-            self._push() as push,
+        with patch(
+            "core.external_data.fetch_web_metadata", return_value="HTML Title: DevTool\nContent..."
         ):
             _run(_item("https://devtool.io"))
-        row = push.call_args.args[1][0]
-        assert push.call_args.args[0] == "bookmarks" and row["url"] == "https://devtool.io"
+        (row,) = _rows(hub, "bookmarks")
+        assert row["url"] == "https://devtool.io" and row["title"] == "DevTool"
 
-    def test_github_bookmark_auto_tagged(self, mock_gemini, mock_notion):
+    def test_github_bookmark_auto_tagged(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "bookmarks",
@@ -531,18 +370,14 @@ class TestBookmarkPipeline:
                 "Tags": [],
             },
         )
-        with (
-            patch(
-                "core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."
-            ),
-            patch("core.handlers.pull_rows", return_value=[]),
-            self._push() as push,
+        with patch(
+            "core.external_data.fetch_web_metadata", return_value="HTML Title: Repo\nContent..."
         ):
             _run(_item("https://github.com/owner/repo"))
-        row = push.call_args.args[1][0]
+        (row,) = _rows(hub, "bookmarks")
         assert row["tags"] == ["Github"] and row["description"] == "A repo"
 
-    def test_failed_scrape_flags_the_row_instead_of_filing_a_task(self, mock_gemini, mock_notion):
+    def test_failed_scrape_flags_the_row_instead_of_filing_a_task(self, hub, mock_gemini):
         # A login-walled or bot-checked page: the model can only guess from the URL.
         _setup_classify_extract(
             mock_gemini,
@@ -554,19 +389,14 @@ class TestBookmarkPipeline:
                 "Tags": [],
             },
         )
-        with (
-            patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"),
-            patch("core.handlers.pull_rows", return_value=[]),
-            patch("core.pipeline.create_cleanup_task") as cleanup,
-            self._push() as push,
-        ):
+        with patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"):
             _run(_item("https://www.instagram.com/direct/inbox/"))
-        row = push.call_args.args[1][0]
+        (row,) = _rows(hub, "bookmarks")
         assert "title" not in row  # a guessed title would break "the page's own title"
         assert row["needs_review"] and row["description"] == "Instagram direct messages"
-        cleanup.assert_not_called()
+        assert _rows(hub, "tasks") == []
 
-    def test_failed_scrape_of_a_known_bookmark_changes_nothing(self, mock_gemini, mock_notion):
+    def test_failed_scrape_of_a_known_bookmark_changes_nothing(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "bookmarks",
@@ -580,39 +410,18 @@ class TestBookmarkPipeline:
             "tags": '["List"]',
             "needs_review": None,
         }
-        with (
-            patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"),
-            patch("core.handlers.pull_rows", return_value=[known]),
-            self._push() as push,
-        ):
+        hub.rows["bookmarks"] = {"bm1": dict(known)}
+        with patch("core.external_data.fetch_web_metadata", return_value="Error fetching metadata"):
             _run(_item("https://x.com"))
-        row = push.call_args.args[1][0]
-        assert row["id"] == "bm1"
-        assert not {"title", "description", "tags", "needs_review"} & row.keys()
+        (row,) = _rows(hub, "bookmarks")
+        assert {k: row[k] for k in known} == known
 
 
 # ======================================================================
-# Quote Tests
+# Ideas, things to do, podcasts
 # ======================================================================
-class TestQuotePipeline:
-    def test_new_quote(self, mock_gemini, mock_notion):
-        _setup_classify_extract(
-            mock_gemini,
-            "quotes",
-            {
-                "Quote": "I will be back",
-            },
-        )
-
-        _run(_item("I will be back", "Arnold"))
-        assert mock_notion.pages.create.called
-
-
-# ======================================================================
-# Ideas Tests
-# ======================================================================
-class TestIdeaPipeline:
-    def test_new_idea(self, mock_gemini, mock_notion):
+class TestCategoryRows:
+    def test_new_idea(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "ideas",
@@ -622,36 +431,30 @@ class TestIdeaPipeline:
                 "Status": "Someday",
             },
         )
-        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
-            _run(_item("Idea for an app that tracks sleep patterns"))
-        assert push.call_args.args[0] == "ideas"
-        assert push.call_args.args[1][0]["status"] == "Someday"
+        _run(_item("Idea for an app that tracks sleep patterns"))
+        (row,) = _rows(hub, "ideas")
+        assert row["status"] == "Someday" and row["tags"] == ["Coding"]
 
-
-# ======================================================================
-# Fun Activities Tests
-# ======================================================================
-class TestFunActivitiesPipeline:
-    def test_with_location(self, mock_gemini, mock_notion):
+    def test_fun_activity_with_location(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "fun-activities",
             {"Title": "Walk around Seaport", "Status": "Someday", "Location": "Boston"},
         )
-        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
-            _run(_item("Walk around Seaport", "fun"))
-        row = push.call_args.args[1][0]
-        assert push.call_args.args[0] == "things_to_do"
+        _run(_item("Walk around Seaport", "fun"))
+        (row,) = _rows(hub, "things_to_do")
         assert row["kind"] == "Activity" and row["city"] == "Boston"
         assert "needs_review" not in row
 
+    def test_bucket_list_item_is_an_ambition(self, hub, mock_gemini):
+        _setup_classify_extract(
+            mock_gemini, "bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
+        )
+        _run(_item("Skydive in Dubai", "bucket list"))
+        (row,) = _rows(hub, "things_to_do")
+        assert row["kind"] == "Ambition" and row["title"] == "Skydive in Dubai"
 
-# ======================================================================
-# Podcast Tests
-# ======================================================================
-@pytest.mark.usefixtures("media_hub")
-class TestPodcastPipeline:
-    def test_spotify_podcast(self, mock_gemini, mock_notion):
+    def test_spotify_podcast(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,
             "podcasts",
@@ -663,132 +466,93 @@ class TestPodcastPipeline:
                 "URL": "https://open.spotify.com/episode/abc",
             },
         )
-        with (
-            patch(
-                "core.external_data.get_spotify_metadata",
-                return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
-            ),
-            patch("core.soma_hub.insert_rows", wraps=soma_hub.insert_rows) as push,
+        with patch(
+            "core.external_data.get_spotify_metadata",
+            return_value="Show: My Show\nEp: Great Episode\nDesc: Good",
         ):
             _run(_item("https://open.spotify.com/episode/abc"))
-        row = push.call_args.args[1][0]
-        assert push.call_args.args[0] == "podcast_episodes"
+        (row,) = _rows(hub, "podcast_episodes")
         assert row["podcast"] == "My Show" and row["url"].startswith("https://open.spotify.com")
 
 
 # ======================================================================
-# Bucket List Tests
-# ======================================================================
-class TestBucketListPipeline:
-    def test_new_item(self, mock_gemini, mock_notion):
-        _setup_classify_extract(
-            mock_gemini, "bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
-        )
-        with patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []}) as push:
-            _run(_item("Skydive in Dubai", "bucket list"))
-        row = push.call_args.args[1][0]
-        assert push.call_args.args[0] == "things_to_do" and row["kind"] == "Ambition"
-
-
-# ======================================================================
-# Error Handling Tests
+# Errors
 # ======================================================================
 class TestErrorHandling:
-    def test_pipeline_error_logs_and_creates_task(self, mock_gemini, mock_notion):
-        """When the pipeline throws, it should log the error and create a high-priority task."""
+    def test_a_failed_preparation_files_a_recovery_task_and_logs_the_error(self, hub, mock_gemini):
         mock_gemini.models.generate_content.side_effect = Exception("Gemini down")
-
         _run(_item("Some text that fails"))
-        # Should have called create for: log_job_outcome + create_high_priority_task
-        assert mock_notion.pages.create.call_count >= 1
+        task = _task(hub)
+        assert task["title"].endswith("Some text that fails") and task["priority"] == "High"
+        execution = _execution(hub)
+        assert execution["code_execution"] == "Error(s)" and execution["category"] == "Unknown"
+        assert "Gemini down" in execution["error_details"]
+        assert execution["created_item"] == f"tasks/{task['id']}"
 
 
 # ======================================================================
-# Batch Processing (processor entry point)
+# The worker entry point
 # ======================================================================
 class TestProcessorEntryPoint:
-    def test_batch_processing(self, mock_gemini, mock_notion):
-        """run() should read raw_text from the payload, parse, and run pipeline for each item."""
-        # Mock parse_raw_input to return 2 items
-        with (
-            patch("core.pipeline.parse_raw_input") as mock_parse,
-            patch("core.pipeline.hydrate_dynamic_options"),
-            patch(
-                "core.pipeline.fetch_active_projects", return_value=(["Synapse"], {"Synapse": "id"})
+    PAYLOAD = {
+        "raw_text": "Buy milk $ groceries @ Call John",
+        "workspace": "default",
+        "capture_id": "0d4bbad3-41a2-4f40-9ba6-0c1d13c3a7a1",
+    }
+
+    def _gemini(self, mock_gemini):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "groceries"}),
+            make_gemini_response({"Name": "Milk", "Status": "On List", "Category": "Dairy"}),
+            make_gemini_response({"category": "tasks"}),
+            make_gemini_response(
+                {"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}
             ),
-            patch("core.pipeline.fetch_inventory_map", return_value={}),
-        ):
-            mock_parse.return_value = [
+        ]
+
+    def test_batch_processing_lands_every_item_and_its_execution(self, hub, mock_gemini):
+        hub.rows["projects"] = {"p1": {"id": "p1", "title": "Synapse", "status": "To Do"}}
+        self._gemini(mock_gemini)
+        with patch(
+            "core.pipeline.parse_raw_input",
+            return_value=[
                 {"core_text": "Buy milk", "context_notes": "groceries"},
                 {"core_text": "Call John", "context_notes": ""},
-            ]
+            ],
+        ) as parse:
+            run(dict(self.PAYLOAD), store={})
+        parse.assert_called_once()
+        assert [r["name"] for r in _rows(hub, "groceries")] == ["Milk"]
+        assert [r["title"] for r in _rows(hub, "tasks")] == ["Call John"]
+        assert len(_rows(hub, "synapse_executions")) == 2
 
-            # Mock the Gemini calls for each pipeline run (classify + extract per item)
-            mock_gemini.models.generate_content.side_effect = [
-                make_gemini_response({"category": "groceries"}),
-                make_gemini_response({"Name": "Milk", "Status": "On List", "Category": "Dairy"}),
-                make_gemini_response({"category": "tasks"}),
-                make_gemini_response(
-                    {"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}
-                ),
-                make_gemini_response({"mobile_compatible": False}),
-            ]
+    def test_a_resent_capture_id_writes_nothing_new(self, hub, mock_gemini):
+        self._gemini(mock_gemini)
+        store = {}
+        items = [
+            {"core_text": "Buy milk", "context_notes": "groceries"},
+            {"core_text": "Call John", "context_notes": ""},
+        ]
+        with patch("core.pipeline.parse_raw_input", return_value=items):
+            run(dict(self.PAYLOAD), store=store)
+            run(dict(self.PAYLOAD), store=store)
+        assert mock_gemini.models.generate_content.call_count == 4
+        assert len(_rows(hub, "synapse_executions")) == 2
 
-            run({"raw_text": "Buy milk $ groceries @ Call John"})
+    def test_a_workspace_without_soma_task_bindings_is_refused(self, monkeypatch):
+        from core import workflow
 
-            mock_parse.assert_called_once()
+        monkeypatch.setattr(
+            workflow, "binding_for", lambda kind: None if kind == "tasks" else {"table": "x"}
+        )
+        monkeypatch.setattr("core.pipeline.binding_for", workflow.binding_for)
+        with pytest.raises(ValueError, match="workflow.tasks"):
+            run(dict(self.PAYLOAD), store={})
 
-
-# ======================================================================
-# Server-side dedupe (Receptor occasionally re-sends a thought)
-# ======================================================================
-class TestDedup:
-    def _run_with(self, seen, raw_text, mock_parse_holder):
-        with (
-            patch("core.pipeline.parse_raw_input", return_value=[]) as mock_parse,
-            patch("core.pipeline.fetch_active_projects", return_value=([], {})) as mock_fetch,
-            patch("core.pipeline.fetch_inventory_map", return_value={}),
-        ):
-            run({"raw_text": raw_text}, seen=seen)
-            mock_parse_holder["parse"] = mock_parse
-            mock_parse_holder["fetch"] = mock_fetch
-
-    def test_exact_resend_is_skipped(self, mock_gemini, mock_notion):
-        seen, calls = {}, {}
-        self._run_with(seen, "Buy milk", calls)
-        assert calls["parse"].call_count == 1
-        assert len(seen) == 1
-
-        self._run_with(seen, "Buy milk", calls)
-        assert calls["parse"].call_count == 0
-        assert calls["fetch"].call_count == 0  # skipped before any Notion reads
-
-    def test_whitespace_variants_are_the_same_thought(self, mock_gemini, mock_notion):
-        seen, calls = {}, {}
-        self._run_with(seen, "Buy milk", calls)
-        self._run_with(seen, "  Buy milk\n", calls)
-        assert calls["parse"].call_count == 0
-
-    def test_different_text_is_processed(self, mock_gemini, mock_notion):
-        seen, calls = {}, {}
-        self._run_with(seen, "Buy milk", calls)
-        self._run_with(seen, "Buy eggs", calls)
-        assert calls["parse"].call_count == 1
-        assert len(seen) == 2
-
-    def test_old_entry_is_reprocessed(self, mock_gemini, mock_notion):
-        from core.pipeline import DEDUP_WINDOW_S, _dedup_key
-
-        seen, calls = {_dedup_key("Buy milk"): time.time() - DEDUP_WINDOW_S - 1}, {}
-        self._run_with(seen, "Buy milk", calls)
-        assert calls["parse"].call_count == 1
-        assert time.time() - seen[_dedup_key("Buy milk")] < 5  # timestamp refreshed
-
-    def test_no_store_means_no_dedup(self, mock_gemini, mock_notion):
-        calls = {}
-        self._run_with(None, "Buy milk", calls)
-        self._run_with(None, "Buy milk", calls)
-        assert calls["parse"].call_count == 1
+    def test_a_capture_without_its_id_is_refused(self, hub):
+        payload = {k: v for k, v in self.PAYLOAD.items() if k != "capture_id"}
+        with pytest.raises(ValueError, match="capture_id"):
+            run(payload, store={})
 
 
 # ======================================================================
@@ -800,31 +564,29 @@ class TestSourceAndPjKeyword:
             make_gemini_response({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03"}),
         ]
 
-    def test_source_is_logged_on_the_execution(self, mock_gemini, mock_notion):
+    def test_source_is_logged_on_the_execution(self, hub, mock_gemini):
         self._task_extraction(mock_gemini, "clean the desk")
         _run(_item("clean the desk", "task"), source="ios-app")
-        assert _log_props(mock_notion)["Source"] == {"select": {"name": "ios-app"}}
+        assert _execution(hub)["source"] == "ios-app"
 
-    def test_missing_source_leaves_the_property_unset(self, mock_gemini, mock_notion):
+    def test_missing_source_leaves_the_column_unset(self, hub, mock_gemini):
         self._task_extraction(mock_gemini, "clean the desk")
         _run(_item("clean the desk", "task"))
-        assert "Source" not in _log_props(mock_notion)
+        assert "source" not in _execution(hub)
 
-    def test_pj_forces_a_project_task_and_is_stripped(self, mock_gemini, mock_notion):
+    def test_pj_forces_a_project_task_and_is_stripped(self, hub, mock_gemini):
         """`pj` anywhere in the capture = project task: no classifier call, the
         project comes from the contains-match, and the keyword never reaches the
         task name."""
         self._task_extraction(mock_gemini, "fix the url bug synapse")
         _run(_item("fix the url bug pj synapse"))
         assert mock_gemini.models.generate_content.call_count == 1
-        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
-        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
-        assert props["Name"]["title"][0]["text"]["content"] == "fix the url bug synapse"
-        assert _log_props(mock_notion)["Tags"]["multi_select"] == [{"name": "project-append"}]
+        task = _task(hub)
+        assert task["project_ids"] == ["synapse-project-id"]
+        assert task["title"] == "fix the url bug synapse"
+        assert _execution(hub)["tags"] == ["project-append"]
 
-    def test_pj_in_context_without_name_match_uses_classifier_rescue(
-        self, mock_gemini, mock_notion
-    ):
+    def test_pj_in_context_without_name_match_uses_classifier_rescue(self, hub, mock_gemini):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response({"category": "tasks", "related_project": "Synapse"}),
             make_gemini_response(
@@ -833,13 +595,12 @@ class TestSourceAndPjKeyword:
         ]
         _run(_item("fix the url bug", "pj the thought app"))
         assert mock_gemini.models.generate_content.call_count == 2
-        props = props_of(mock_notion.pages.create.call_args_list[0], "tasks")
-        assert props["Project"] == {"relation": [{"id": "synapse-project-id"}]}
+        assert _task(hub)["project_ids"] == ["synapse-project-id"]
 
-    def test_pj_inside_a_word_is_not_the_keyword(self, mock_gemini, mock_notion):
+    def test_pj_inside_a_word_is_not_the_keyword(self, hub, mock_gemini):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response({"category": "groceries"}),
-            make_gemini_response({"Name": "pjs"}),
+            make_gemini_response({"Name": "Pajamas", "Category": "Snacks", "Status": "On List"}),
         ]
         _run(_item("buy new pjs"))
         assert mock_gemini.models.generate_content.call_count == 2
