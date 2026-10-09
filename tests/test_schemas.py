@@ -1,7 +1,7 @@
 """Tests for schemas.py — static JSON schema definitions."""
 
 from core.schemas import PARSER_SCHEMA, CATEGORY_SCHEMA_CLASSIFY
-from core.config import DATABASES
+from core.config import CATEGORIES
 
 
 class TestParserSchema:
@@ -30,14 +30,9 @@ class TestCategorySchemaClassify:
         assert "enum" in cat_prop
         assert len(cat_prop["enum"]) > 0
 
-    def test_non_helper_categories_present_helpers_excluded(self):
-        dbs = DATABASES.get("databases", {})
+    def test_every_category_and_nothing_else_is_classifiable(self):
         enum_values = CATEGORY_SCHEMA_CLASSIFY["properties"]["category"]["enum"]
-        for cat, details in dbs.items():
-            if details.get("helper"):
-                assert cat not in enum_values, f"Helper DB leaked into classifier enum: {cat}"
-            else:
-                assert cat in enum_values, f"Missing category: {cat}"
+        assert enum_values == list(CATEGORIES)
         assert "logs" not in enum_values
         assert "youtube-channels" not in enum_values
 
@@ -53,11 +48,11 @@ class TestCategorySchemaClassify:
         assert CATEGORY_SCHEMA_CLASSIFY["properties"]["related_project"]["type"] == "string"
 
 
-class TestYamlFixGuards:
-    """CI-run regression guards for YAML-only fixes that no unit test would
+class TestPromptGuards:
+    """CI-run regression guards for prompt-only fixes that no unit test would
     otherwise touch (their behavior tests live in the integration suite)."""
 
-    def test_fun_activities_location_enum_includes_lakeport(self):
+    def test_fun_activities_location_options_come_from_the_catalog(self):
         from core.ai_engine import get_gemini_schema
 
         schema = get_gemini_schema("fun-activities")
@@ -66,140 +61,62 @@ class TestYamlFixGuards:
     def test_place_tags_substituted_into_instructions(self, monkeypatch):
         """{place_tags} in a tasks instruction renders the configured list."""
         from core.ai_engine import generate_extraction_prompt
-        from core.config import DATABASES
 
-        monkeypatch.setitem(DATABASES["databases"]["tasks"], "place_tags", ["Lake House"])
+        monkeypatch.setitem(CATEGORIES["tasks"], "place_tags", ["Lake House"])
         prompt = generate_extraction_prompt("tasks", "fix the dock lines")
         assert '["Lake House"]' in prompt
         assert "{place_tags}" not in prompt
 
-    def test_task_ai_title_property_removed(self):
-        """Alex deleted the 'AI Title' property from the Tasks DB — Synapse must
-        no longer define or write it (otherwise every task write 400s)."""
-        assert "AI Title" not in DATABASES["databases"]["tasks"]["properties"]
-
     def test_movies_tags_instruction_mentions_all_time_favorite(self):
-        instr = DATABASES["databases"]["movies"]["properties"]["Tags"]["instruction"]
+        instr = CATEGORIES["movies"]["properties"]["Tags"]["instruction"]
         assert "all time favorite" in instr.lower()
-        allow = DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]
-        # one Favorite tier: the old spellings must never be offered again
-        assert "Favorite" in allow
-        assert "All-time Favorite" not in allow
-        assert "Best Movies" not in allow
 
-    def test_media_categories_are_hub_backed_not_notion(self):
-        """movies/tv-shows write to soma: they carry a hub_table and NO db_id
-        (a db_id would put them back on the Notion hydrate/validate/write paths)."""
-        for cat, table in (("movies", "movies"), ("tv-shows", "tv_shows")):
-            stanza = DATABASES["databases"][cat]
-            assert stanza["hub_table"] == table
-            assert "db_id" not in stanza
-
-    def test_media_derived_properties_removed(self):
-        """Genres/Director/Famous Cast Members are TMDB-derived ON THE HUB now -
-        extracting AI guesses for them would be rejected as unprovenanced."""
-        for cat in ("movies", "tv-shows"):
-            props = DATABASES["databases"][cat]["properties"]
-            assert not {"Genres", "Director", "Famous Cast Members"}.intersection(props)
-
-    def test_media_tags_allowlists_match_the_soma_catalog(self):
-        assert set(DATABASES["databases"]["movies"]["properties"]["Tags"]["allowlist"]) == {
-            "Favorite",
-            "Sequel",
-            "Prequel",
-            "Studio Ghibli",
-            "LS477",
-            "Sad",
-            "Coming-of-age",
-            "Animé",
-            "Mocumentary",
-            "Spanish",
-            "Sport",
-            "Concert",
-            "Cult Classic",
-        }
-        assert set(DATABASES["databases"]["tv-shows"]["properties"]["Tags"]["allowlist"]) == {
-            "Favorite",
-            "Classic",
-            "Sequel",
-            "Prequel",
-            "Animé",
-            "Dystopia",
-            "Mocumentary",
-            "Spanish",
-            "Sport",
-            "Game-Show",
-            "Medical",
-            "Video Game",
-            "Sitcom",
-            "Educational",
-        }
-
-    def test_ideas_tags_allowlist_matches_the_life_data_catalog(self):
-        assert set(DATABASES["databases"]["ideas"]["properties"]["Tags"]["allowlist"]) == {
-            "Animation",
-            "Business",
-            "Coding",
-            "Counting Apps",
-            "Dating Apps",
-            "Desktop Applications",
-            "Educational",
-            "Embedded",
-            "Games",
-            "Google Workspace",
-            "LLM-Related",
-            "Music",
-            "Product",
-            "Productivity",
-            "Social Media",
-            "Tech Consulting",
-            "Web Scrapers",
-            "Hobby",
-        }
+    def test_media_categories_never_send_derived_columns(self):
+        """Title/year/genres/cast are derived on the hub from the resolved id;
+        Synapse extracts a Title only to resolve that id."""
+        for category in ("movies", "tv-shows"):
+            stanza = CATEGORIES[category]
+            assert "columns" not in stanza
+            assert set(stanza["capture_columns"].values()) <= {
+                "status",
+                "tags",
+                "date_watched",
+                "note",
+            }
 
     def test_ideas_hobby_context_maps_to_hobby_tag(self):
         """A fun idea with no business case is Someday + Hobby, never Canceled."""
-        instr = DATABASES["databases"]["ideas"]["properties"]["Tags"]["instruction"].lower()
+        instr = CATEGORIES["ideas"]["properties"]["Tags"]["instruction"].lower()
         for cue in ("hobby", "for fun", "no business case"):
             assert cue in instr
 
     def test_movies_status_priority_keywords(self):
-        instr = DATABASES["databases"]["movies"]["properties"]["Status"]["instruction"]
+        instr = CATEGORIES["movies"]["properties"]["Status"]["instruction"]
         assert "priority movie" in instr.lower()
         assert "need to watch" in instr.lower()
 
-    def test_tv_status_allowlist_matches_live_options(self):
-        """The allowlist is exactly the tv_shows.status options in the soma
-        catalog; any other word is rejected by the hub."""
-        allow = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["allowlist"]
-        assert set(allow) == {
-            "Priority",
-            "Not Started",
-            "Watched Parts",
-            "In Progress",
-            "Finished",
-            "Gave Up",
-        }
-
     def test_tv_status_instruction_uses_tv_names_and_is_unambiguous(self):
-        instr = DATABASES["databases"]["tv-shows"]["properties"]["Status"]["instruction"]
+        instr = CATEGORIES["tv-shows"]["properties"]["Status"]["instruction"]
         # the catalog's partial-watch word is "Watched Parts" for movies and TV
         # alike; "Watched Some" is not an option and the hub rejects it
         assert "Watched Some" not in instr
         assert "Watched Parts" in instr
-        # "must watch" must map to exactly one status (Priority, matching
-        # movies) — the old text routed "Must watch [title]" to Not Started in
-        # one clause and "must watch" to Priority in another
+        # "must watch" must map to exactly one status (Priority, matching movies)
         assert "Must watch [title]" not in instr
         assert "must watch" in instr.lower() and "Priority" in instr
 
     def test_youtube_status_need_to_watch_is_priority(self):
-        instr = DATABASES["databases"]["youtube-videos"]["properties"]["Status"]["instruction"]
+        instr = CATEGORIES["youtube-videos"]["properties"]["Status"]["instruction"]
         assert "need to watch" in instr.lower()
         assert "Priority" in instr
 
     def test_tasks_due_date_resolves_bare_month(self):
         """A bare month name must resolve to its next occurrence, never January."""
-        instr = DATABASES["databases"]["tasks"]["properties"]["Due Date"]["instruction"]
+        instr = CATEGORIES["tasks"]["properties"]["Due Date"]["instruction"]
         assert "BARE MONTH" in instr
         assert "NEVER default a bare month to January" in instr
+
+    def test_task_fields_never_include_ai_columns(self):
+        """Only the user sets AI Ready / AI Completed, and the AI Title column is gone."""
+        props = CATEGORIES["tasks"]["properties"]
+        assert not {"AI Ready", "AI Completed", "AI Title"} & set(props)

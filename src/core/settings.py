@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     spotify_client_secret: str | None = None
     google_youtube_api_key: str | None = None
     tmdb_api_key: str | None = None
-    # A user's Notion connection and soma hub are workspace credentials
-    # (core/workspace.py), not app settings.
+    # A user's Soma hub is a workspace credential (core/workspace.py), not an
+    # app setting.
 
 
 @lru_cache

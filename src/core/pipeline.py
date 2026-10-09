@@ -1,18 +1,18 @@
-import hashlib
 import json
 import re
-import time
 
 from google.genai import types
 
-from core.config import PROMPTS
-from core.workspace import current
 from core.settings import get_settings
-from core.notion_utils import (
-    log_job_outcome,
-    create_high_priority_task,
+from core.workflow import (
+    binding_for,
+    capture_scope,
     create_cleanup_task,
-    create_project_task,
+    create_high_priority_task,
+    create_task,
+    current_capture,
+    log_execution,
+    prepare_item,
 )
 from core.ai_engine import (
     GEMINI_MODEL,
@@ -27,7 +27,6 @@ from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 from core.external_data import enrich_context
 from core.handlers import Failed
 from core.business_logic import (
-    hydrate_dynamic_options,
     fetch_active_projects,
     fetch_inventory_map,
     apply_business_logic,
@@ -137,9 +136,6 @@ def run_pipeline(
             category = classified.get("category", "tasks")
             project = classified.get("related_project")
         print(f"🤖 Classification: {category}")
-        # Hydrate ONLY the classified category's live Notion options (deferred
-        # from startup — the extraction schema below needs _runtime_options).
-        hydrate_dynamic_options(only_category=category)
         if project:
             print(f"   🔍 AI identified project: '{project}'")
             if project in project_id_map:
@@ -191,104 +187,72 @@ def run_pipeline(
             "url_context": url_context,
         }
 
-    try:
-        from core.workflow import prepare_item
-
-        prepared = prepare_item(prepare)
-        if "preparation_error" in prepared:
-            recovery = create_high_priority_task(full_str_for_log)
-            log_job_outcome(
-                full_str_for_log,
-                "Unknown",
-                "Error(s)",
-                details=prepared["preparation_error"],
-                created_url=recovery,
-                ai_data=log_payload,
-                source=source,
-            )
-            return
-        category, project = prepared["category"], prepared["project"]
-        extracted, log_payload = prepared["extracted"], prepared["log_payload"]
-        url_context = prepared["url_context"]
-
-        def execute():
-            url = None
-            project_append = False
-            if project and category == "tasks":
-                project_id = project_id_map.get(project)
-                if project_id:
-                    project_append = True
-                    # A matched project is ALWAYS a task now (project notes removed).
-                    print(f"   -> Creating project task for: {project}")
-                    url = create_project_task(project_id, extracted)
-                    log_payload["Extractor_Data"]["Action"] = "Created Project Task"
-                else:
-                    url = execute_logic(category, extracted)
-            else:
-                if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
-                    # The page was never read, so everything but the URL is the model's
-                    # guess. Title stays unset (the stanza's review_if_missing flags the
-                    # row); Description and Tags only fill gaps on an already-known url.
-                    extracted.pop("Title", None)
-                    extracted["_fill_only"] = ["Description", "Tags"]
-                url = execute_logic(category, extracted, inventory_map)
-
-                if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
-                    print("   🧹 Creating cleanup task for youtube-videos failure...")
-                    create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
-
-            # A handler that wrote nothing returns Failed - never log that as Success.
-            outcome, details = "Success", ""
-            if isinstance(url, Failed):
-                outcome, details, url = "Error(s)", url.detail, None
-
-            return {
-                "url": url,
-                "outcome": outcome,
-                "details": details,
-                "project_append": project_append,
-                "log_payload": log_payload,
-            }
-
-        from core.workflow import current_capture
-
-        active = current_capture()
-        result = (
-            active.journal.checkpoint(f"item/{active.item_index}/result", execute)
-            if active is not None
-            else execute()
-        )
-        url, outcome, details = result["url"], result["outcome"], result["details"]
-        project_append, log_payload = result["project_append"], result["log_payload"]
-
-        log_job_outcome(
-            full_str_for_log,
-            category,
-            outcome,
-            details=details,
-            created_url=url,
-            ai_data=log_payload,
-            project_append=project_append,
-            source=source,
-        )
-
-    except Exception as e:
-        from core.workflow import current_capture
-
-        if current_capture() is not None:
-            # A remote effect may already have committed. Preserve the journal
-            # and let the existing worker retry rather than create a second task.
-            raise
-        print(f"❌ Pipeline Error: {e}")
-        log_job_outcome(
+    prepared = prepare_item(prepare)
+    if "preparation_error" in prepared:
+        recovery = create_high_priority_task(full_str_for_log)
+        log_execution(
             full_str_for_log,
             "Unknown",
             "Error(s)",
-            details=e,
+            details=prepared["preparation_error"],
+            created_url=recovery,
             ai_data=log_payload,
             source=source,
         )
-        create_high_priority_task(full_str_for_log)
+        return
+    category, project = prepared["category"], prepared["project"]
+    extracted, log_payload = prepared["extracted"], prepared["log_payload"]
+    url_context = prepared["url_context"]
+
+    def execute():
+        url = None
+        project_append = False
+        if project and category == "tasks" and project_id_map.get(project):
+            # A matched project is ALWAYS a task (project notes removed).
+            print(f"   -> Creating project task for: {project}")
+            project_append = True
+            url = create_task(extracted, project_id_map[project])
+            log_payload["Extractor_Data"]["Action"] = "Created Project Task"
+        else:
+            if category == "bookmarks" and "Error fetching metadata" in (url_context or ""):
+                # The page was never read, so everything but the URL is the model's
+                # guess. Title stays unset (the stanza's review_if_missing flags the
+                # row); Description and Tags only fill gaps on an already-known url.
+                extracted.pop("Title", None)
+                extracted["_fill_only"] = ["Description", "Tags"]
+            url = execute_logic(category, extracted, inventory_map)
+
+            if url and category == "youtube-videos" and "YT Error" in (url_context or ""):
+                print("   🧹 Creating cleanup task for youtube-videos failure...")
+                create_cleanup_task(f"Fix Metadata for: {raw_text}", link_url=url)
+
+        # A handler that wrote nothing returns Failed - never log that as Success.
+        outcome, details = "Success", ""
+        if isinstance(url, Failed):
+            outcome, details, url = "Error(s)", url.detail, None
+
+        return {
+            "url": url,
+            "outcome": outcome,
+            "details": details,
+            "project_append": project_append,
+            "log_payload": log_payload,
+        }
+
+    # A remote effect may commit before a failure: the frozen result means a
+    # Modal retry resumes here instead of writing a second task.
+    active = current_capture()
+    result = active.journal.checkpoint(f"item/{active.item_index}/result", execute)
+    log_execution(
+        full_str_for_log,
+        category,
+        result["outcome"],
+        details=result["details"],
+        created_url=result["url"],
+        ai_data=result["log_payload"],
+        project_append=result["project_append"],
+        source=source,
+    )
 
 
 def payload_error(payload):
@@ -322,46 +286,13 @@ WORKSPACE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 MAX_SOURCE_LEN = 64
 
 
-# Receptor's iOS background uploads occasionally re-send a thought whose success
-# callback got lost, so the same raw_text can arrive twice hours apart. The
-# window is long because a legitimately repeated verbatim capture within a day
-# is rarer than that failure mode.
-DEDUP_WINDOW_S = 24 * 60 * 60
-
-
-def _dedup_key(raw_text: str) -> str:
-    # Per workspace: two people sending the same words are two captures.
-    return hashlib.sha256(f"{current().id}\n{raw_text.strip()}".encode()).hexdigest()
-
-
-def _run(payload: dict, seen=None):
-    """Process one webhook payload.
-
-    `seen` is any mapping (a modal.Dict in production) of dedup key -> epoch
-    seconds of the last time that exact raw_text was processed. A resend inside
-    DEDUP_WINDOW_S is skipped; the key is marked only after processing, so a
-    crashed run is retried rather than deduped away. None disables the check.
-    """
-    from core.workflow import current_capture
-
+def _run(payload: dict):
+    """Process one capture inside its journal (core.workflow.capture_scope)."""
     active = current_capture()
     print("🧠 Worker awake!")
-    if not get_settings().gemini_api_key or not PROMPTS:
-        if active is not None:
-            raise RuntimeError("Missing API Key or Prompts")
-        print("❌ Critical: Missing API Key or Prompts")
-        return
+    if not get_settings().gemini_api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY")
 
-    key = _dedup_key(payload["raw_text"])
-    if seen is not None:
-        last = seen.get(key)
-        if last is not None and time.time() - last < DEDUP_WINDOW_S:
-            print(f"⏭️ Duplicate: same raw_text processed {int(time.time() - last)}s ago — skipping")
-            return
-
-    # Option hydration is deferred to run_pipeline (only the classified
-    # category) — that alone cut ~40 upfront Notion calls per thought to ~2-3.
-    # Projects/inventory are one query each, so they stay here.
     def load_context():
         names, ids = fetch_active_projects()
         return {
@@ -370,64 +301,41 @@ def _run(payload: dict, seen=None):
             "inventory": fetch_inventory_map("groceries"),
         }
 
-    context = (
-        active.journal.checkpoint("context", load_context) if active is not None else load_context()
-    )
+    context = active.journal.checkpoint("context", load_context)
     project_prompts, project_id_map = context["projects"], context["project_ids"]
     inventory_map = context["inventory"]
     inventory_list = list(inventory_map.keys())
 
-    try:
-        full_text = payload["raw_text"]
+    full_text = payload["raw_text"]
+    print(f"🔍 DEBUG INPUT REPR: {repr(full_text)}")
 
-        # DEBUG LOG: See exactly what Python sees as the pipeline input
-        print(f"🔍 DEBUG INPUT REPR: {repr(full_text)}")
+    # STEP 1: AI PARSING
+    parsed_items = active.journal.checkpoint("parsed_items", lambda: parse_raw_input(full_text))
+    print(f"📋 Processing Batch: {len(parsed_items)} item(s)")
 
-        # STEP 1: AI PARSING
-        parsed_items = (
-            active.journal.checkpoint("parsed_items", lambda: parse_raw_input(full_text))
-            if active is not None
-            else parse_raw_input(full_text)
+    # STEP 2: LOOP
+    for index, item in enumerate(parsed_items):
+        active.item_index = index
+        active.counters = {}
+        run_pipeline(
+            item,
+            project_prompts,
+            project_id_map,
+            inventory_map,
+            inventory_list,
+            source=payload.get("source"),
         )
-        print(f"📋 Processing Batch: {len(parsed_items)} item(s)")
-
-        # STEP 2: LOOP
-        for index, item in enumerate(parsed_items):
-            if active is not None:
-                active.item_index = index
-                active.counters = {}
-            run_pipeline(
-                item,
-                project_prompts,
-                project_id_map,
-                inventory_map,
-                inventory_list,
-                source=payload.get("source"),
-            )
-
-        print("--- BATCH COMPLETE ---")
-
-    except Exception as e:
-        if active is not None:
-            raise
-        print(f"❌ Critical Event Error: {e}")
-
-    if seen is not None:
-        seen[key] = time.time()
+    print("--- BATCH COMPLETE ---")
 
 
-def run(payload: dict, seen=None, store=None):
-    from core.workflow import binding_for, capture_scope
-
-    tasks_enabled = binding_for("tasks") is not None
-    executions_enabled = binding_for("executions") is not None
-    if tasks_enabled != executions_enabled:
-        raise ValueError("Workflow tasks and executions must switch together for retry safety")
-    enabled = tasks_enabled
-    if not enabled:
-        return _run(payload, seen=seen)
-    if store is None or "capture_id" not in payload:
-        raise ValueError("Workflow capture requires a persisted identity and operational store")
+def run(payload: dict, store):
+    """Process one accepted capture: tasks and the execution log are Soma rows
+    (workflow.tasks / workflow.executions), journaled under its capture_id in
+    `store`, so a Modal retry resumes without a second write."""
+    if binding_for("tasks") is None or binding_for("executions") is None:
+        raise ValueError("A workspace needs workflow.tasks and workflow.executions bindings")
+    if "capture_id" not in payload:
+        raise ValueError("A capture needs its persisted capture_id")
     with capture_scope(store, payload) as active:
         if active.journal.completed:
             return

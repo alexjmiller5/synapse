@@ -10,28 +10,15 @@ from functools import lru_cache
 import google.genai as genai
 import spotipy
 from googleapiclient.discovery import build
-from notion_client import Client
 from spotipy.oauth2 import SpotifyClientCredentials
 
 from core.settings import get_settings
-from core.workspace import current
 
 
 @lru_cache
 def get_gemini_client():
     key = get_settings().gemini_api_key
     return genai.Client(api_key=key) if key else None
-
-
-def get_notion():
-    """The ACTIVE workspace's Notion connection (one client per token)."""
-    token = current().secrets.get("notion_integration_token")
-    return _notion_client(token) if token else None
-
-
-@lru_cache
-def _notion_client(token):
-    return Client(auth=token, notion_version="2022-06-28")
 
 
 @lru_cache

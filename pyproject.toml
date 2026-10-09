@@ -1,16 +1,15 @@
 [project]
 name = "synapse"
 version = "2.0.0"
-description = "An intelligent middleware for capturing thoughts and organizing them in Notion"
+description = "An intelligent middleware for capturing thoughts and filing them as Soma rows"
 readme = "README.md"
 requires-python = ">=3.13"
-keywords = ["ai", "notion", "automation", "serverless"]
+keywords = ["ai", "soma", "automation", "serverless"]
 dependencies = [
     "fastapi>=0.115",
     "google-genai~=1.49.0",
     "PyYAML~=6.0.3",
     "requests~=2.32.3",
-    "notion-client~=2.7.0",
     "inscriptis~=2.7.0",
     "spotipy~=2.25.1",
     "google-api-python-client>=2.187.0",

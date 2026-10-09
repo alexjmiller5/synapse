@@ -1,0 +1,1391 @@
+{
+ "tables": [],
+ "properties": [
+  {
+   "tbl": "articles",
+   "col": "content",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "date_read",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "feed_id",
+   "type": "ref",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "note",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "notion_id",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "published_at",
+   "type": "datetime",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "saved",
+   "type": "bool",
+   "required": null,
+   "default_value": "0",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Not Started",
+   "options": "[{\"v\": \"Priority\"}, {\"v\": \"Not Started\"}, {\"v\": \"In Progress\"}, {\"v\": \"Finished\"}, {\"v\": \"Watched Parts\"}, {\"v\": \"Gave Up\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "articles",
+   "col": "title",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "description",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "needs_review",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "related_ids",
+   "type": "multi_ref",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Github\", \"d\": \"A github.com repository; required on every github.com url.\"}, {\"v\": \"AI\", \"d\": \"An AI model, assistant or AI-powered tool.\"}, {\"v\": \"Cloud Hosting\", \"d\": \"Hosting, deployment and cloud infrastructure providers.\"}, {\"v\": \"Developer Tool\", \"d\": \"A tool, library or service used while building software that is not a framework or a host.\"}, {\"v\": \"Web Framework\", \"d\": \"Frontend and backend web frameworks, metaframeworks, JS runtimes and CSS frameworks.\"}, {\"v\": \"UI Library\", \"d\": \"Component libraries, design systems and icon sets.\"}, {\"v\": \"Design Tool\", \"d\": \"Apps for design, diagramming, color and prototyping.\"}, {\"v\": \"Mac App\", \"d\": \"An app for macOS.\"}, {\"v\": \"Backup\", \"d\": \"Backup software, services and guides.\"}, {\"v\": \"Domains\", \"d\": \"Domain registrars and DNS lookup tools.\"}, {\"v\": \"Blog\", \"d\": \"A person's or company's blog.\"}, {\"v\": \"Learning Material\", \"d\": \"Courses, tutorials and references to study.\"}, {\"v\": \"List\", \"d\": \"A curated list of links (awesome-lists and the like).\"}, {\"v\": \"Browser Extension\", \"d\": \"An extension for a web browser.\"}, {\"v\": \"Discord Mod\", \"d\": \"A Discord client mod or plugin.\"}, {\"v\": \"Videogame\", \"d\": \"A game or a game resource.\"}, {\"v\": \"Money\", \"d\": \"Ways to earn or save money.\"}, {\"v\": \"Royalty-free Music\", \"d\": \"Music free to use in projects.\"}, {\"v\": \"Job Search\", \"d\": \"New-grad job and internship postings.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "title",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "col": "url",
+   "type": "url",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "col": "category",
+   "type": "select",
+   "required": 1,
+   "default_value": null,
+   "options": "[{\"v\": \"Baking\"}, {\"v\": \"Beverages\"}, {\"v\": \"Bread & Bakery\"}, {\"v\": \"Condiments & Spices\"}, {\"v\": \"Dairy\"}, {\"v\": \"Dietary Supplement\"}, {\"v\": \"Fruits\"}, {\"v\": \"Grains\"}, {\"v\": \"Meat\"}, {\"v\": \"Pre-prepared\"}, {\"v\": \"Sauces & Oils\"}, {\"v\": \"Seafood\"}, {\"v\": \"Snacks\"}, {\"v\": \"Sweets\"}, {\"v\": \"Vegetables\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "col": "name",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "col": "notes",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "On List",
+   "options": "[{\"v\": \"On List\", \"d\": \"Need to buy it; the default for a new capture.\"}, {\"v\": \"In Cart\", \"d\": \"Picked up during the current shopping trip.\"}, {\"v\": \"Have\", \"d\": \"At home.\"}, {\"v\": \"Don't Have\", \"d\": \"Out of it, not yet on the list.\"}, {\"v\": \"Don't Buy\", \"d\": \"Never buy this again.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "col": "description",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "col": "legacy_project_ids",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "col": "reason",
+   "type": "select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"gave up\", \"d\": \"Started on it, then stopped.\"}, {\"v\": \"not interested\", \"d\": \"Never really wanted to pursue it.\"}, {\"v\": \"no longer interested\", \"d\": \"Wanted to once; the interest passed.\"}, {\"v\": \"too complex\", \"d\": \"More effort than it is worth.\"}, {\"v\": \"bad idea\", \"d\": \"Does not hold up on reflection.\"}, {\"v\": \"already exists\", \"d\": \"Someone already built it.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Someday",
+   "options": "[{\"v\": \"Someday\", \"d\": \"An idea on file, not a commitment (the old Ideated). Default.\"}, {\"v\": \"Priority\", \"d\": \"A good idea worth pursuing next (the old Good Idea).\"}, {\"v\": \"In Progress\", \"d\": \"Being built or explored now.\"}, {\"v\": \"Completed\", \"d\": \"Built or carried out.\"}, {\"v\": \"Canceled\", \"d\": \"Decided against; reason says why. Kept for the record, never resurfaces.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Animation\"}, {\"v\": \"Business\"}, {\"v\": \"Coding\"}, {\"v\": \"Counting Apps\"}, {\"v\": \"Dating Apps\"}, {\"v\": \"Desktop Applications\"}, {\"v\": \"Educational\"}, {\"v\": \"Embedded\"}, {\"v\": \"Games\"}, {\"v\": \"Google Workspace\"}, {\"v\": \"LLM-Related\"}, {\"v\": \"Music\"}, {\"v\": \"Product\"}, {\"v\": \"Productivity\"}, {\"v\": \"Social Media\"}, {\"v\": \"Tech Consulting\"}, {\"v\": \"Web Scrapers\"}, {\"v\": \"Hobby\", \"d\": \"Worth doing for fun when there is time, not as a business; deferred for time, not for lack of interest.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "actors",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "date_watched",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "director",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "franchise_id",
+   "type": "ref",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "genres",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "id",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "note",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "poster_url",
+   "type": "url",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "release_date",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "saved",
+   "type": "bool",
+   "required": null,
+   "default_value": "0",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Not Started",
+   "options": "[{\"v\": \"Priority\", \"d\": \"Need to watch / must watch / dying to see\"}, {\"v\": \"Not Started\", \"d\": \"Default. Saved, not started\"}, {\"v\": \"In Progress\", \"d\": \"Currently watching\"}, {\"v\": \"Finished\", \"d\": \"Watched it. This is the watched state\"}, {\"v\": \"Watched Parts\", \"d\": \"Saw some of it, not finished\"}, {\"v\": \"Gave Up\", \"d\": \"Stopped on purpose\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Favorite\", \"d\": \"Would recommend without hesitation; the shortlist named when asked for top picks.\"}, {\"v\": \"Sequel\", \"d\": \"Continues the story of an earlier title in the same franchise.\"}, {\"v\": \"Prequel\", \"d\": \"Set before an earlier-released title in the same franchise.\"}, {\"v\": \"Studio Ghibli\", \"d\": \"A Studio Ghibli film.\"}, {\"v\": \"Sad\", \"d\": \"Emotionally heavy; want to be in the mood for it.\"}, {\"v\": \"Coming-of-age\", \"d\": \"A story about growing up.\"}, {\"v\": \"Animé\", \"d\": \"Japanese animation.\"}, {\"v\": \"Mockumentary\", \"d\": \"Fiction shot in documentary style.\"}, {\"v\": \"Spanish\", \"d\": \"In Spanish.\"}, {\"v\": \"Sport\", \"d\": \"About sports.\"}, {\"v\": \"Concert\", \"d\": \"A concert film.\"}, {\"v\": \"Cult Classic\", \"d\": \"Loved by a devoted niche rather than widely acclaimed.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "title",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "col": "year",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "people",
+   "col": "name",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "date_listened",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "episode",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "genres",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Classics\"}, {\"v\": \"Comedy\"}, {\"v\": \"Crime\"}, {\"v\": \"Documentary\"}, {\"v\": \"Drama\"}, {\"v\": \"Economics\"}, {\"v\": \"Health\"}, {\"v\": \"History\"}, {\"v\": \"Medical\"}, {\"v\": \"Memoir\"}, {\"v\": \"Political Science\"}, {\"v\": \"Psychology\"}, {\"v\": \"Science Fiction\"}, {\"v\": \"Self-help\"}, {\"v\": \"Sociology\"}, {\"v\": \"Spirituality\"}, {\"v\": \"Talk-Show\"}, {\"v\": \"Technology\"}, {\"v\": \"Thriller\"}, {\"v\": \"Young Adult\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "needs_review",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "note",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "podcast",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": "[]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "producer",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": "[]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "saved",
+   "type": "bool",
+   "required": null,
+   "default_value": "0",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "season",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Not Started",
+   "options": "[{\"v\": \"Priority\", \"d\": \"Want to listen to this next.\"}, {\"v\": \"Not Started\", \"d\": \"Saved, not begun. No commitment implied. Default.\"}, {\"v\": \"In Progress\", \"d\": \"Partway through right now.\"}, {\"v\": \"Finished\", \"d\": \"Listened to the end. This is the listened state; set date_listened.\"}, {\"v\": \"Watched Parts\", \"d\": \"Heard pieces of it without going front to back.\"}, {\"v\": \"Gave Up\", \"d\": \"Started, then abandoned on purpose.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Favorite\", \"d\": \"Would recommend without hesitation; the shortlist named when asked for top picks.\"}, {\"v\": \"Sad\", \"d\": \"Emotionally heavy; want to be in the mood for it.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "title",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "podcast_episodes",
+   "col": "url",
+   "type": "url",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "body",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "completed_date",
+   "type": "date_or_datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "github_repos",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "idea_ids",
+   "type": "multi_ref",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "links",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "priority",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Low\", \"d\": \"Preserved source priority value Low. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Medium\", \"d\": \"Preserved source priority value Medium. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"High\", \"d\": \"Preserved source priority value High. Historical retention does not authorize this value for prospective automated creation.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "source_page_url",
+   "type": "url",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "source_properties",
+   "type": "json",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "source_updated_at",
+   "type": "datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "status",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"To Do\", \"d\": \"Preserved source status value To Do. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"In progress\", \"d\": \"Preserved source status value In progress. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Canceled\", \"d\": \"Preserved source status value Canceled. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Completed\", \"d\": \"Preserved source status value Completed. Historical retention does not authorize this value for prospective automated creation.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "tags",
+   "type": "multi_select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Business\", \"d\": \"Professional, commercial or income-generating work. Preserve existing source assignments; automatic creation policy is separate.\"}, {\"v\": \"Personal\", \"d\": \"Private life, hobbies and personal tooling. Preserve existing source assignments; automatic creation policy is separate.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "projects",
+   "col": "title",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "ai_summary",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "body",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "category",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"groceries\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"tasks\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"ideas\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"people\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"tv-shows\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"movies\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"quotes\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"podcasts\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"youtube-videos\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"bookmarks\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"bucket-list\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"fun-activities\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Unknown\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"places\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"trips\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Social\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"logs\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"System Test\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"youtube-channels\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "code_execution",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Success\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Error(s)\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "created_item",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "error_details",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "outcome",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"To Review\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"User Error\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Test Execution\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Bug\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Failed Extraction\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}, {\"v\": \"Successful Flow\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "raw_input",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "remedied",
+   "type": "bool",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "remedied_date",
+   "type": "date_or_datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "reviewed_date",
+   "type": "date_or_datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "source",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "source_page_url",
+   "type": "url",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "source_properties",
+   "type": "json",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "source_updated_at",
+   "type": "datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "synapse_executions",
+   "col": "tags",
+   "type": "multi_select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"project-append\", \"d\": \"Preserved source vocabulary; review and execution status remain distinct.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "agent_sessions",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "ai_completed",
+   "type": "bool",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "ai_ready",
+   "type": "bool",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "assignees",
+   "type": "json",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "blocked_by_ids",
+   "type": "multi_ref",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "body",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "completed_date",
+   "type": "date_or_datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "due_date",
+   "type": "date_or_datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "links",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "notes",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "parent_task_ids",
+   "type": "multi_ref",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "person_ids",
+   "type": "multi_ref",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "priority",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Low\", \"d\": \"Preserved source priority value Low. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Medium\", \"d\": \"Preserved source priority value Medium. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"High\", \"d\": \"Preserved source priority value High. Historical retention does not authorize this value for prospective automated creation.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "project_ids",
+   "type": "multi_ref",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "source_page_url",
+   "type": "url",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "source_properties",
+   "type": "json",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "source_updated_at",
+   "type": "datetime",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "status",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"To Do\", \"d\": \"Preserved source status value To Do. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"In Progress\", \"d\": \"Preserved source status value In Progress. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Canceled\", \"d\": \"Preserved source status value Canceled. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Completed\", \"d\": \"Preserved source status value Completed. Historical retention does not authorize this value for prospective automated creation.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "tags",
+   "type": "multi_select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Decision\", \"d\": \"Preserved source tags value Decision. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Shopping\", \"d\": \"Preserved source tags value Shopping. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Errand\", \"d\": \"Preserved source tags value Errand. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Finances\", \"d\": \"Preserved source tags value Finances. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Career\", \"d\": \"Preserved source tags value Career. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Work\", \"d\": \"Preserved source tags value Work. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Chore\", \"d\": \"Preserved source tags value Chore. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Social Planning\", \"d\": \"Preserved source tags value Social Planning. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Social\", \"d\": \"Preserved source tags value Social. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Learning\", \"d\": \"Preserved source tags value Learning. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Lakeport\", \"d\": \"Preserved source tags value Lakeport. Historical retention does not authorize this value for prospective automated creation.\"}, {\"v\": \"Gifts\", \"d\": \"Preserved source tags value Gifts. Historical retention does not authorize this value for prospective automated creation.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "title",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
+   "col": "workspace",
+   "type": "text",
+   "required": 0,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "city",
+   "type": "select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Boston\"}, {\"v\": \"Dallas\"}, {\"v\": \"NYC\"}, {\"v\": \"Lakeport\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "completed_on",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "kind",
+   "type": "select",
+   "required": 1,
+   "default_value": null,
+   "options": "[{\"v\": \"Activity\", \"d\": \"A repeatable outing or thing to do, usually tied to a city (the old Fun Activities).\"}, {\"v\": \"Ambition\", \"d\": \"A one-off life goal (the old Bucket List).\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "link",
+   "type": "url",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "needs_review",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "notes",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Someday",
+   "options": "[{\"v\": \"Someday\", \"d\": \"Would like to do it; no plan yet. Default.\"}, {\"v\": \"Priority\", \"d\": \"Want to do this next.\"}, {\"v\": \"Planned\", \"d\": \"Has a date or a concrete plan.\"}, {\"v\": \"Completed\", \"d\": \"Did it; set completed_on.\"}, {\"v\": \"Canceled\", \"d\": \"Decided not to do it (the old Never Done).\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Adventure\"}, {\"v\": \"Altruism\"}, {\"v\": \"Concert\"}, {\"v\": \"Cooking\"}, {\"v\": \"Cultural\"}, {\"v\": \"Culture\"}, {\"v\": \"Drug\"}, {\"v\": \"Education\"}, {\"v\": \"Event\"}, {\"v\": \"Experience\"}, {\"v\": \"Fitness\"}, {\"v\": \"Food\"}, {\"v\": \"Fun\"}, {\"v\": \"Goals\"}, {\"v\": \"Learning\"}, {\"v\": \"Nature\"}, {\"v\": \"Nightlife\"}, {\"v\": \"Personal\"}, {\"v\": \"Personal Care\"}, {\"v\": \"Show\"}, {\"v\": \"Skills\"}, {\"v\": \"Social\"}, {\"v\": \"Sports\"}, {\"v\": \"Technology\"}, {\"v\": \"Travel\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "things_to_do",
+   "col": "title",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "actors",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "date_watched",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "director",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "feed_since",
+   "type": "datetime",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "follow",
+   "type": "bool",
+   "required": null,
+   "default_value": "1",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "franchise_id",
+   "type": "ref",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "genres",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "id",
+   "type": "text",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "note",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "poster_url",
+   "type": "url",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "release_date",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "saved",
+   "type": "bool",
+   "required": null,
+   "default_value": "0",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Not Started",
+   "options": "[{\"v\": \"Priority\", \"d\": \"Need to watch / must watch\"}, {\"v\": \"Not Started\", \"d\": \"Default. Saved, not started\"}, {\"v\": \"In Progress\", \"d\": \"Currently watching\"}, {\"v\": \"Finished\", \"d\": \"Watched it all\"}, {\"v\": \"Watched Parts\", \"d\": \"Saw some episodes, not finished\"}, {\"v\": \"Gave Up\", \"d\": \"Stopped on purpose\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Favorite\", \"d\": \"Would recommend without hesitation; the shortlist named when asked for top picks.\"}, {\"v\": \"Classic\", \"d\": \"Canonical and still great; the reference point others get compared to.\"}, {\"v\": \"Sequel\", \"d\": \"Continues the story of an earlier title in the same franchise.\"}, {\"v\": \"Prequel\", \"d\": \"Set before an earlier-released title in the same franchise.\"}, {\"v\": \"Animé\", \"d\": \"Japanese animation.\"}, {\"v\": \"Dystopia\", \"d\": \"Set in a dystopian society.\"}, {\"v\": \"Mockumentary\", \"d\": \"Fiction shot in documentary style.\"}, {\"v\": \"Spanish\", \"d\": \"In Spanish.\"}, {\"v\": \"Sport\", \"d\": \"About sports.\"}, {\"v\": \"Game-Show\", \"d\": \"A game show.\"}, {\"v\": \"Medical\", \"d\": \"Set in medicine or hospitals.\"}, {\"v\": \"Video Game\", \"d\": \"Based on or about video games.\"}, {\"v\": \"Sitcom\", \"d\": \"A situation comedy.\"}, {\"v\": \"Educational\", \"d\": \"Watched to learn something.\"}, {\"v\": \"Fantasy\", \"d\": \"Fantasy; a genre word TMDB's TV genres do not carry on their own.\"}, {\"v\": \"History\", \"d\": \"Historical; a genre word TMDB's TV genres do not carry.\"}, {\"v\": \"Horror\", \"d\": \"Horror; a genre word TMDB's TV genres do not carry.\"}, {\"v\": \"Romance\", \"d\": \"Romance; a genre word TMDB's TV genres do not carry.\"}, {\"v\": \"Thriller\", \"d\": \"Thriller; a genre word TMDB's TV genres do not carry.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "title",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "tmdb_status",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "watch_providers",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "tv_shows",
+   "col": "year",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "channel_id",
+   "type": "ref",
+   "required": 1,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "date_watched",
+   "type": "date",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "duration_s",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "is_short",
+   "type": "bool",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "note",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "notion_id",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "offline_bytes",
+   "type": "int",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "offline_error",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "offline_file",
+   "type": "json",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "offline_requested",
+   "type": "bool",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "offline_status",
+   "type": "select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"downloading\", \"d\": \"The youtube-offline job is downloading or uploading this video now.\"}, {\"v\": \"ready\", \"d\": \"offline_file holds a complete, checksum-verified copy in the hub files API.\"}, {\"v\": \"failed\", \"d\": \"The last attempt failed; offline_error says why and when the job retries (it gives up after a bounded number of attempts).\"}, {\"v\": \"storage_full\", \"d\": \"Refused because retained YouTube files reached the job's configured storage cap; offline_error has the numbers. Re-evaluated whenever offline requests change or the cap is raised.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "published_at",
+   "type": "datetime",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "saved",
+   "type": "bool",
+   "required": null,
+   "default_value": "0",
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "status",
+   "type": "select",
+   "required": 1,
+   "default_value": "Not Started",
+   "options": "[{\"v\": \"Priority\"}, {\"v\": \"Not Started\"}, {\"v\": \"In Progress\"}, {\"v\": \"Finished\"}, {\"v\": \"Watched Parts\"}, {\"v\": \"Gave Up\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "tags",
+   "type": "multi_select",
+   "required": null,
+   "default_value": null,
+   "options": "[{\"v\": \"Favorite\"}, {\"v\": \"Classic\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "thumbnail_url",
+   "type": "url",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  },
+  {
+   "tbl": "youtube_videos",
+   "col": "title",
+   "type": "text",
+   "required": null,
+   "default_value": null,
+   "options": null,
+   "deleted_at": null
+  }
+ ],
+ "rules": [
+  {
+   "tbl": "bookmarks",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "A github.com url carries the Github tag.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "description never ends with a period.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "bookmarks",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "One live bookmark per url.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "One live grocery item per name (case-insensitive).",
+   "deleted_at": null
+  },
+  {
+   "tbl": "groceries",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "A grocery item cannot be soft-deleted while a recipe, cocktail, meal or grocery run still references it.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "ideas",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "reason is set only when status is Canceled.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "kind": "invariant",
+   "enforce": 0,
+   "text": "A row with date_watched has a terminal status.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "kind": "invariant",
+   "enforce": 1,
+   "text": "A movie cannot be soft-deleted while a live quote still references it (quotes.movie_id).",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "kind": "doctrine",
+   "enforce": null,
+   "text": "There is no Watched status. A watched movie is Finished; date_watched is the date.",
+   "deleted_at": null
+  },
+  {
+   "tbl": "movies",
+   "kind": "doctrine",
+   "enforce": null,
+   "text": "Priority means need to watch / dying to see. It is not a favorite marker; use tags for that.",
+   "deleted_at": null
+  }
+ ]
+}

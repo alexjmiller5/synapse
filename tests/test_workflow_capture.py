@@ -25,12 +25,6 @@ def test_caller_uuid_is_preserved_and_workspace_comes_from_authentication():
     assert body["workspace"] == "untrusted"
 
 
-def test_new_submissions_without_client_identity_are_distinct():
-    a = accepted_capture({"raw_text": "Same"}, "sample")
-    b = accepted_capture({"raw_text": "Same"}, "sample")
-    assert a["capture_id"] != b["capture_id"]
-
-
 @pytest.mark.parametrize("identity", ["", "../elsewhere", 1, None, CAPTURE.upper()])
 def test_explicit_malformed_capture_identity_is_rejected(identity):
     with pytest.raises(ValueError):
@@ -98,10 +92,10 @@ def test_persistence_failure_does_not_return_an_unretained_parser_result():
     assert capture.checkpoint("parsed_items", lambda: ["Recovered"]) == ["Recovered"]
 
 
-def test_selected_workflow_requires_client_identity_for_http_retry_safety():
+def test_every_capture_requires_client_identity_for_http_retry_safety():
     with pytest.raises(ValueError, match="capture_id"):
-        accepted_capture({"raw_text": "One"}, "sample", require_identity=True)
-    assert accepted_capture(payload(), "sample", require_identity=True)["capture_id"] == CAPTURE
+        accepted_capture({"raw_text": "One"}, "sample")
+    assert accepted_capture(payload(), "sample")["capture_id"] == CAPTURE
 
 
 def test_capture_scope_refuses_authenticated_workspace_mismatch_before_journal():

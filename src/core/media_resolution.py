@@ -32,7 +32,7 @@ FIELDS = {"status": "Status", "tags": "Tags", "note": "Notes", "consumed_at": "D
 
 
 def classify(text):
-    return _classify_with_ai(text, "", [])[0]
+    return _classify_with_ai(text, "", []).get("category")
 
 
 def extract(category, text):

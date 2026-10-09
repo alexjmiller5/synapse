@@ -402,7 +402,9 @@ class TestGetTalMetadata:
         assert "Content:" in result
 
     @responses.activate
-    def test_failure_creates_cleanup(self, mock_notion):
+    def test_failure_creates_cleanup(self):
         responses.add(responses.GET, "https://www.thisamericanlife.org/bad", body=Exception("fail"))
-        result = get_tal_metadata("https://www.thisamericanlife.org/bad")
+        with patch("core.external_data.create_cleanup_task") as cleanup:
+            result = get_tal_metadata("https://www.thisamericanlife.org/bad")
         assert "Error fetching URL" in result
+        assert cleanup.call_args.kwargs["link_url"] == "https://www.thisamericanlife.org/bad"

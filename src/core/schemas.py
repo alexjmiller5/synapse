@@ -1,4 +1,4 @@
-from core.config import DATABASES
+from core.config import CATEGORIES
 
 PARSER_SCHEMA = {
     "type": "array",
@@ -17,13 +17,7 @@ CATEGORY_SCHEMA_CLASSIFY = {
     "properties": {
         "category": {
             "type": "string",
-            # Exclude helper DBs (trips/logs/youtube-channels) so the model cannot
-            # even structurally classify into them — they exist only to be related to.
-            "enum": [
-                cat
-                for cat, details in DATABASES.get("databases", {}).items()
-                if not details.get("helper")
-            ],
+            "enum": list(CATEGORIES),
         },
         "related_project": {"type": "string"},
     },

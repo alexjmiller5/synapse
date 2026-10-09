@@ -26,14 +26,11 @@ image = (
 
 secrets = [modal.Secret.from_name(APP_NAME)]
 
-# raw_text hash -> epoch seconds last processed; the pipeline skips exact resends
-# inside its dedup window. Entries expire after 7 idle days on Modal's side.
-seen_inputs = modal.Dict.from_name(f"{APP_NAME}-seen-inputs", create_if_missing=True)
-
 # Durable state (store.VolumeStore over this Volume): workspaces (core.workspace:
-# each user's overlay, property ids and Notion / soma credentials) and
-# per-device capture tokens (core.capture_clients: hashes only, each bound to a
-# workspace). The operator edits both with scripts/workspace.py and
+# each user's overlay and Soma hub credentials), their cached catalog slices
+# (core.catalog), capture journals (core.workflow) and per-device capture tokens
+# (core.capture_clients: hashes only, each bound to a workspace). The operator
+# edits workspaces and tokens with scripts/workspace.py and
 # scripts/capture_clients.py.
 state = modal.Volume.from_name(f"{APP_NAME}-state", create_if_missing=True)  # = store.STATE_VOLUME
 
@@ -49,8 +46,9 @@ def _state():
     secrets=secrets,
     timeout=600,
     memory=512,
-    # max_containers=1 preserves the old Cloud Run max_instances=1 serialization —
-    # Notion dedupe is query-then-create, not atomic.
+    # max_containers=1: one serialized worker owns the capture journals and
+    # media receipts, and name/url dedupe (groceries, bookmarks) is
+    # query-then-write, not atomic.
     max_containers=1,
     retries=modal.Retries(max_retries=3, backoff_coefficient=2.0),
 )
@@ -71,16 +69,13 @@ def process(payload: dict):
             if media["action"] == "process":
                 return media_capture.process_capture(store, media["caller"], media["request_id"])
             raise ValueError("unsupported media operation")
-        return run(payload, seen=seen_inputs, store=store)
+        return run(payload, store=store)
 
 
 def _accepted_payload(payload, workspace_id):
-    from core import workspace
-    from core.workflow import accepted_capture, binding_for
+    from core.workflow import accepted_capture
 
-    with workspace.use(workspace.load(_state(), workspace_id)):
-        workflow = binding_for("tasks") is not None or binding_for("executions") is not None
-        return accepted_capture(payload, workspace_id, require_identity=workflow)
+    return accepted_capture(payload, workspace_id)
 
 
 @app.function(image=image, secrets=secrets)

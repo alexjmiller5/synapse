@@ -2,8 +2,8 @@
 # Local dev:       op run --env-file=.env.tpl -- <cmd>   (see justfile)
 # Push to Modal:   just sync-secrets
 #
-# These are the APP's own provider keys. A user's Notion connection, soma
-# hub and Notion ids are workspace data (src/core/workspace.py), set with
+# These are the APP's own provider keys. A user's Soma hub credentials and
+# config overlay are workspace data (src/core/workspace.py), set with
 # `just workspace set-secrets <id>` / `just workspace push <id> <dir>`.
 
 GEMINI_API_KEY=op://Synapse/Synapse ENV/GEMINI_API_KEY

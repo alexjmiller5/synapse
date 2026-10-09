@@ -1,19 +1,19 @@
-"""Manage Synapse workspaces: one user's config overlay, Notion property ids and
+"""Manage Synapse workspaces: one user's config overlay and Soma hub
 credentials, kept in the deployed app's state (operator tool).
 
     uv run scripts/workspace.py list
     uv run scripts/workspace.py show <id>
-    uv run scripts/workspace.py pull <id> <dir>       # writes overlay.yaml + property_ids.yaml
+    uv run scripts/workspace.py pull <id> <dir>       # writes overlay.yaml
     uv run scripts/workspace.py push <id> <dir>       # validated against the template; secrets kept
     uv run scripts/workspace.py set-secrets <id>      # KEY=VALUE lines on stdin
 
-An overlay only lists what differs from src/core/template/databases.yaml: the
-workspace's Notion ids (`db_ids`, per-category `db_id`), its allowlists and
-instruction wording, `tasks.place_tags`. Secrets are the workspace's own Notion
-connection and soma hub: NOTION_INTEGRATION_TOKEN, SOMA_HUB_URL,
-SOMA_HUB_TOKEN - pipe them in (`op inject`, `op read`), never as arguments.
-A new person = push an overlay + set-secrets, then
-`just clients issue "<device>" <id>` for each device.
+An overlay only lists what differs from src/core/template/prompts.yaml: the
+workspace's `workflow` table bindings (tasks, executions, projects), wording
+and allowlist overrides under `categories`, `categories.tasks.place_tags`.
+Secrets are the workspace's Soma hub: SOMA_HUB_URL, SOMA_HUB_TOKEN - pipe them
+in (`op inject`, `op read`), never as arguments. A new person = push an
+overlay + set-secrets, then `just clients issue "<device>" <id>` for each
+device.
 """
 
 import json
@@ -48,19 +48,14 @@ def main(argv: list[str]) -> int:
             (out / "overlay.yaml").write_text(
                 yaml.safe_dump(record["overlay"], sort_keys=False, allow_unicode=True)
             )
-            (out / "property_ids.yaml").write_text(
-                yaml.safe_dump(record["property_ids"], allow_unicode=True)
-            )
-            print(f"wrote {out}/overlay.yaml and property_ids.yaml (credentials are not pulled)")
+            print(f"wrote {out}/overlay.yaml (credentials are not pulled)")
         case ["push", wid, folder]:
             src = Path(folder)
             overlay = _read(src, "overlay.yaml")
             if overlay is None:
                 print(f"{src}/overlay.yaml not found", file=sys.stderr)
                 return 1
-            workspace.save(
-                store, wid, overlay=overlay, property_ids=_read(src, "property_ids.yaml")
-            )
+            workspace.save(store, wid, overlay=overlay)
             print(f"pushed workspace {wid}")
         case ["set-secrets", wid]:
             secrets = {}

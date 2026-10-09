@@ -5,7 +5,7 @@ from inscriptis import get_text
 import os
 
 from core.clients import get_spotify, get_youtube
-from core.notion_utils import create_cleanup_task
+from core.workflow import create_cleanup_task
 
 # Timestamp / tracking params to strip from YouTube URLs before storage
 YOUTUBE_JUNK_PARAMS = ("t", "si", "feature")
@@ -162,15 +162,12 @@ def get_youtube_metadata(url):
 
         title = snippet.get("title")
         channel_title = snippet.get("channelTitle")
-        # Notion logic expects a handle if possible, but channel title works for search too
-        # API doesn't return @handle in snippet, so we use Channel Title.
+        # The snippet carries no @handle; the channel title stands in for it.
 
         return f"Title: {title}\nHandle: {channel_title}"
 
     except Exception as e:
         print(f"   ⚠️ YT Metadata fetch failed: {e}")
-        print("   🧹 Triggering cleanup task for failed YT extraction...")
-        # create_cleanup_task(f"Manual YouTube Entry (Extraction Failed): {url}", link_url=url)
         return f"YT Error: {e}"
 
 

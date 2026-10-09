@@ -6,16 +6,11 @@ from core.timeutils import today_eastern
 
 from core.business_logic import (
     apply_business_logic,
+    clean_text,
     execute_logic,
     fetch_inventory_map,
     fetch_active_projects,
-    hydrate_dynamic_options,
-    query_notion_db,
-    fetch_property_options,
-    validate_category,
-    validate_all,
 )
-from helpers import make_notion_page
 
 
 # ======================================================================
@@ -141,25 +136,6 @@ class TestApplyBusinessLogic:
 
 
 # ======================================================================
-# query_notion_db
-# ======================================================================
-class TestQueryNotionDb:
-    def test_returns_results(self, mock_notion):
-        page = make_notion_page("p1")
-        mock_notion.request.return_value = {"results": [page]}
-        results = query_notion_db("tasks")
-        assert len(results) == 1
-
-    def test_empty_results(self, mock_notion):
-        mock_notion.request.return_value = {"results": []}
-        assert query_notion_db("tasks") == []
-
-    def test_exception_returns_empty(self, mock_notion):
-        mock_notion.request.side_effect = Exception("API error")
-        assert query_notion_db("tasks") == []
-
-
-# ======================================================================
 # fetch_inventory_map
 # ======================================================================
 class TestFetchInventoryMap:
@@ -179,253 +155,46 @@ class TestFetchInventoryMap:
 # fetch_active_projects
 # ======================================================================
 class TestFetchActiveProjects:
-    def test_returns_projects(self, mock_notion):
-        pages = [
-            make_notion_page("proj1", "Title", "Synapse"),
-            make_notion_page("proj2", "Title", "Blueprint"),
+    def test_reads_the_workflow_projects_table(self):
+        rows = [
+            {"id": "p1", "title": "Synapse", "status": "In progress"},
+            {"id": "p2", "title": "Blueprint", "status": "To Do"},
+            {"id": "p3", "title": "Old", "status": "Completed"},
         ]
-        mock_notion.request.return_value = {"results": pages}
+        with patch("core.soma_hub.pull_rows", return_value=rows) as pull:
+            prompt_list, id_map = fetch_active_projects()
+        assert prompt_list == ["Synapse", "Blueprint"]
+        assert id_map == {"Synapse": "p1", "Blueprint": "p2"}
+        assert pull.call_args.args == ("projects", ["title", "status"])
 
-        prompt_list, id_map = fetch_active_projects()
-        assert "Synapse" in prompt_list
-        assert "Blueprint" in prompt_list
-        assert id_map["Synapse"] == "proj1"
+    def test_no_projects_binding_means_no_projects(self, monkeypatch):
+        from core import workflow
 
-    def test_skips_unknown(self, mock_notion):
-        """Pages with empty titles are skipped."""
-        page = {"id": "bad", "properties": {"Title": {"title": []}}}
-        mock_notion.request.return_value = {"results": [page]}
-
-        prompt_list, id_map = fetch_active_projects()
-        assert len(prompt_list) == 0
+        monkeypatch.setattr(workflow, "binding_for", lambda kind: None)
+        assert fetch_active_projects() == ([], {})
 
 
 # ======================================================================
 # execute_logic
 # ======================================================================
 class TestExecuteLogic:
-    def test_tasks_uses_default_handler(self, mock_notion):
-        """Tasks without a project go through execute_logic -> default handler."""
+    def test_tasks_are_soma_task_rows(self):
         data = {"Name": "Test task", "Status": "To Do", "Tags": ["Chore"]}
-        execute_logic("tasks", data)
-        # Should have called create_page via handle_default_logic
-        assert mock_notion.pages.create.called
+        with patch("core.workflow.create_task", return_value="tasks/abc") as create:
+            assert execute_logic("tasks", data) == "tasks/abc"
+        create.assert_called_once_with(data)
 
-    def test_hub_backed_category_routes_to_the_hub_handler(self, mock_notion):
+    def test_hub_backed_category_routes_to_the_hub_handler(self):
         data = {"Name": "New Item", "Status": "On List"}
         with patch("core.business_logic.handle_hub_logic", return_value="groceries/x") as hub:
             assert execute_logic("groceries", data, inventory_map={}) == "groceries/x"
         hub.assert_called_once_with("groceries", data)
-        mock_notion.pages.create.assert_not_called()
 
-
-# ======================================================================
-# hydrate_dynamic_options
-# ======================================================================
-class TestHydrateDynamicOptions:
-    def test_populates_runtime_options(self, mock_notion):
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Tags": {
-                    "type": "multi_select",
-                    "multi_select": {"options": [{"name": "Chore"}, {"name": "Errand"}]},
-                }
-            }
-        }
-        # This modifies DATABASES in-place
-        hydrate_dynamic_options()
-        # Verify it ran without error (detailed check would require inspecting DATABASES)
-        assert True
-
-    def test_only_category_hydrates_just_that_category(self, mock_notion):
-        """The hot path: hydrate only the classified category, not all ~15
-        (which cost ~40 Notion calls per thought). fetch_property_options must
-        be called only for the requested category's select props."""
-        from core.config import DATABASES
-
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {"Tags": {"type": "multi_select", "multi_select": {"options": []}}}
-        }
-        try:
-            hydrate_dynamic_options(only_category="tasks")
-            calls = mock_notion.databases.retrieve.call_count
-            # tasks has a handful of select/status props; a full all-category
-            # hydrate would retrieve far more DBs. Assert we touched exactly one DB.
-            db_ids = {
-                c.kwargs.get("database_id") or c.args[0]
-                for c in mock_notion.databases.retrieve.call_args_list
-            }
-            assert len(db_ids) == 1, f"expected 1 DB hydrated, got {len(db_ids)}: {db_ids}"
-            assert calls >= 1
-        finally:
-            for details in DATABASES["databases"].values():
-                for rules in details.get("properties", {}).values():
-                    rules.pop("_runtime_options", None)
-
-    def test_hub_backed_categories_are_never_hydrated(self, mock_notion, monkeypatch):
-        """movies/tv-shows live in soma - there is no Notion DB to read
-        options from, and their yaml allowlists ARE the catalog options. The
-        env override supplies a db_id, so only the hub_table guard can stop it."""
-        monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
-        hydrate_dynamic_options(only_category="movies")
-        mock_notion.databases.retrieve.assert_not_called()
-
-    def test_fetch_options_matches_by_id_after_rename(self, mock_notion):
-        """Rename-safety: the live schema property was RENAMED (name differs from
-        databases.yaml) but kept its id — options are still found by id."""
-        from core.notion_utils import prop_id
-
-        genres_id = prop_id("podcasts", "Genres")
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Renamed Genres!!": {
-                    "id": genres_id,
-                    "type": "multi_select",
-                    "multi_select": {"options": [{"name": "Action"}, {"name": "Drama"}]},
-                }
-            }
-        }
-        opts = fetch_property_options("fake-podcasts-db", "Genres", "podcasts")
-        assert opts == ["Action", "Drama"]
-
-    def test_warns_when_allowlist_option_missing_from_live_select(self, mock_notion, capsys):
-        """An allowlist entry absent from the live Notion select is filtered out
-        of the AI enum — hydration must warn loudly instead of silently no-oping."""
-        from core.config import DATABASES
-
-        # Live tasks Priority select without the 'Low' option
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Priority": {
-                    "type": "select",
-                    "select": {"options": [{"name": "Medium"}, {"name": "High"}]},
-                }
-            }
-        }
-        try:
-            hydrate_dynamic_options()
-            out = capsys.readouterr().out
-            assert "Low" in out and "not in Notion" in out
-            priority = DATABASES["databases"]["tasks"]["properties"]["Priority"]
-            assert "Low" not in priority["_runtime_options"]
-        finally:
-            # Undo the in-place DATABASES mutation so schema tests keep seeing allowlists
-            for details in DATABASES["databases"].values():
-                for rules in details.get("properties", {}).values():
-                    rules.pop("_runtime_options", None)
-
-
-# ======================================================================
-# fetch_property_options
-# ======================================================================
-class TestFetchPropertyOptions:
-    def test_select_options(self, mock_notion):
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Priority": {
-                    "type": "select",
-                    "select": {"options": [{"name": "Low"}, {"name": "High"}]},
-                }
-            }
-        }
-        result = fetch_property_options("fake-db-id", "Priority")
-        assert result == ["Low", "High"]
-
-    def test_multi_select_options(self, mock_notion):
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Tags": {
-                    "type": "multi_select",
-                    "multi_select": {"options": [{"name": "A"}, {"name": "B"}]},
-                }
-            }
-        }
-        result = fetch_property_options("fake-db-id", "Tags")
-        assert result == ["A", "B"]
-
-    def test_status_options(self, mock_notion):
-        mock_notion.databases.retrieve.return_value = {
-            "properties": {
-                "Status": {
-                    "type": "status",
-                    "status": {"options": [{"name": "To Do"}, {"name": "Done"}]},
-                }
-            }
-        }
-        result = fetch_property_options("fake-db-id", "Status")
-        assert result == ["To Do", "Done"]
-
-    def test_missing_property(self, mock_notion):
-        mock_notion.databases.retrieve.return_value = {"properties": {}}
-        result = fetch_property_options("fake-db-id", "NonExistent")
-        assert result == []
-
-
-# ======================================================================
-# validate_category / validate_all — config-drift detection
-# ======================================================================
-class TestValidateConfig:
-    # a category NOT in property_ids.yaml -> prop_id falls back to names, so the
-    # synthetic schema below is matched by name.
-    CAT = "synthetic-cat"
-
-    def _schema(self, status_type="status", status_opts=("To Do", "Done")):
-        return {
-            "Title": {"id": "title", "type": "title"},
-            "Status": {
-                "id": "sid",
-                "type": status_type,
-                status_type: {"options": [{"name": o} for o in status_opts]},
-            },
-        }
-
-    def test_clean_config_no_issues(self):
-        details = {
-            "properties": {
-                "Title": {"type": "title"},
-                "Status": {"type": "status", "allowlist": ["To Do", "Done"]},
-            }
-        }
-        assert validate_category(self.CAT, details, self._schema()) == []
-
-    def test_flags_missing_property(self):
-        details = {"properties": {"Title": {"type": "title"}, "Genres": {"type": "multi_select"}}}
-        issues = validate_category(self.CAT, details, self._schema())
-        assert any("Genres" in i and "not found" in i for i in issues)
-
-    def test_flags_type_mismatch(self):
-        details = {"properties": {"Status": {"type": "status"}}}
-        # live schema has Status as a select, not status
-        issues = validate_category(self.CAT, details, self._schema(status_type="select"))
-        assert any("Status" in i and "type" in i for i in issues)
-
-    def test_flags_allowlist_gap(self):
-        details = {"properties": {"Status": {"type": "status", "allowlist": ["To Do", "Blocked"]}}}
-        issues = validate_category(self.CAT, details, self._schema(status_opts=("To Do",)))
-        assert any("allowlist" in i and "Blocked" in i for i in issues)
-
-    def test_ignore_type_skipped(self):
-        details = {"properties": {"Helper Field": {"type": "ignore"}}}
-        assert validate_category(self.CAT, details, self._schema()) == []
-
-    def test_empty_schema_reports_issue(self):
-        issues = validate_category(self.CAT, {"properties": {"Title": {"type": "title"}}}, {})
-        assert issues and "could not fetch live schema" in issues[0]
-
-    def test_validate_all_skips_hub_backed_categories(self, mock_notion, monkeypatch):
-        """A soma category has no live Notion schema to drift from."""
-        monkeypatch.setenv("NOTION_MOVIES_DB_ID", "stale-notion-movies-db")
-        mock_notion.databases.retrieve.return_value = {"properties": {}}
-        report = validate_all()
-        assert "movies" not in report
-        assert "tv-shows" not in report
-
-    def test_validate_all_returns_dict(self, mock_notion):
-        # every DB retrieve returns an empty schema -> every category reports drift
-        mock_notion.databases.retrieve.return_value = {"properties": {}}
-        report = validate_all()
-        assert isinstance(report, dict)
-        assert len(report) > 0  # empty live schemas => drift everywhere
+    def test_resolved_id_categories_use_their_handler(self):
+        with patch.dict(
+            "core.business_logic.LOGIC_HANDLERS", {"movies": lambda c, d: "movies/603"}
+        ):
+            assert execute_logic("movies", {"Title": "The Matrix"}) == "movies/603"
 
 
 def test_project_routing_preserves_extracted_task_notes():
@@ -435,3 +204,52 @@ def test_project_routing_preserves_extracted_task_notes():
         related_project="Example Project",
     )
     assert result["Notes"] == "Keep the supplied details\n\nProject: Example Project"
+
+
+# ======================================================================
+# clean_text — deterministic de-spam / de-mojibake of a task's verbatim name
+# ======================================================================
+class TestCleanText:
+    def test_empty_and_none_safe(self):
+        assert clean_text("") == ""
+        assert clean_text(None) is None  # non-str passes through untouched
+
+    def test_clean_string_is_noop(self):
+        assert clean_text("Buy milk") == "Buy milk"
+
+    def test_strips_leading_trailing_whitespace(self):
+        assert clean_text("  hello  \n") == "hello"
+
+    def test_collapses_newline_spam(self):
+        assert clean_text("a\n\n\n\n\nb") == "a\n\nb"
+
+    def test_keeps_double_newline(self):
+        assert clean_text("a\n\nb") == "a\n\nb"
+
+    def test_collapses_punctuation_spam(self):
+        assert clean_text("wait———really") == "wait—really"
+        assert clean_text("well....") == "well…"
+        assert clean_text("stop!!!!") == "stop!"
+        assert clean_text("what???") == "what?"
+
+    def test_short_repeats_untouched(self):
+        assert clean_text("a—b") == "a—b"
+        assert clean_text("wait..") == "wait.."
+        assert clean_text("yes!!") == "yes!!"
+
+    def test_mojibake_quotes_dashes_and_spaces(self):
+        rsquo = "\u00e2\u20ac\u2122"
+        assert clean_text("It" + rsquo + "s here") == "It's here"
+        assert clean_text("a" + "\u00e2\u20ac\u201d" + "b") == "a\u2014b"
+        assert clean_text("a\u00c2\u00a0b") == "a b"
+        assert clean_text("a\u00a0b") == "a b"
+        assert clean_text("\ufeffhello") == "hello"
+
+    def test_preserves_accents(self):
+        assert clean_text("Sérgio") == "Sérgio"
+        assert clean_text("l'âme") == "l'âme"
+
+    def test_idempotent(self):
+        messy = "Buy milk!!!!\n\n\n\nnow...."
+        once = clean_text(messy)
+        assert clean_text(once) == once

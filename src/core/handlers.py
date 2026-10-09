@@ -3,13 +3,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import NamedTuple
 
-from core.config import DATABASES
+from core.config import CATEGORIES
 from core.clients import get_youtube
-from core.notion_utils import (
-    create_page,
-    create_cleanup_task,
-    build_notion_properties,
-)
 from core.external_data import (
     get_youtube_video_id,
     resolve_tmdb_id,
@@ -19,6 +14,7 @@ from core.soma_hub import pull_ids, pull_rows, push_rows
 from core import soma_hub
 from core.media_save import save_media
 from core.timeutils import now_utc_iso_ms
+from core.workflow import create_cleanup_task
 
 # Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
 # because the two services don't share a dependency.
@@ -64,23 +60,21 @@ def _empty(value):
 
 
 def handle_hub_logic(category, data):
-    """A capture for any category whose stanza names a soma `hub_table`.
+    """A capture for any category whose stanza maps fields to `columns`.
 
-    The stanza's `columns` map extracted Notion-style property names to catalog
-    columns; `constants` are fixed columns (things_to_do.kind); `match_on` names
+    The stanza's `columns` map extracted field names to catalog columns; `constants` are fixed columns (things_to_do.kind); `match_on` names
     the natural key - a row already holding that value is UPDATED (only the
     columns we know are sent, so a status capture never clobbers the rest)
     instead of duplicated; `review_if_missing` turns an unfillable property into
-    a `needs_review` reason rather than a Notion cleanup task (only when the
-    matched row lacks it too; a capture that fills it clears that reason).
+    a `needs_review` reason rather than a cleanup task (only when the matched
+    row lacks it too; a capture that fills it clears that reason).
     `data["_fill_only"]` names properties the caller only guessed: they fill
     an empty column but never replace a value the matched row already holds.
-    Everything the yaml used to enforce (required, allowlists, defaults) is
-    the catalog's job now: a rejected row files a cleanup task and writes
-    nothing.
+    The catalog enforces the contract (required, options, defaults,
+    invariants): a rejected row files a cleanup task and writes nothing.
     """
-    stanza = DATABASES["databases"][category]
-    table = stanza["hub_table"]
+    stanza = CATEGORIES[category]
+    table = stanza["table"]
     columns = stanza.get("columns", {})
     review = stanza.get("review_if_missing") or {}
     fill_only = data.get("_fill_only") or []
@@ -134,7 +128,7 @@ def _capture_media(
     explicit_properties=(),
 ):
     review = review or create_cleanup_task
-    stanza = DATABASES["databases"][category]
+    stanza = CATEGORIES[category]
     mapping = stanza["capture_columns"]
     requested = {
         column: data[field]
@@ -149,7 +143,7 @@ def _capture_media(
     result = save_media(
         soma_hub,
         {
-            "table": stanza["hub_table"],
+            "table": stanza["table"],
             "editable_columns": [*mapping.values(), *([saved_column] if saved_column else [])],
         },
         identity,
@@ -160,13 +154,13 @@ def _capture_media(
     if result.state != "saved":
         review(f"Media capture requires review: {result.reason}")
         return result if receipt else Failed(f"Media capture {result.state}: {result.reason}")
-    return result if receipt else f"{stanza['hub_table']}/{identity}"
+    return result if receipt else f"{stanza['table']}/{identity}"
 
 
 def handle_youtube_logic(
     category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
 ):
-    """YouTube captures are a soma table, not a Notion DB.
+    """A YouTube capture: the video id is the row id, its facts come from the API.
 
     A channel is pushed once (on first sight of a video from it), with a
     "Classify new Channel" cleanup task so the user chooses follow by
@@ -178,7 +172,8 @@ def handle_youtube_logic(
     url = sanitize_youtube_url(data["Video URL"]) if data.get("Video URL") else None
     vid = get_youtube_video_id(url) if url else None
     if not vid:
-        raise ValueError(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
+        review(f"No YouTube video ID in URL: {data.get('Video URL')}")
+        return Failed(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
 
     yt = get_youtube()
     if not yt:
@@ -263,9 +258,7 @@ def handle_movies_tv_logic(
     explicit_properties=(),
     strict_identity=False,
 ):
-    """Movies and TV shows are soma rows, not Notion pages.
-
-    The TMDB id IS the row id, so an unconfident match is worse than none: we
+    """Movies and TV shows: the TMDB id IS the row id, so an unconfident match is worse than none: we
     file a cleanup task and write nothing rather than pin a row to the wrong
     film. Everything else about the title (genres, cast, poster) is derived on
     the hub - we push only the columns we actually know, and the hub's upsert
@@ -296,10 +289,6 @@ def handle_movies_tv_logic(
     )
 
 
-def handle_default_logic(category, data):
-    return create_page(category, build_notion_properties(category, data)).get("url")
-
-
 def canonical_media_url(url):
     """The media poller's public URL identity rules; no personal source list."""
     from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -326,16 +315,16 @@ def canonical_media_url(url):
 def handle_url_media(
     category, data, *, receipt=False, review=None, checkpoint=None, explicit_properties=()
 ):
-    stanza = DATABASES["databases"][category]
+    stanza = CATEGORIES[category]
     try:
         raw_url = (data.get("URL") or "").strip()
         url = canonical_media_url(raw_url)
         if category == "podcasts":
-            identity = soma_hub.media_url_identity(stanza["hub_table"], url, canonical_media_url)
+            identity = soma_hub.media_url_identity(stanza["table"], url, canonical_media_url)
         else:
             # Some producer IDs deliberately retain fragments and trailing slashes.
             # Check exact identity before applying ordinary URL normalization.
-            exact = soma_hub.read_row(stanza["hub_table"], raw_url, ["id"])
+            exact = soma_hub.read_row(stanza["table"], raw_url, ["id"])
             if exact:
                 identity = raw_url
             elif "#" in raw_url:
