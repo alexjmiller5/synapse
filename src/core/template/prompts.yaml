@@ -130,6 +130,10 @@ categories:
         allowlist: ["Low", "Medium", "High"]
         instruction: |
           The default for this cateogry if the user doesn't specify a priority is High. If the user mentions Low or Medium priority, then make the task as such. Oftentimes the user will just say "low" or "medium", they won't necesarily say "low priority". You should interespret just the mention of low or medium as meaning the corresponding priority, and the same for high priority. And again, if the user doesn't specify high priority, then you should default to High.
+      Lane:
+        required: true
+        instruction: |
+          Who does this task. "AI" when an agent working on the user's computer could finish it or do its prep: code and coding projects, research, comparing options, drafting, organizing files, notes or data, fixing a sync or setting. "Me" when the user must do it personally: going somewhere or anything physical, spending money or buying, talking to or messaging people, appointments, or a decision only the user can make. If the text says to have AI or an agent do it, "AI"; if it says the user will do it themselves, "Me".
       Links:
         instruction: "Every valid URL (http, https) in the text, one per line. Leave empty when there is none."
       Due Date:

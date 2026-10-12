@@ -174,6 +174,11 @@ class TestGenerateExtractionPrompt:
         prompt = generate_extraction_prompt("tasks", "have ai do this")
         assert "AI Ready" not in prompt
 
+    def test_lane_prompt_lists_catalog_meanings_and_instruction(self):
+        prompt = generate_extraction_prompt("tasks", "buy a birthday card")
+        assert '- "Me": Only the user can do this task.' in prompt
+        assert "- `Lane`:" in prompt
+
     def test_includes_url_context(self):
         prompt = generate_extraction_prompt(
             "bookmarks", "https://example.com", url_context="HTML Title: Example\nContent..."
@@ -259,8 +264,10 @@ class TestGetGeminiSchema:
     def test_tasks_schema(self):
         schema = get_gemini_schema("tasks")
         assert schema["type"] == "object"
-        assert {"Name", "Tags", "Due Date", "Priority", "Links"} == set(schema["properties"])
-        assert set(schema["required"]) == {"Name", "Tags", "Due Date"}
+        assert {"Name", "Tags", "Due Date", "Priority", "Lane", "Links"} == set(
+            schema["properties"]
+        )
+        assert set(schema["required"]) == {"Name", "Tags", "Due Date", "Lane"}
 
     def test_multi_select_is_an_array_of_catalog_options(self):
         tags = get_gemini_schema("ideas")["properties"]["Tags"]
@@ -308,6 +315,12 @@ class TestGetGeminiSchema:
         """Synapse must never tick 'AI Ready' - only the user sets it, by hand."""
         schema = get_gemini_schema("tasks")
         assert "AI Ready" not in schema["properties"]
+
+    def test_tasks_schema_always_answers_lane_from_catalog_options(self):
+        """Every captured task is triaged: Lane is required, its enum the catalog's."""
+        schema = get_gemini_schema("tasks")
+        assert schema["properties"]["Lane"] == {"type": "string", "enum": ["AI", "Me"]}
+        assert "Lane" in schema["required"]
 
 
 # ======================================================================

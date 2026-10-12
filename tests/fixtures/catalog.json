@@ -750,6 +750,15 @@
   },
   {
    "tbl": "tasks",
+   "col": "lane",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"AI\", \"d\": \"An agent can take this task.\"}, {\"v\": \"Me\", \"d\": \"Only the user can do this task.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
    "col": "ai_ready",
    "type": "bool",
    "required": 0,

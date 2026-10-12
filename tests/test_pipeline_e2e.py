@@ -97,6 +97,17 @@ class TestTaskPipeline:
         assert execution["outcome"] == "To Review"
         assert "tags" not in execution  # ordinary execution: not a project append
 
+    @pytest.mark.parametrize("lane", ["AI", "Me"])
+    def test_task_lands_with_the_extracted_lane(self, hub, mock_gemini, lane):
+        _setup_classify_extract(
+            mock_gemini,
+            "tasks",
+            {"Name": "Sort the inbox", "Tags": ["Chore"], "Due Date": "2026-03-29", "Lane": lane},
+        )
+        _run(_item("Sort the inbox"))
+        assert _task(hub)["lane"] == lane
+        assert "ai_ready" not in _task(hub)
+
     def test_task_name_is_the_verbatim_capture(self, hub, mock_gemini):
         _setup_classify_extract(
             mock_gemini,

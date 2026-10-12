@@ -23,6 +23,7 @@ workflow:
       Links: links
       Notes: notes
       Project: project_ids
+      Lane: lane
     defaults:
       Status: To Do
   executions:
