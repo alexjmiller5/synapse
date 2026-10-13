@@ -107,16 +107,6 @@ def _post(path, body, *, settings=None, client=None):
     return payload
 
 
-def push_rows(table, rows, *, settings=None, client=None):
-    """Sparse upsert for existing category handlers; callers inspect rejections."""
-    return _post(
-        "/v1/rows/push",
-        {"table": table, "columns": sorted({k for row in rows for k in row}), "rows": rows},
-        settings=settings,
-        client=client,
-    )
-
-
 def pull_rows(table, columns, *, settings=None, client=None):
     """Exhaust the hub scan before returning non-deleted rows.
 

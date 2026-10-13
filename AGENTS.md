@@ -61,11 +61,16 @@ stripped. A workspace without a `Dispatch` mapping just gets a lane-AI task.
 
 Soma's catalog owns each column's contract: type, required, select options
 and their `d` meanings, defaults, enforced invariants. `core/catalog.py`
-fetches `GET /v1/catalog`, keeps the slice for the tables the workspace config
-names, and caches it in the operational store (`catalog:<workspace>`): reread
-after `TTL_S` (1 h) with ETag revalidation, dropped when the hub rejects a
-write (a `rejected` list, or HTTP 400/422 - the contract may have changed),
-served stale when the hub is unreachable. `ai_engine.fields(category)` joins
+reads it with `POST /v1/catalog/projection`, one request per table a category
+writes, for exactly the columns its prompt fields map to (`_columns`: the
+stanza's `columns`/`capture_columns`, the tasks binding for tasks): type,
+required, options, static default, plus the table's enforced rule texts. A
+refused projection (a column without a catalog row or grant) leaves that table
+without a contract, as an uncataloged table has none. The slice is cached in
+the operational store (`catalog:<workspace>`): reprojected after `TTL_S` (1 h;
+the route has no ETag) or when the config maps other columns, dropped when the
+hub rejects a write (a `rejected` list, or HTTP 400/422 - the contract may
+have changed), served stale when the hub is unreachable. `ai_engine.fields(category)` joins
 it with `src/core/template/prompts.yaml`, which holds only interpretation:
 classifier descriptions and precedence, each category's `table` / `columns`
 / `capture_columns` wiring and per-field `instruction`s. A field `allowlist`
@@ -104,9 +109,23 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   workspace's Soma hub URL and token are workspace secrets
   (`just workspace set-secrets <id>`, KEY=VALUE on stdin). Rotating one =
   re-run set-secrets from its 1Password item. The `default` workspace's hub
-  token is its own enrollment with the Soma profile `synapse-workspace-v1`
-  (broad `tables:read`/`tables:write` plus read/write `raw/synapse-executions/`;
-  copy in the Synapse ENV field `SOMA_HUB_TOKEN`).
+  token is its own enrollment with the Soma profile `synapse-workspace-v2`
+  (copy in the Synapse ENV field `SOMA_HUB_TOKEN`), exact grants only:
+  - `tables:read:<t>` for the tables whose rows Synapse reads: `groceries`
+    (inventory, name match), `bookmarks` (url match), `projects` (active
+    projects), `movies`, `tv_shows`, `youtube_videos`, `articles`,
+    `podcast_episodes` (identity and URL reads before a save) and
+    `youtube_channels` (known channel ids).
+  - `tables:read:<t>:id`, `tables:read:<t>:<c>` and `catalog:read:<t>:<c>`
+    for every column a prompt field maps to (the projection needs the catalog
+    and the row read of each column; Soma requires the `id` read beside them).
+    A config change that maps a new prompt column needs that grant added in
+    a new profile revision, or its table loses its prompt contract.
+  - `tables:write:<t>` for the twelve tables it creates or edits rows in
+    (every table above but `projects`, plus `tasks`, `synapse_executions`,
+    `ideas`, `things_to_do`).
+  - `files:read:raw/synapse-executions/` and `files:write:...` for retained
+    execution originals.
 - Without an active workspace (tests, local scripts) `current()` is the local
   one: the overlay from `$SYNAPSE_WORKSPACE_DIR`, credentials from env.
   Tests use `tests/fixtures/workspace` (workflow bindings) and
@@ -132,14 +151,11 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   `get_gemini_client()`, `get_spotify()`, `get_youtube()` (lru_cached, built
   on first use, `None` if the key is absent) — nothing is instantiated at
   import.
-- **Every category is a Soma table.** A stanza's `table` names it:
-  `core/soma_hub.py: push_rows` POSTs `{table, columns, rows}` to the hub's
-  `/v1/rows/push` with the workspace's `SOMA_HUB_URL` /
-  `SOMA_HUB_TOKEN` settings (broad `tables:read,tables:write`: the handlers
-  also pull rows, and the hub refuses table-scoped writes to `groceries`,
-  `ideas`, `movies` and `tv_shows`). Push ONLY the columns you know - the hub's upsert touches
-  exactly the columns sent, so a status capture never blanks tags.
-  `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
+- **Every category is a Soma table.** A stanza's `table` names it; every
+  write goes through `core/soma_hub.py` with the workspace's `SOMA_HUB_URL` /
+  `SOMA_HUB_TOKEN`, never an unconditional row push. Send ONLY the columns you
+  know - a patch touches exactly the columns sent, so a status capture never
+  blanks tags. `pull_rows` exhausts bounded pages and fails on missing/repeated cursors; a
   failed scan never returns a partial inventory. Workflow adapters use
   `insert_rows` for stable-ID creation (preserves existing/tombstoned rows and
   verifies exhaustive receipts; stamps the `updated_at` the hub requires on
@@ -151,14 +167,16 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   catalog enforces the contract; a rejected row files a cleanup task and
   writes nothing. Two handler shapes:
   - `handle_hub_logic` (groceries, ideas, fun-activities, bucket-list,
-    podcasts, bookmarks): driven entirely by the stanza - `columns` maps
+    bookmarks): driven entirely by the stanza - `columns` maps
     extracted property names to catalog columns, `constants` adds fixed
     columns (`things_to_do.kind`), `match_on` names the natural key (a
-    grocery by `name`, a bookmark by `url`) so a repeat capture updates the
-    existing row instead of duplicating it, `review_if_missing` turns an
+    grocery by `name`, a bookmark by `url`) so a repeat capture patches the
+    existing row at the revision it was read at instead of duplicating it
+    (a new row is inserted; a 409 conflict or 422 rejection files a cleanup
+    task), `review_if_missing` turns an
     unfillable property into a `needs_review` reason when the matched row
     lacks it too (a later capture that fills it clears that reason). A
-    bookmark whose page could not be fetched is pushed without a guessed
+    bookmark whose page could not be fetched is saved without a guessed
     Title, never as a cleanup task, and its guessed Description/Tags go in
     `data["_fill_only"]`: they fill empty columns but never replace a known
     url's values. New rows get a random 32-hex id.
@@ -168,7 +186,7 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
     silently merges two films. Everything else on those rows (title, year,
     genres, cast, poster) is DERIVED on the hub from the id; sending a
     guessed value gets the row rejected for missing provenance. A YouTube
-    channel is pushed once, gated by `known_channel_ids()` against the hub's
+    channel is inserted once, gated by `known_channel_ids()` against the hub's
     actual state, with a "Classify new Channel" cleanup task.
   The grocery inventory the extraction prompt sees comes from the hub too
   (`fetch_inventory_map`). An execution's `Created Item` holds
@@ -261,7 +279,8 @@ Write the test in `tests/` first, then the `src/core/` code. `app.py` shim
 functions stay thin enough to not need tests (webhook validation is the pure
 `core.pipeline.payload_error`, tested in `tests/test_webhook.py`).
 `tests/conftest.py` seeds fake secrets as env vars, serves
-`tests/fixtures/catalog.json` as the hub's catalog and swaps all external
+`tests/fixtures/catalog.json` through `helpers.CatalogHub` (the projection
+route, refusing an uncataloged column as the hub does) and swaps all external
 clients (`core.clients` globals) for MagicMocks — no test touches the network.
 `tests/media_hub.py`'s `SyntheticHub` stands in for the hub's row routes;
 end-to-end tests run captures through the real journal and assert on its rows.

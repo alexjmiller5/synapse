@@ -4,9 +4,11 @@ from core import soma_hub
 
 
 import re
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from core.handlers import (
     Failed,
@@ -29,61 +31,67 @@ def cleanup():
 # handle_hub_logic - every category stanza with a table + columns
 # ======================================================================
 class TestHubHandler:
-    def _push(self):
-        return patch("core.handlers.push_rows", return_value={"upserted": 1, "rejected": []})
+    """New rows are inserted; a matched row gets a conditional patch at the
+    revision it was read at (no category write is an unconditional upsert)."""
 
-    def test_new_grocery_gets_a_fresh_id_and_only_known_columns(self):
+    REVISION = {"updated_at": "2026-01-01T00:00:00.000Z", "hub_at": "2026-01-01T00:00:01.000Z"}
+
+    @pytest.fixture
+    def writes(self):
         with (
-            patch("core.handlers.pull_rows", return_value=[]),
-            self._push() as push,
+            patch("core.handlers.insert_rows", return_value={"inserted": ["x"]}) as insert,
+            patch("core.handlers.patch_row", return_value={"id": "x"}) as patch_,
         ):
+            yield SimpleNamespace(insert=insert, patch=patch_)
+
+    def _known(self, **cols):
+        return patch("core.handlers.pull_rows", return_value=[{**self.REVISION, **cols}])
+
+    def test_new_grocery_gets_a_fresh_id_and_only_known_columns(self, writes):
+        with patch("core.handlers.pull_rows", return_value=[]):
             ref = handle_hub_logic(
                 "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
             )
-        table, rows = push.call_args.args
+        table, rows = writes.insert.call_args.args
         row = rows[0]
         assert table == "groceries" and ref == f"groceries/{row['id']}"
         assert len(row["id"]) == 32
         assert row["name"] == "Quinoa" and row["category"] == "Grains"
-        assert row["status"] == "On List" and row["updated_at"].endswith("Z")
+        assert row["status"] == "On List"
         assert "notes" not in row  # never sends a column it does not know
+        writes.patch.assert_not_called()
 
-    def test_existing_grocery_is_updated_by_name_case_insensitively(self):
-        with (
-            patch("core.handlers.pull_rows", return_value=[{"id": "abc", "name": "Eggs"}]) as pull,
-            self._push() as push,
-        ):
+    def test_existing_grocery_is_patched_by_name_case_insensitively(self, writes):
+        with self._known(id="abc", name="Eggs") as pull:
             ref = handle_hub_logic("groceries", {"Name": "eggs", "Status": "Have"})
         assert ref == "groceries/abc"
-        assert pull.call_args.args == ("groceries", ["name"])
-        row = push.call_args.args[1][0]
-        assert row["id"] == "abc" and row["status"] == "Have"
-        assert "category" not in row  # a status capture never clobbers the rest
+        assert pull.call_args.args == ("groceries", ["name", "updated_at", "hub_at"])
+        table, row_id, values, revision = writes.patch.call_args.args
+        assert (table, row_id, revision) == ("groceries", "abc", self.REVISION)
+        assert values == {"name": "eggs", "status": "Have"}  # never clobbers the rest
+        writes.insert.assert_not_called()
 
-    def test_constants_and_review_reason(self):
-        with patch("core.handlers.pull_rows") as pull, self._push() as push:
+    def test_constants_and_review_reason(self, writes):
+        with patch("core.handlers.pull_rows") as pull:
             handle_hub_logic("fun-activities", {"Title": "Go Kayaking", "Status": "Someday"})
         pull.assert_not_called()  # no match_on -> no lookup
-        row = push.call_args.args[1][0]
-        assert push.call_args.args[0] == "things_to_do"
-        assert row["kind"] == "Activity" and row["title"] == "Go Kayaking"
-        assert "City" in row["needs_review"]
+        table, rows = writes.insert.call_args.args
+        assert table == "things_to_do"
+        assert rows[0]["kind"] == "Activity" and rows[0]["title"] == "Go Kayaking"
+        assert "City" in rows[0]["needs_review"]
 
-    def test_bucket_list_is_an_ambition(self):
-        with self._push() as push:
-            handle_hub_logic("bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]})
-        row = push.call_args.args[1][0]
+    def test_bucket_list_is_an_ambition(self, writes):
+        handle_hub_logic("bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]})
+        row = writes.insert.call_args.args[1][0]
         assert row["kind"] == "Ambition" and row["tags"] == ["Adventure"]
 
-    def test_rejected_row_files_a_cleanup_task_and_fails(self, cleanup):
+    def test_rejected_insert_files_a_cleanup_task_and_fails(self, cleanup):
+        rejected = soma_hub.InsertRejected(
+            "Soma rejected 1 rows: x: category required (category is required.)"
+        )
         with (
             patch("core.handlers.pull_rows", return_value=[]),
-            patch(
-                "core.handlers.push_rows",
-                return_value={
-                    "rejected": [{"col": "category", "message": "category is required."}]
-                },
-            ),
+            patch("core.handlers.insert_rows", side_effect=rejected),
         ):
             out = handle_hub_logic("groceries", {"Name": "Quinoa", "Status": "On List"})
         assert isinstance(out, Failed) and "category is required" in out.detail
@@ -91,21 +99,36 @@ class TestHubHandler:
         name = cleanup.call_args.args[0]
         assert "Quinoa" in name and "rejected" in name
 
-    def test_bookmark_matches_on_url(self):
+    @pytest.mark.parametrize("status", [409, 422])
+    def test_a_rejected_or_conflicting_patch_files_a_cleanup_task_and_fails(self, cleanup, status):
+        error = requests.HTTPError(response=SimpleNamespace(status_code=status))
         with (
-            patch(
-                "core.handlers.pull_rows",
-                return_value=[{"id": "bm1", "url": "https://example.com"}],
-            ),
-            self._push() as push,
+            self._known(id="abc", name="Eggs"),
+            patch("core.handlers.patch_row", side_effect=error),
         ):
+            out = handle_hub_logic("groceries", {"Name": "eggs", "Status": "Have"})
+        assert isinstance(out, Failed) and "groceries/abc" in out.detail
+        cleanup.assert_called_once()
+
+    def test_an_unavailable_hub_is_raised_for_a_retry(self, cleanup):
+        error = requests.HTTPError(response=SimpleNamespace(status_code=503))
+        with (
+            self._known(id="abc", name="Eggs"),
+            patch("core.handlers.patch_row", side_effect=error),
+        ):
+            with pytest.raises(requests.HTTPError):
+                handle_hub_logic("groceries", {"Name": "eggs", "Status": "Have"})
+        cleanup.assert_not_called()
+
+    def test_bookmark_matches_on_url(self, writes):
+        with self._known(id="bm1", url="https://example.com"):
             ref = handle_hub_logic(
                 "bookmarks", {"Description": "A site", "URL": "https://example.com", "Tags": []}
             )
         assert ref == "bookmarks/bm1"
-        row = push.call_args.args[1][0]
-        assert row["id"] == "bm1" and row["description"] == "A site"
-        assert "tags" not in row  # empty lists are not sent
+        values = writes.patch.call_args.args[2]
+        assert values["description"] == "A site"
+        assert "tags" not in values  # empty lists are not sent
 
     # A bookmark whose page could not be fetched: the pipeline drops Title and
     # marks Description/Tags as guesses that may only fill empty columns.
@@ -117,42 +140,42 @@ class TestHubHandler:
     }
     REASON = CATEGORIES["bookmarks"]["review_if_missing"]["Title"]
 
-    def _known(self, **cols):
-        row = {"id": "bm1", "url": "https://x.com", "title": None, "description": None}
-        return patch("core.handlers.pull_rows", return_value=[{**row, **cols}])
+    def _bookmark(self, **cols):
+        return self._known(
+            **{"id": "bm1", "url": "https://x.com", "title": None, "description": None, **cols}
+        )
 
-    def test_a_guess_never_replaces_a_known_bookmarks_values(self):
-        known = self._known(title="X", description="Real", tags='["List"]', needs_review=None)
-        with known as pull, self._push() as push:
+    def test_a_guess_never_replaces_a_known_bookmarks_values(self, writes):
+        known = self._bookmark(title="X", description="Real", tags='["List"]', needs_review=None)
+        with known as pull:
             ref = handle_hub_logic("bookmarks", dict(self.GUESS))
         assert ref == "bookmarks/bm1"
         assert set(pull.call_args.args[1]) >= {"url", "title", "description", "tags"}
-        row = push.call_args.args[1][0]
-        assert row["id"] == "bm1"
-        assert "description" not in row and "tags" not in row
-        assert "needs_review" not in row  # the row already has the title we could not fetch
+        values = writes.patch.call_args.args[2]
+        assert "description" not in values and "tags" not in values
+        assert "needs_review" not in values  # the row already has the title we could not fetch
 
-    def test_a_guess_still_fills_an_empty_column_on_a_known_bookmark(self):
-        with self._known(description="Real", tags="[]", needs_review=None), self._push() as push:
+    def test_a_guess_still_fills_an_empty_column_on_a_known_bookmark(self, writes):
+        with self._bookmark(description="Real", tags="[]", needs_review=None):
             handle_hub_logic("bookmarks", dict(self.GUESS))
-        row = push.call_args.args[1][0]
-        assert row["tags"] == ["Money"] and "description" not in row
-        assert row["needs_review"] == self.REASON  # still no title anywhere
+        values = writes.patch.call_args.args[2]
+        assert values["tags"] == ["Money"] and "description" not in values
+        assert values["needs_review"] == self.REASON  # still no title anywhere
 
-    def test_filling_the_flagged_column_clears_its_own_reason(self):
-        with self._known(needs_review=self.REASON), self._push() as push:
+    def test_filling_the_flagged_column_clears_its_own_reason(self, writes):
+        with self._bookmark(needs_review=self.REASON):
             handle_hub_logic(
                 "bookmarks", {"Description": "Real", "Title": "X", "URL": "https://x.com"}
             )
-        row = push.call_args.args[1][0]
-        assert row["title"] == "X" and row["needs_review"] is None
+        values = writes.patch.call_args.args[2]
+        assert values["title"] == "X" and values["needs_review"] is None
 
-    def test_another_review_reason_is_left_alone(self):
-        with self._known(needs_review="Duplicate of another bookmark"), self._push() as push:
+    def test_another_review_reason_is_left_alone(self, writes):
+        with self._bookmark(needs_review="Duplicate of another bookmark"):
             handle_hub_logic(
                 "bookmarks", {"Description": "Real", "Title": "X", "URL": "https://x.com"}
             )
-        assert "needs_review" not in push.call_args.args[1][0]
+        assert "needs_review" not in writes.patch.call_args.args[2]
 
 
 # ======================================================================

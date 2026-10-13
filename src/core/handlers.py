@@ -10,7 +10,9 @@ from core.external_data import (
     resolve_tmdb_id,
     sanitize_youtube_url,
 )
-from core.soma_hub import pull_ids, pull_rows, push_rows
+import requests
+
+from core.soma_hub import InsertRejected, insert_rows, patch_row, pull_ids, pull_rows
 from core import soma_hub
 from core.media_save import save_media
 from core.timeutils import now_utc_iso_ms
@@ -63,15 +65,17 @@ def handle_hub_logic(category, data):
     """A capture for any category whose stanza maps fields to `columns`.
 
     The stanza's `columns` map extracted field names to catalog columns; `constants` are fixed columns (things_to_do.kind); `match_on` names
-    the natural key - a row already holding that value is UPDATED (only the
-    columns we know are sent, so a status capture never clobbers the rest)
-    instead of duplicated; `review_if_missing` turns an unfillable property into
+    the natural key - a row already holding that value is PATCHED at the
+    revision it was read at (only the columns we know are sent, so a status
+    capture never clobbers the rest) instead of duplicated; a new row is
+    inserted; `review_if_missing` turns an unfillable property into
     a `needs_review` reason rather than a cleanup task (only when the matched
     row lacks it too; a capture that fills it clears that reason).
     `data["_fill_only"]` names properties the caller only guessed: they fill
     an empty column but never replace a value the matched row already holds.
     The catalog enforces the contract (required, options, defaults,
-    invariants): a rejected row files a cleanup task and writes nothing.
+    invariants): a rejected row, or an edit racing the read (409), files a
+    cleanup task and writes nothing.
     """
     stanza = CATEGORIES[category]
     table = stanza["table"]
@@ -87,6 +91,7 @@ def handle_hub_logic(category, data):
         key = str(row[match]).strip().lower()
         wanted = [match] + [columns[p] for p in [*review, *fill_only]]
         wanted += ["needs_review"] if review else []
+        wanted += ["updated_at", "hub_at"]  # the revision the patch is conditional on
         known = next(
             (r for r in pull_rows(table, wanted) if str(r.get(match) or "").strip().lower() == key),
             {},
@@ -102,18 +107,24 @@ def handle_hub_logic(category, data):
         elif _empty(known.get(columns[prop])):
             row["needs_review"] = reason
 
-    row["id"] = known.get("id") or secrets.token_hex(16)
-    row["updated_at"] = now_utc_iso_ms()
-
-    rejected = push_rows(table, [row]).get("rejected") or []
-    if rejected:
-        message = rejected[0].get("message")
+    row_id = known.get("id") or secrets.token_hex(16)
+    try:
+        if known:
+            revision = {"updated_at": known.get("updated_at"), "hub_at": known.get("hub_at")}
+            patch_row(table, row_id, row, revision)
+        else:
+            insert_rows(table, [{**row, "id": row_id}])
+    except (InsertRejected, requests.HTTPError) as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        if isinstance(error, requests.HTTPError) and status not in (409, 422):
+            raise
+        message = str(error) if isinstance(error, InsertRejected) else f"HTTP {status}"
         label = row.get(match) if match else next(iter(row.values()))
         create_cleanup_task(f"soma rejected {label!r}: {message}")
-        return Failed(f"soma rejected {table}/{row['id']}: {message}")
+        return Failed(f"soma rejected {table}/{row_id}: {message}")
 
-    print(f"   ✅ Pushed {table}/{row['id']}")
-    return f"{table}/{row['id']}"
+    print(f"   ✅ Saved {table}/{row_id}")
+    return f"{table}/{row_id}"
 
 
 def _capture_media(

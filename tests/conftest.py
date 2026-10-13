@@ -6,7 +6,7 @@ Mocking strategy:
   local workspace (core.workspace.local) is tests/fixtures/workspace: the
   product template plus the workflow bindings a real workspace carries
 - The Soma catalog is tests/fixtures/catalog.json (generic values only),
-  served by a fake `GET /v1/catalog`
+  served by a fake `POST /v1/catalog/projection` (helpers.CatalogHub)
 - core.clients module globals (gemini_client, spotify, youtube) are patched
   at the module level
 - All external API calls are intercepted before any real network I/O
@@ -18,7 +18,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
 
 CATALOG = Path(__file__).parent / "fixtures" / "catalog.json"
 
@@ -70,25 +69,12 @@ def _reset_all_mocks():
     yield
 
 
-class _CatalogHub:
-    """The hub's `GET /v1/catalog`, serving the fixture catalog."""
-
-    def __init__(self):
-        self.raw = json.loads(CATALOG.read_text())
-
-    def get(self, url, *, headers, timeout):
-        response = requests.Response()
-        response.status_code = 200
-        response._content = json.dumps(self.raw).encode()
-        response.headers["ETag"] = '"fixture"'
-        return response
-
-
 @pytest.fixture(autouse=True)
 def catalog_hub(monkeypatch):
     from core import catalog, workspace
+    from helpers import CatalogHub
 
-    hub = _CatalogHub()
+    hub = CatalogHub(json.loads(CATALOG.read_text()))
     monkeypatch.setattr(catalog, "requests", hub)
     workspace.local().catalog_memo = None
     yield hub
