@@ -88,7 +88,7 @@ Type, catalog `required`, options with their meanings and defaults come from the
   - Every other default is the Soma catalog's: a new movie, show, video or podcast starts `Not Started`, an activity `Someday`, a grocery `On List`
 - **Category cheatsheet**
   - **Tasks (default):** `Update my profile photo`
-  - **Projects:** `Refactor code $ Synapse` (strict: must name the project in context, or carry `pj`; always a task linked to the project)
+  - **Projects:** `Refactor code $ Synapse` (strict: must name the project in context; always a task linked to the project)
   - **URLs:** auto-route to **YouTube**, **Podcasts** (Spotify/TAL), or **Bookmarks**
   - **Dates/status:** `Cancel the gym trial $ Jan 1` · `The Matrix $ movie priority`
 - **Batch example:** `Renew passport @ https://youtu.be/xyz @ Buy eggs $ groceries`

@@ -42,9 +42,7 @@ Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
 `source` is a free-form caller label naming the surface that captured it
 (Receptor's table is in its AGENTS.md: `ios-app`, `macos-panel`,
 `share-send`, `app-shortcut`, `hammerspoon-hyper-r`, ...; plus `agent`,
-`cli`) logged as the execution's free-text `source`; Synapse never parses it. A standalone `pj` token in text or context forces a project task
-(`PJ_KEYWORD`): category tasks, project linked (contains-match, else one
-classifier call), token stripped from the task name. A standalone `ag` token
+`cli`) logged as the execution's free-text `source`; Synapse never parses it. A standalone `ag` token
 (`AG_KEYWORD`) sends the task straight to an agent: category tasks, `Lane` AI
 whatever the extractor said, `Dispatch` Requested (mapped by the workspace's
 tasks binding; Agent Dispatch, a separate project, consumes it), token

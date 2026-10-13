@@ -75,12 +75,9 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
     return json.loads(response.text)
 
 
-# `pj` anywhere in the capture (text or context) = "this is a project task": the
-# category is forced to tasks and a project is always linked. The token itself
-# is stripped so it never lands in the task name.
-PJ_KEYWORD = re.compile(r"\bpj\b", re.IGNORECASE)
 # `ag` = "send this task straight to an agent": a task with lane AI and dispatch
-# Requested, which the workspace's Agent Dispatch picks up. Stripped like `pj`.
+# Requested, which the workspace's Agent Dispatch picks up. The token itself is
+# stripped so it never lands in the task name.
 AG_KEYWORD = re.compile(r"\bag\b", re.IGNORECASE)
 
 
@@ -99,10 +96,6 @@ def run_pipeline(
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
     full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
-    force_project = bool(PJ_KEYWORD.search(f"{raw_text} {user_context}"))
-    if force_project:
-        print("⚡ 'pj' keyword — forcing a project task")
-        raw_text, user_context = _strip(PJ_KEYWORD, raw_text), _strip(PJ_KEYWORD, user_context)
     dispatch = bool(AG_KEYWORD.search(f"{raw_text} {user_context}"))
     if dispatch:
         print("⚡ 'ag' keyword — task for an agent (lane AI, dispatch Requested)")
@@ -117,17 +110,14 @@ def run_pipeline(
         # Deterministic pre-check: if the user's context says "task", it IS a task —
         # skip the classifier entirely so a movie/venue name can't hijack the category.
         # ponytail: word-match on 'task' only; widen if the prompt fix doesn't hold
-        if force_project or dispatch or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
+        if dispatch or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
             print("⚡ Context mentions 'task' — deterministic classification: tasks")
             category = "tasks"
             # Still link a referenced project so the deterministic path doesn't drop
             # it. ponytail: case-insensitive contains match on active project names —
             # simplest correct approach; the classifier path relies on exact map keys too.
             project = _match_project(f"{raw_text} {user_context}", project_prompts)
-            if not project and (
-                force_project
-                or re.search(r"\bproj\w*", f"{raw_text} {user_context}", re.IGNORECASE)
-            ):
+            if not project and re.search(r"\bproj\w*", f"{raw_text} {user_context}", re.IGNORECASE):
                 # The text names a project the contains-match couldn't find (typo
                 # "burdown", paraphrase "file renaming convention proj") — ask the
                 # classifier just for the project: it sees the exact active-project

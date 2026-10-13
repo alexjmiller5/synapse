@@ -576,9 +576,9 @@ class TestProcessorEntryPoint:
 
 
 # ======================================================================
-# Source stamp + `pj` keyword
+# Source stamp
 # ======================================================================
-class TestSourceAndPjKeyword:
+class TestSource:
     def _task_extraction(self, mock_gemini, name):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03"}),
@@ -594,36 +594,19 @@ class TestSourceAndPjKeyword:
         _run(_item("clean the desk", "task"))
         assert "source" not in _execution(hub)
 
-    def test_pj_forces_a_project_task_and_is_stripped(self, hub, mock_gemini):
-        """`pj` anywhere in the capture = project task: no classifier call, the
-        project comes from the contains-match, and the keyword never reaches the
-        task name."""
-        self._task_extraction(mock_gemini, "fix the url bug synapse")
-        _run(_item("fix the url bug pj synapse"))
-        assert mock_gemini.models.generate_content.call_count == 1
-        task = _task(hub)
-        assert task["project_ids"] == ["synapse-project-id"]
-        assert task["title"] == "fix the url bug synapse"
-        assert _execution(hub)["tags"] == ["project-append"]
-
-    def test_pj_in_context_without_name_match_uses_classifier_rescue(self, hub, mock_gemini):
+    def test_pj_is_ordinary_text(self, hub, mock_gemini):
+        """`pj` is no longer a keyword: it stays in the capture and the classifier
+        decides the category as for any other text."""
         mock_gemini.models.generate_content.side_effect = [
-            make_gemini_response({"category": "tasks", "related_project": "Synapse"}),
+            make_gemini_response({"category": "tasks"}),
             make_gemini_response(
-                {"Name": "fix the url bug", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+                {"Name": "pack pj bottoms", "Tags": ["Chore"], "Due Date": "2026-08-03"}
             ),
         ]
-        _run(_item("fix the url bug", "pj the thought app"))
+        _run(_item("pack pj bottoms"))
         assert mock_gemini.models.generate_content.call_count == 2
-        assert _task(hub)["project_ids"] == ["synapse-project-id"]
-
-    def test_pj_inside_a_word_is_not_the_keyword(self, hub, mock_gemini):
-        mock_gemini.models.generate_content.side_effect = [
-            make_gemini_response({"category": "groceries"}),
-            make_gemini_response({"Name": "Pajamas", "Category": "Snacks", "Status": "On List"}),
-        ]
-        _run(_item("buy new pjs"))
-        assert mock_gemini.models.generate_content.call_count == 2
+        assert "pack pj bottoms" in str(mock_gemini.models.generate_content.call_args_list[0])
+        assert "project_ids" not in _task(hub)
 
 
 # ======================================================================
@@ -654,9 +637,9 @@ class TestAgKeyword:
         task = _task(hub)
         assert task["dispatch"] == "Requested" and task["lane"] == "AI"
 
-    def test_ag_with_pj_is_a_dispatched_project_task(self, hub, mock_gemini):
+    def test_ag_naming_a_project_is_a_dispatched_project_task(self, hub, mock_gemini):
         self._task_extraction(mock_gemini, "fix the url bug synapse")
-        _run(_item("fix the url bug pj synapse AG"))
+        _run(_item("fix the url bug synapse AG"))
         task = _task(hub)
         assert task["project_ids"] == ["synapse-project-id"]
         assert task["title"] == "fix the url bug synapse"
