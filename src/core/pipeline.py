@@ -75,14 +75,10 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
     return json.loads(response.text)
 
 
-# `ag` = "send this task straight to an agent": a task with lane AI and dispatch
-# Requested, which the workspace's Agent Dispatch picks up. The token itself is
-# stripped so it never lands in the task name.
-AG_KEYWORD = re.compile(r"\bag\b", re.IGNORECASE)
-
-
-def _strip(keyword, text):
-    return re.sub(r"\s{2,}", " ", keyword.sub("", text or "")).strip()
+# A `$` context of exactly `agent` = "send this task straight to an agent": a task
+# with lane AI and dispatch Requested, which the workspace's Agent Dispatch picks up.
+# The word is the whole context, so it never reaches the extractor or the name.
+AGENT_CONTEXT = "agent"
 
 
 def run_pipeline(
@@ -96,10 +92,10 @@ def run_pipeline(
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
     full_str_for_log = f"{raw_text} (Context: {user_context})" if user_context else raw_text
-    dispatch = bool(AG_KEYWORD.search(f"{raw_text} {user_context}"))
+    dispatch = (user_context or "").strip().lower() == AGENT_CONTEXT
     if dispatch:
-        print("⚡ 'ag' keyword — task for an agent (lane AI, dispatch Requested)")
-        raw_text, user_context = _strip(AG_KEYWORD, raw_text), _strip(AG_KEYWORD, user_context)
+        print("⚡ '$ agent' context — task for an agent (lane AI, dispatch Requested)")
+        user_context = ""
 
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 

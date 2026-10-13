@@ -42,11 +42,12 @@ Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
 `source` is a free-form caller label naming the surface that captured it
 (Receptor's table is in its AGENTS.md: `ios-app`, `macos-panel`,
 `share-send`, `app-shortcut`, `hammerspoon-hyper-r`, ...; plus `agent`,
-`cli`) logged as the execution's free-text `source`; Synapse never parses it. A standalone `ag` token
-(`AG_KEYWORD`) sends the task straight to an agent: category tasks, `Lane` AI
+`cli`) logged as the execution's free-text `source`; Synapse never parses it. A `$` context of
+exactly `agent` (`AGENT_CONTEXT`; case and surrounding spaces ignored, so
+`... $ agent`) sends the task straight to an agent: category tasks, `Lane` AI
 whatever the extractor said, `Dispatch` Requested (mapped by the workspace's
-tasks binding; Agent Dispatch, a separate project, consumes it), token
-stripped. A workspace without a `Dispatch` mapping just gets a lane-AI task.
+tasks binding; Agent Dispatch, a separate project, consumes it), context
+dropped. `agent` anywhere else, or with other context words, is ordinary text. A workspace without a `Dispatch` mapping just gets a lane-AI task.
 
 1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
    skipped entirely (verbatim pass-through) when the text has no `@`/`$` —

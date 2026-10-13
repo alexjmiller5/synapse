@@ -610,9 +610,9 @@ class TestSource:
 
 
 # ======================================================================
-# `ag` keyword: send the task straight to an agent
+# `$ agent` context: send the task straight to an agent
 # ======================================================================
-class TestAgKeyword:
+class TestAgentContext:
     def _task_extraction(self, mock_gemini, name, lane="Me"):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response(
@@ -620,40 +620,47 @@ class TestAgKeyword:
             ),
         ]
 
-    def test_ag_requests_dispatch_with_lane_ai_and_is_stripped(self, hub, mock_gemini):
-        """`ag` = this task goes straight to an agent: no classifier call, lane AI
-        whatever the extractor said, dispatch Requested, keyword not in the name."""
+    @pytest.mark.parametrize("context", ["agent", "  Agent ", "AGENT"])
+    def test_agent_context_requests_dispatch_with_lane_ai(self, hub, mock_gemini, context):
+        """Context exactly `agent` (spaces and case aside) = this task goes straight
+        to an agent: no classifier call, lane AI whatever the extractor said,
+        dispatch Requested, the context word kept out of the extraction."""
         self._task_extraction(mock_gemini, "compare standing desks")
-        _run(_item("ag compare standing desks"))
+        _run(_item("compare standing desks", context))
         assert mock_gemini.models.generate_content.call_count == 1
+        assert "manually provided" not in str(mock_gemini.models.generate_content.call_args)
         task = _task(hub)
         assert task["title"] == "compare standing desks"
         assert task["lane"] == "AI" and task["dispatch"] == "Requested"
         assert _execution(hub)["code_execution"] == "Success"
 
-    def test_ag_in_context_counts(self, hub, mock_gemini):
-        self._task_extraction(mock_gemini, "compare standing desks")
-        _run(_item("compare standing desks", "ag"))
-        task = _task(hub)
-        assert task["dispatch"] == "Requested" and task["lane"] == "AI"
-
-    def test_ag_naming_a_project_is_a_dispatched_project_task(self, hub, mock_gemini):
+    def test_agent_context_naming_a_project_is_a_dispatched_project_task(self, hub, mock_gemini):
         self._task_extraction(mock_gemini, "fix the url bug synapse")
-        _run(_item("fix the url bug synapse AG"))
+        _run(_item("fix the url bug synapse", "agent"))
         task = _task(hub)
         assert task["project_ids"] == ["synapse-project-id"]
-        assert task["title"] == "fix the url bug synapse"
         assert task["dispatch"] == "Requested" and task["lane"] == "AI"
 
-    @pytest.mark.parametrize("text", ["pack the bag", "set the agenda"])
-    def test_ag_inside_a_word_is_not_the_keyword(self, hub, mock_gemini, text):
+    @pytest.mark.parametrize(
+        "text,context",
+        [
+            ("ask the agent to compare standing desks", ""),
+            ("ag compare standing desks", ""),
+            ("compare standing desks", "ag"),
+            ("compare standing desks", "agent tomorrow"),
+            ("compare standing desks", "agents"),
+        ],
+    )
+    def test_anything_but_exactly_agent_context_is_not_dispatched(
+        self, hub, mock_gemini, text, context
+    ):
         mock_gemini.models.generate_content.side_effect = [
             make_gemini_response({"category": "tasks"}),
             make_gemini_response(
                 {"Name": text, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": "Me"}
             ),
         ]
-        _run(_item(text))
+        _run(_item(text, context))
         assert mock_gemini.models.generate_content.call_count == 2
         task = _task(hub)
         assert task["lane"] == "Me" and "dispatch" not in task
