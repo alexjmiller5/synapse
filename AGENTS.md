@@ -186,6 +186,11 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   followups use that civil day. The capture journal freezes it before extraction
   so retries cannot move a task into a later day. Other categories keep their
   own calendar behavior; invalid selected calendars fail closed.
+- A catalog `date_or_datetime` field (a task's Due Date) is a date, or a
+  floating local time `YYYY-MM-DDTHH:MM` (no seconds, no zone) only when the
+  capture states a time ("at noon", "3pm"): the extraction prompt states that
+  shape for every such field (`ai_engine.DATE_OR_DATETIME_FORMAT`), and
+  `apply_business_logic` trims seconds or a zone the model adds to a task's.
 - Oversized execution fields can use runtime `retained_fields`,
   `max_inline_bytes` and `files_prefix`. Retain the frozen original with a
   conditional file create, then byte-verify readback before inserting its row

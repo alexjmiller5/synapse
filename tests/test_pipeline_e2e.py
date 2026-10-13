@@ -97,6 +97,15 @@ class TestTaskPipeline:
         assert execution["outcome"] == "To Review"
         assert "tags" not in execution  # ordinary execution: not a project append
 
+    def test_a_stated_time_lands_as_a_floating_local_due(self, hub, mock_gemini):
+        _setup_classify_extract(
+            mock_gemini,
+            "tasks",
+            {"Name": "Call the bank", "Tags": ["Chore"], "Due Date": "2026-03-30T15:00:00"},
+        )
+        _run(_item("Call the bank tomorrow at 3pm"))
+        assert _task(hub)["due_date"] == "2026-03-30T15:00"
+
     @pytest.mark.parametrize("lane", ["AI", "Me"])
     def test_task_lands_with_the_extracted_lane(self, hub, mock_gemini, lane):
         _setup_classify_extract(

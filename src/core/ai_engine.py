@@ -28,6 +28,16 @@ GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-la
 # of failing every capture in the category.
 MAX_ENUM_OPTIONS = 100
 
+# The value shapes of a catalog date_or_datetime column Synapse writes: a date,
+# or a floating local wall-clock time (no zone) when the user states a time.
+DATE_OR_DATETIME_FORMAT = (
+    "Write a date as YYYY-MM-DD. Only when the user states a time of day "
+    '("at noon", "3pm", "tomorrow at 9", "9:30am") write YYYY-MM-DDTHH:MM instead: '
+    'the 24-hour local wall-clock time, no seconds and no time zone ("3pm" -> T15:00, '
+    '"noon" -> T12:00). Never invent a time: without a stated one ("tonight", '
+    '"this morning", "by end of day") the value stays date-only.'
+)
+
 
 def safe_json_load(text):
     """Helper to parse JSON and raise specific error if it fails.
@@ -244,6 +254,8 @@ def generate_extraction_prompt(
             instr = f["instruction"].replace("{current_date}", extraction_day)
             instr = instr.replace("{raw_text}", raw_text)
             parts.append(instr.replace("{place_tags}", place_tags_json))
+        if f["type"] == "date_or_datetime":
+            parts.append(DATE_OR_DATETIME_FORMAT)
         if parts:
             instr_lines.append(f"- `{f['name']}`: " + " ".join(parts))
 

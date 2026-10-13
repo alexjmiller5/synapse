@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from core.timeutils import today_eastern
 
 from core.business_logic import (
@@ -93,6 +95,20 @@ class TestApplyBusinessLogic:
             "tasks", {"Name": "fix the dock lines", "Tags": ["Lake House"], "Due Date": ""}
         )
         assert "Due Date" not in result
+
+    @pytest.mark.parametrize(
+        "extracted, stored",
+        [
+            ("2026-10-13", "2026-10-13"),
+            ("2026-10-13T15:00", "2026-10-13T15:00"),
+            ("2026-10-13T15:00:00", "2026-10-13T15:00"),
+            ("2026-10-13 09:30", "2026-10-13T09:30"),
+            ("2026-10-13T15:00:00.000Z", "2026-10-13T15:00"),
+        ],
+    )
+    def test_tasks_due_date_keeps_only_a_date_or_floating_local_time(self, extracted, stored):
+        result = apply_business_logic("tasks", {"Name": "call", "Due Date": extracted})
+        assert result["Due Date"] == stored
 
     def test_podcasts_finished_sets_date(self):
         data = {"Episode Title": "Ep1", "Status": "Finished"}

@@ -143,7 +143,6 @@ categories:
           1. CHECK CONTEXT: If the user provided a date in the Context/Metadata block (e.g. "January 2025", "next week"), USE THAT DATE.
           2. CHECK TEXT: If no date is in the Context, look for date mentions in the text itself.
           3. FALLBACK: If absolutely no date is found in either, use today: {current_date}.
-          Write it as an ISO 8601 date (YYYY-MM-DD).
           *Note: EXCEPTION — if you selected a place tag from {place_tags} for Tags and no date is mentioned in the text or Context, output "" (empty string) instead of the fallback: place-tagged tasks are dateless by design.*
           *Note: If the user gives a vague date like "January 2025", assume the 1st of that month.*
           *Note: If the user gives a month and day but no year (e.g. "March 5"), assume the next occurrence of that date (e.g. if today is June 2024, "March 5" means March 5, 2025). IF IT'S CURRENTLY DEC 2025 AND THE USER CONTEXT SAYS 'Nov 14' THE USER MEANS Nov 14, 2026.*

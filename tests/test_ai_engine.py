@@ -198,6 +198,12 @@ class TestGenerateExtractionPrompt:
         assert "USER EXPLICIT CONTEXT" in prompt
         assert "urgent due friday" in prompt
 
+    def test_a_date_or_datetime_field_takes_a_floating_time_only_when_one_is_stated(self):
+        prompt = generate_extraction_prompt("tasks", "call the bank tomorrow at 3pm")
+        due = prompt.split("- `Due Date`:")[1].split("\n- `")[0]
+        assert "YYYY-MM-DDTHH:MM" in due and "no seconds and no time zone" in due
+        assert "YYYY-MM-DDTHH:MM" not in generate_extraction_prompt("movies", "watched dune")
+
     def test_task_status_is_set_by_synapse_not_extracted(self):
         prompt = generate_extraction_prompt("tasks", "test")
         assert not any(line.strip().startswith("- `Status`:") for line in prompt.split("\n"))

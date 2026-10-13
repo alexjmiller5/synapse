@@ -16,6 +16,12 @@ from core.soma_hub import pull_rows
 # 2-char NBSP one. Only multi-char artifact sequences are replaced — a bare
 # accented letter (é in "Sérgio", â in French "âme") never matches, so accents
 # are preserved. Escapes used so the source stays ASCII and unambiguous.
+# A stated time is stored as floating local wall-clock time (YYYY-MM-DDTHH:MM);
+# seconds or a zone the model adds are dropped, keeping the time the user said.
+_TIMED_DUE = re.compile(
+    r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?"
+)
+
 _MOJIBAKE_MAP = [
     ("\u00e2\u20ac\u2122", "'"),  # UTF-8 U+2019 (') decoded as CP1252
     ("\u00e2\u20ac\u02dc", "'"),  # U+2018 (') left single quote
@@ -98,6 +104,8 @@ def apply_business_logic(category, data, related_project=None, source_text=None)
         # never reaches the row.
         if not data.get("Due Date"):
             data.pop("Due Date", None)
+        elif timed := _TIMED_DUE.fullmatch(str(data["Due Date"])):
+            data["Due Date"] = f"{timed[1]}T{timed[2]}"
         if related_project:
             annotation = f"Project: {related_project}"
             existing = data.get("Notes") or ""

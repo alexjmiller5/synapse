@@ -15,6 +15,7 @@ Requires: GEMINI_API_KEY env var or 1Password access
 
 import json
 import os
+import re
 import subprocess
 from datetime import date
 
@@ -195,6 +196,23 @@ class TestTaskClassification:
         assert "Shopping" in data.get("Tags", [])
         due = data.get("Due Date", "")
         assert due != date.today().isoformat()
+
+    @pytest.mark.parametrize(
+        "text, time",
+        [
+            ("Call the bank tomorrow at 3pm", "15:00"),
+            ("Pick up the package at noon on Friday", "12:00"),
+            ("Call the bank tomorrow", None),
+        ],
+    )
+    def test_a_stated_time_becomes_a_floating_due_and_none_stays_date_only(self, text, time):
+        cat, data, _ = full_pipeline(text)
+        assert cat == "tasks"
+        due = data.get("Due Date", "")
+        if time:
+            assert re.fullmatch(rf"\d{{4}}-\d{{2}}-\d{{2}}T{time}", due), due
+        else:
+            assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", due), due
 
     def test_errand_tag(self):
         cat, data, _ = full_pipeline("Pick up dry cleaning from the store", "high priority")
