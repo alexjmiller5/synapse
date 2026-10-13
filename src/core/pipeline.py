@@ -79,10 +79,13 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
 # category is forced to tasks and a project is always linked. The token itself
 # is stripped so it never lands in the task name.
 PJ_KEYWORD = re.compile(r"\bpj\b", re.IGNORECASE)
+# `ag` = "send this task straight to an agent": a task with lane AI and dispatch
+# Requested, which the workspace's Agent Dispatch picks up. Stripped like `pj`.
+AG_KEYWORD = re.compile(r"\bag\b", re.IGNORECASE)
 
 
-def _strip_pj(text):
-    return re.sub(r"\s{2,}", " ", PJ_KEYWORD.sub("", text or "")).strip()
+def _strip(keyword, text):
+    return re.sub(r"\s{2,}", " ", keyword.sub("", text or "")).strip()
 
 
 def run_pipeline(
@@ -99,7 +102,11 @@ def run_pipeline(
     force_project = bool(PJ_KEYWORD.search(f"{raw_text} {user_context}"))
     if force_project:
         print("⚡ 'pj' keyword — forcing a project task")
-        raw_text, user_context = _strip_pj(raw_text), _strip_pj(user_context)
+        raw_text, user_context = _strip(PJ_KEYWORD, raw_text), _strip(PJ_KEYWORD, user_context)
+    dispatch = bool(AG_KEYWORD.search(f"{raw_text} {user_context}"))
+    if dispatch:
+        print("⚡ 'ag' keyword — task for an agent (lane AI, dispatch Requested)")
+        raw_text, user_context = _strip(AG_KEYWORD, raw_text), _strip(AG_KEYWORD, user_context)
 
     log_payload = {"Parser_Data": item_data, "Extractor_Data": None}
 
@@ -110,7 +117,7 @@ def run_pipeline(
         # Deterministic pre-check: if the user's context says "task", it IS a task —
         # skip the classifier entirely so a movie/venue name can't hijack the category.
         # ponytail: word-match on 'task' only; widen if the prompt fix doesn't hold
-        if force_project or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
+        if force_project or dispatch or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
             print("⚡ Context mentions 'task' — deterministic classification: tasks")
             category = "tasks"
             # Still link a referenced project so the deterministic path doesn't drop
@@ -177,6 +184,8 @@ def run_pipeline(
         # source_text grounds the tasks Name back to the user's verbatim input
         # (apply_business_logic overrides only for the tasks category).
         extracted = apply_business_logic(category, extracted, project, raw_text)
+        if dispatch:
+            extracted.update({"Lane": "AI", "Dispatch": "Requested"})
         log_payload["Extractor_Data"] = extracted
 
         return {

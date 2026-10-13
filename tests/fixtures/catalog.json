@@ -759,6 +759,15 @@
   },
   {
    "tbl": "tasks",
+   "col": "dispatch",
+   "type": "select",
+   "required": 0,
+   "default_value": null,
+   "options": "[{\"v\": \"Requested\", \"d\": \"Open an agent session for this task.\"}, {\"v\": \"Started\", \"d\": \"An agent session was opened.\"}, {\"v\": \"Failed\", \"d\": \"No agent could be started.\"}]",
+   "deleted_at": null
+  },
+  {
+   "tbl": "tasks",
    "col": "ai_ready",
    "type": "bool",
    "required": 0,

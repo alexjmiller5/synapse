@@ -44,7 +44,11 @@ Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
 `share-send`, `app-shortcut`, `hammerspoon-hyper-r`, ...; plus `agent`,
 `cli`) logged as the execution's free-text `source`; Synapse never parses it. A standalone `pj` token in text or context forces a project task
 (`PJ_KEYWORD`): category tasks, project linked (contains-match, else one
-classifier call), token stripped from the task name.
+classifier call), token stripped from the task name. A standalone `ag` token
+(`AG_KEYWORD`) sends the task straight to an agent: category tasks, `Lane` AI
+whatever the extractor said, `Dispatch` Requested (mapped by the workspace's
+tasks binding; Agent Dispatch, a separate project, consumes it), token
+stripped. A workspace without a `Dispatch` mapping just gets a lane-AI task.
 
 1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
    skipped entirely (verbatim pass-through) when the text has no `@`/`$` —

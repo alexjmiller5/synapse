@@ -624,3 +624,53 @@ class TestSourceAndPjKeyword:
         ]
         _run(_item("buy new pjs"))
         assert mock_gemini.models.generate_content.call_count == 2
+
+
+# ======================================================================
+# `ag` keyword: send the task straight to an agent
+# ======================================================================
+class TestAgKeyword:
+    def _task_extraction(self, mock_gemini, name, lane="Me"):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": lane}
+            ),
+        ]
+
+    def test_ag_requests_dispatch_with_lane_ai_and_is_stripped(self, hub, mock_gemini):
+        """`ag` = this task goes straight to an agent: no classifier call, lane AI
+        whatever the extractor said, dispatch Requested, keyword not in the name."""
+        self._task_extraction(mock_gemini, "compare standing desks")
+        _run(_item("ag compare standing desks"))
+        assert mock_gemini.models.generate_content.call_count == 1
+        task = _task(hub)
+        assert task["title"] == "compare standing desks"
+        assert task["lane"] == "AI" and task["dispatch"] == "Requested"
+        assert _execution(hub)["code_execution"] == "Success"
+
+    def test_ag_in_context_counts(self, hub, mock_gemini):
+        self._task_extraction(mock_gemini, "compare standing desks")
+        _run(_item("compare standing desks", "ag"))
+        task = _task(hub)
+        assert task["dispatch"] == "Requested" and task["lane"] == "AI"
+
+    def test_ag_with_pj_is_a_dispatched_project_task(self, hub, mock_gemini):
+        self._task_extraction(mock_gemini, "fix the url bug synapse")
+        _run(_item("fix the url bug pj synapse AG"))
+        task = _task(hub)
+        assert task["project_ids"] == ["synapse-project-id"]
+        assert task["title"] == "fix the url bug synapse"
+        assert task["dispatch"] == "Requested" and task["lane"] == "AI"
+
+    @pytest.mark.parametrize("text", ["pack the bag", "set the agenda"])
+    def test_ag_inside_a_word_is_not_the_keyword(self, hub, mock_gemini, text):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks"}),
+            make_gemini_response(
+                {"Name": text, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": "Me"}
+            ),
+        ]
+        _run(_item(text))
+        assert mock_gemini.models.generate_content.call_count == 2
+        task = _task(hub)
+        assert task["lane"] == "Me" and "dispatch" not in task
