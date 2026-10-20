@@ -178,6 +178,8 @@ class TestGenerateExtractionPrompt:
         prompt = generate_extraction_prompt("tasks", "buy a birthday card")
         assert '- "Me": Only the user can do this task.' in prompt
         assert "- `Lane`:" in prompt
+        assert "majority of the work" in prompt
+        assert "approval or final action" in prompt
 
     def test_includes_url_context(self):
         prompt = generate_extraction_prompt(

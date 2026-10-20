@@ -132,7 +132,7 @@ categories:
       Lane:
         required: true
         instruction: |
-          Who does this task. "AI" when an agent working on the user's computer could finish it or do its prep: code and coding projects, research, comparing options, drafting, organizing files, notes or data, fixing a sync or setting. "Me" when the user must do it personally: going somewhere or anything physical, spending money or buying, talking to or messaging people, appointments, or a decision only the user can make. If the text says to have AI or an agent do it, "AI"; if it says the user will do it themselves, "Me".
+          Who WILL do the majority of the work across the whole task. "AI" for agent-led coding, research, comparisons, drafting, organizing files, notes or data, and fixing sync or settings. "Me" for user-led errands, physical work, appointments, conversations, purchases or personal decisions; occasional AI preparation does not make these AI-led. A user approval or final action (buy, send, decide, pick, test or review) does not make an otherwise agent-led task Me. Honor explicit ownership: having an agent do the work means AI; doing it themselves means Me. This classifies a new task only; an existing lane stays assigned until the user explicitly changes it or approves correction of an initial misclassification.
       Links:
         instruction: "Every valid URL (http, https) in the text, one per line. Leave empty when there is none."
       Due Date:
