@@ -664,3 +664,75 @@ class TestAgentContext:
         assert mock_gemini.models.generate_content.call_count == 2
         task = _task(hub)
         assert task["lane"] == "Me" and "dispatch" not in task
+
+
+@pytest.mark.parametrize(
+    "category,table,kind", [("movies", "movies", "movie"), ("tv-shows", "tv_shows", "tv")]
+)
+def test_movie_tv_confirmation_files_task_without_saving(
+    hub, mock_gemini, monkeypatch, category, table, kind
+):
+    # Removing the confirmation gate would save the media row without user approval.
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES[category], "confirm_before_save", True)
+    _setup_classify_extract(
+        mock_gemini,
+        category,
+        {
+            "Title": "Example (2020)",
+            "Capture Intent": "save",
+            "Status": "Priority",
+            "Notes": "Watch with subtitles",
+        },
+    )
+    with patch("core.handlers.resolve_tmdb_id", return_value="123"):
+        _run(_item("Save Example (2020), priority, with subtitles"))
+    assert _rows(hub, table) == []
+    task = _task(hub)
+    assert "Confirm" in task["title"] and "Example (2020)" in task["title"]
+    assert task["links"] == f"https://www.themoviedb.org/{kind}/123"
+    assert task["lane"] == "Me" and task["status"] == "To Do"
+    assert "Priority" in task["notes"] and "save" in task["notes"] and "subtitles" in task["notes"]
+    assert _execution(hub)["created_item"] == f"tasks/{task['id']}"
+    assert _execution(hub)["code_execution"] == "Success"
+
+
+def test_resent_confirmation_capture_creates_only_one_task(hub, mock_gemini, monkeypatch):
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES["movies"], "confirm_before_save", True)
+    _setup_classify_extract(mock_gemini, "movies", {"Title": "Example", "Capture Intent": "save"})
+    payload = {"raw_text": "Save Example", "workspace": "default", "capture_id": str(uuid4())}
+    store = {}
+    with patch("core.handlers.resolve_tmdb_id", return_value="123"):
+        run(payload, store=store)
+        run(payload, store=store)
+    assert len(_rows(hub, "tasks")) == 1
+    assert not _rows(hub, "movies")
+    assert len(_rows(hub, "synapse_executions")) == 1
+
+
+def test_confirmation_retry_after_lost_reply_preserves_match_and_human_gate(
+    hub, mock_gemini, monkeypatch
+):
+    import requests
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES["movies"], "confirm_before_save", True)
+    _setup_classify_extract(mock_gemini, "movies", {"Title": "Example", "Capture Intent": "save"})
+    payload = {"raw_text": "Save Example", "workspace": "default", "capture_id": str(uuid4())}
+    store = {}
+    hub.lose_reply = "insert"
+    with patch("core.handlers.resolve_tmdb_id", return_value="123"):
+        with pytest.raises(requests.Timeout):
+            run(payload, store=store)
+    assert len(_rows(hub, "tasks")) == 1
+    # A provider outage or changed workspace on retry cannot bypass the frozen confirmation.
+    monkeypatch.setitem(CATEGORIES["movies"], "confirm_before_save", False)
+    with patch("core.handlers.resolve_tmdb_id", return_value=None):
+        run(payload, store=store)
+    assert len(_rows(hub, "tasks")) == 1
+    assert _task(hub)["links"] == "https://www.themoviedb.org/movie/123"
+    assert not _rows(hub, "movies")
+    assert _execution(hub)["created_item"] == f"tasks/{_task(hub)['id']}"

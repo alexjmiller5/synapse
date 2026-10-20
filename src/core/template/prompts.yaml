@@ -175,6 +175,7 @@ categories:
         instruction: "Use Priority only if the user says it is a good/great idea or otherwise signals they want to pursue it."
 
   movies:
+    confirm_before_save: false
     # The TMDB id is the row id; the hub derives title, year, genres and cast from it.
     table: movies
     description: "A movie title, genre, or film description to watch or rate. A bare 'need to watch X' with NO date is a movie (Status: Priority). But if there is a date/deadline, a 'task' context, or a request to edit the movies db (e.g. 'add X to my movies db'), it is a task, not a movie."
@@ -204,6 +205,7 @@ categories:
           6. Leave Status empty unless the user explicitly requests a status. A neutral title or save-for-later request must not reset an existing status.
 
   tv-shows:
+    confirm_before_save: false
     # See movies.
     table: tv_shows
     description: "A TV series title to start or track status of."

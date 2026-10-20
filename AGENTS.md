@@ -302,6 +302,17 @@ conflicts, rejection and uncertain transport remain explicit non-success states.
 No save path falls back to row push. Channel discovery no longer initializes
 external subscription tracking and preserves existing source rows.
 
+Movie/TV categories accept the boolean workspace setting `confirm_before_save`
+(default false). When enabled, ordinary captures resolve a strict TMDB match and
+create a human-owned confirmation task with the proposed TMDB link and requested
+fields; they neither insert nor patch media rows. Enabling it requires task
+mappings for Name, Lane, Links and Notes. The journal freezes the TMDB identity
+and policy before writing; retries reuse that plan and the durable task receipt. Media-only gateway captures return `needs_review`
+instead and never gain permission to create tasks. Unresolved identities retain
+the existing cleanup-task behavior. Confirmation tasks are completed through
+normal user or agent operations after identity approval; closing one alone does
+not save a title.
+
 `Capture Intent` separates explicit saves from consumption reports. Per-category
 `capture_columns` and optional `saved_column` are template configuration a
 workspace overlay may set.

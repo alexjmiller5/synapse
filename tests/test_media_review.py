@@ -126,3 +126,18 @@ def test_text_input_is_classified_by_the_real_classifier(mock_gemini):
 
     mock_gemini.models.generate_content.return_value = make_gemini_response({"category": "movies"})
     assert media_resolution.classify("need to watch dune") == "movies"
+
+
+@pytest.mark.parametrize("category", ["movies", "tv-shows"])
+def test_confirmation_policy_does_not_let_media_gateway_bypass_review(
+    monkeypatch, media_hub, category
+):
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES[category], "confirm_before_save", True)
+    monkeypatch.setattr(media_resolution, "classify", lambda _: category)
+    monkeypatch.setattr(media_resolution, "extract", lambda *_: {"Title": "Example (2020)"})
+    monkeypatch.setattr("core.handlers.resolve_tmdb_id", lambda *_args, **_kwargs: "123")
+    _, result = media_resolution.resolve_capture(REQUEST, [category], ["saved"])
+    assert result.state == "needs_review"
+    assert not media_hub.writes

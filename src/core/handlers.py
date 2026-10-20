@@ -1,3 +1,4 @@
+import json
 import re
 import secrets
 from datetime import datetime, timezone
@@ -14,9 +15,9 @@ import requests
 
 from core.soma_hub import InsertRejected, insert_rows, patch_row, pull_ids, pull_rows
 from core import soma_hub
-from core.media_save import save_media
-from core.timeutils import now_utc_iso_ms
-from core.workflow import create_cleanup_task
+from core.media_save import SaveReceipt, save_media
+from core.timeutils import now_utc_iso_ms, today_eastern
+from core.workflow import create_cleanup_task, create_task, current_capture, task_day
 
 # Same regex as media-center's core/youtube.py - kept in sync by hand, not shared,
 # because the two services don't share a dependency.
@@ -278,15 +279,49 @@ def handle_movies_tv_logic(
     review = review or create_cleanup_task
     kind = "movie" if category == "movies" else "tv"
     title = data.get("Title")
+    confirm = CATEGORIES[category].get("confirm_before_save", False)
 
-    tmdb_id = (
-        resolve_tmdb_id(kind, title, strict=True)
-        if strict_identity
-        else resolve_tmdb_id(kind, title)
+    def resolve():
+        identity = (
+            resolve_tmdb_id(kind, title, strict=True)
+            if strict_identity or confirm
+            else resolve_tmdb_id(kind, title)
+        )
+        return {"id": identity, "confirm": confirm}
+
+    active = current_capture()
+    plan = (
+        active.journal.checkpoint(f"item/{active.item_index}/tmdb-resolution", resolve)
+        if active is not None and not receipt
+        else resolve()
     )
+    tmdb_id, confirm = plan["id"], plan["confirm"]
     if not tmdb_id:
         review(f"Could not resolve {title!r} on TMDB ({category})")
         return Failed(f"No confident TMDB match for {title!r} - nothing written")
+
+    if confirm:
+        if receipt:
+            return SaveReceipt("needs_review", tmdb_id, reason="confirmation_required")
+        requested = {
+            field: data[field]
+            for field in ("Title", "Capture Intent", *CATEGORIES[category]["capture_columns"])
+            if field in data
+        }
+        return create_task(
+            {
+                "Name": f"Confirm {kind}: {title}",
+                "Status": "To Do",
+                "Priority": "High",
+                "Tags": ["Chore"],
+                "Lane": "Me",
+                "Due Date": task_day() or today_eastern().isoformat(),
+                "Links": f"https://www.themoviedb.org/{kind}/{tmdb_id}",
+                "Notes": "Confirm the TMDB identity before saving. Requested changes:\n"
+                + json.dumps(requested, ensure_ascii=False, indent=2),
+            },
+            role="media-confirmation",
+        )
 
     return _capture_media(
         category,
