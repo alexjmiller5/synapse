@@ -187,24 +187,60 @@ def handle_youtube_logic(
         review(f"No YouTube video ID in URL: {data.get('Video URL')}")
         return Failed(f"No YouTube video ID in URL: {data.get('Video URL')!r}")
 
-    yt = get_youtube()
-    if not yt:
-        review(f"No YouTube client configured for video {vid}")
-        return Failed(f"No YouTube client configured for video {vid}")
+    def resolve():
+        yt = get_youtube()
+        if not yt:
+            return {"error": f"No YouTube client configured for video {vid}"}
+        items = yt.videos().list(part="snippet,contentDetails", id=vid).execute().get("items") or []
+        if not items:
+            return {"error": f"YouTube video not found: {vid}"}
+        return {"item": items[0], "confirm": CATEGORIES[category].get("confirm_before_save", False)}
 
-    video_items = (
-        yt.videos().list(part="snippet,contentDetails", id=vid).execute().get("items") or []
+    active = current_capture()
+    plan = (
+        active.journal.checkpoint(f"item/{active.item_index}/youtube-resolution", resolve)
+        if active is not None and not receipt
+        else resolve()
     )
-    if not video_items:
-        review(f"YouTube video not found: {vid}")
-        return Failed(f"YouTube video not found: {vid}")
-    item = video_items[0]
+    if error := plan.get("error"):
+        review(error)
+        return Failed(error)
+    item = plan["item"]
     snippet = item["snippet"]
+    if plan["confirm"]:
+        if receipt:
+            return SaveReceipt("needs_review", vid, reason="confirmation_required")
+        requested = {
+            field: data[field]
+            for field in ("Video URL", "Capture Intent", *CATEGORIES[category]["capture_columns"])
+            if field in data
+        }
+        return create_task(
+            {
+                "Name": f"Confirm YouTube video: {snippet['title']}",
+                "Status": "To Do",
+                "Priority": "High",
+                "Tags": ["Chore"],
+                "Lane": "Me",
+                "Due Date": task_day() or today_eastern().isoformat(),
+                "Links": f"https://www.youtube.com/watch?v={vid}",
+                "Notes": "Confirm the YouTube video before saving. Channel: "
+                + snippet.get("channelTitle", snippet["channelId"])
+                + "\nRequested changes:\n"
+                + json.dumps(requested, ensure_ascii=False, indent=2),
+            },
+            role="media-confirmation",
+        )
+
     channel_id = snippet["channelId"]
 
     if channel_id not in known_channel_ids():
         channel_items = (
-            yt.channels().list(part="snippet,contentDetails", id=channel_id).execute().get("items")
+            get_youtube()
+            .channels()
+            .list(part="snippet,contentDetails", id=channel_id)
+            .execute()
+            .get("items")
             or []
         )
         if not channel_items:

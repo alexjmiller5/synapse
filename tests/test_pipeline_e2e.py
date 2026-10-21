@@ -736,3 +736,71 @@ def test_confirmation_retry_after_lost_reply_preserves_match_and_human_gate(
     assert _task(hub)["links"] == "https://www.themoviedb.org/movie/123"
     assert not _rows(hub, "movies")
     assert _execution(hub)["created_item"] == f"tasks/{_task(hub)['id']}"
+
+
+def test_youtube_confirmation_creates_one_human_task_without_video_or_channel_writes(
+    hub, mock_gemini, monkeypatch
+):
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", True)
+    _setup_classify_extract(
+        mock_gemini,
+        "youtube-videos",
+        {
+            "Video URL": "https://youtu.be/abc123",
+            "Capture Intent": "save",
+            "Status": "Priority",
+            "Notes": "Watch with subtitles",
+        },
+    )
+    payload = {
+        "raw_text": "Save https://youtu.be/abc123",
+        "workspace": "default",
+        "capture_id": str(uuid4()),
+    }
+    store = {}
+    with patch("core.handlers.get_youtube", return_value=TestYouTubePipeline()._yt()):
+        run(payload, store=store)
+        run(payload, store=store)
+    assert not _rows(hub, "youtube_videos") and not _rows(hub, "youtube_channels")
+    (task,) = _rows(hub, "tasks")
+    assert "Confirm" in task["title"] and "Great Video" in task["title"]
+    assert task["links"] == "https://www.youtube.com/watch?v=abc123"
+    assert task["lane"] == "Me" and task["priority"] == "High"
+    assert "Priority" in task["notes"] and "subtitles" in task["notes"]
+    assert _execution(hub)["created_item"] == f"tasks/{task['id']}"
+
+
+def test_youtube_confirmation_retry_keeps_frozen_identity_and_review_policy(
+    hub, mock_gemini, monkeypatch
+):
+    import requests
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", True)
+    _setup_classify_extract(
+        mock_gemini,
+        "youtube-videos",
+        {
+            "Video URL": "https://youtu.be/abc123",
+            "Capture Intent": "save",
+        },
+    )
+    payload = {
+        "raw_text": "Save https://youtu.be/abc123",
+        "workspace": "default",
+        "capture_id": str(uuid4()),
+    }
+    store = {}
+    hub.lose_reply = "insert"
+    with patch("core.handlers.get_youtube", return_value=TestYouTubePipeline()._yt()):
+        with pytest.raises(requests.Timeout):
+            run(payload, store=store)
+    monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", False)
+    with patch("core.handlers.get_youtube", return_value=None):
+        run(payload, store=store)
+    assert len(_rows(hub, "tasks")) == 1
+    assert "Great Video" in _task(hub)["title"]
+    assert not _rows(hub, "youtube_videos") and not _rows(hub, "youtube_channels")
+    assert _execution(hub)["created_item"] == f"tasks/{_task(hub)['id']}"

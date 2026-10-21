@@ -262,6 +262,7 @@ categories:
         instruction: "The valid URL found in the text."
 
   youtube-videos:
+    confirm_before_save: false
     # The YouTube video id is the row id; title, channel and duration come from the YouTube API.
     table: youtube_videos
     description: "A YouTube video. MUST contain a valid 'youtube.com' or 'youtu.be' or m.youtube.com link. If the user just describes a video without a link, classify as a TASK (Chore)."

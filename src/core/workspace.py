@@ -90,9 +90,10 @@ def _check(overlay: dict, template: dict) -> None:
         if name not in categories:
             raise InvalidOverlay(f"category {name!r} is not in the template")
         if "confirm_before_save" in (stanza or {}) and (
-            name not in ("movies", "tv-shows") or type(stanza["confirm_before_save"]) is not bool
+            name not in ("movies", "tv-shows", "youtube-videos")
+            or type(stanza["confirm_before_save"]) is not bool
         ):
-            raise InvalidOverlay(f"{name}.confirm_before_save must be a movie/TV boolean")
+            raise InvalidOverlay(f"{name}.confirm_before_save must be a movie/TV/YouTube boolean")
         props = categories[name].get("properties", {})
         for prop in (stanza or {}).get("properties") or {}:
             if prop not in props:
@@ -108,7 +109,7 @@ def build(
     config = merge(base, overlay)
     if any(
         config.get("categories", {}).get(category, {}).get("confirm_before_save", False)
-        for category in ("movies", "tv-shows")
+        for category in ("movies", "tv-shows", "youtube-videos")
     ):
         columns = (config.get("workflow", {}).get("tasks") or {}).get("columns", {})
         missing = {"Name", "Lane", "Links", "Notes"} - columns.keys()

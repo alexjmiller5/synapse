@@ -141,3 +141,21 @@ def test_confirmation_policy_does_not_let_media_gateway_bypass_review(
     _, result = media_resolution.resolve_capture(REQUEST, [category], ["saved"])
     assert result.state == "needs_review"
     assert not media_hub.writes
+
+
+def test_youtube_confirmation_gateway_reports_review_without_writing_rows(
+    monkeypatch, media_hub, mock_youtube
+):
+    from core.config import CATEGORIES
+
+    monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", True)
+    monkeypatch.setattr(media_resolution, "extract", lambda *_: {"Capture Intent": "save"})
+    mock_youtube.videos().list().execute.return_value = {
+        "items": [{"snippet": {"title": "Example", "channelId": "channel-1"}}]
+    }
+    _, result = media_resolution.resolve_capture(
+        {**REQUEST, "input": {"url": "https://youtu.be/abc123"}}, ["youtube-videos"], ["saved"]
+    )
+    assert result.state == "needs_review" and result.identity == "abc123"
+    assert result.reason == "confirmation_required"
+    assert not media_hub.writes

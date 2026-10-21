@@ -118,10 +118,11 @@ def test_hub_credentials_saved_under_the_pre_soma_keys_still_load():
     }
 
 
+@pytest.mark.parametrize("category", ["movies", "tv-shows", "youtube-videos"])
 @pytest.mark.parametrize("value", ["false", 1, None])
-def test_confirmation_setting_rejects_non_boolean_values(value):
+def test_confirmation_setting_rejects_non_boolean_values(value, category):
     with pytest.raises(ws.InvalidOverlay, match="confirm_before_save"):
-        ws.build("example", {"categories": {"movies": {"confirm_before_save": value}}})
+        ws.build("example", {"categories": {category: {"confirm_before_save": value}}})
 
 
 def test_confirmation_requires_human_lane_and_review_content_mappings():
@@ -130,6 +131,17 @@ def test_confirmation_requires_human_lane_and_review_content_mappings():
             "example",
             {
                 "categories": {"movies": {"confirm_before_save": True}},
+                "workflow": {"tasks": {"table": "tasks", "columns": {"Name": "title"}}},
+            },
+        )
+
+
+def test_youtube_confirmation_requires_review_task_mappings():
+    with pytest.raises(ws.InvalidOverlay, match="Lane|Links|Notes"):
+        ws.build(
+            "example",
+            {
+                "categories": {"youtube-videos": {"confirm_before_save": True}},
                 "workflow": {"tasks": {"table": "tasks", "columns": {"Name": "title"}}},
             },
         )

@@ -302,11 +302,13 @@ conflicts, rejection and uncertain transport remain explicit non-success states.
 No save path falls back to row push. Channel discovery no longer initializes
 external subscription tracking and preserves existing source rows.
 
-Movie/TV categories accept the boolean workspace setting `confirm_before_save`
-(default false). When enabled, ordinary captures resolve a strict TMDB match and
-create a human-owned confirmation task with the proposed TMDB link and requested
+Movie/TV/YouTube categories accept the boolean workspace setting `confirm_before_save`
+(default false). When enabled, ordinary captures resolve a strict TMDB match or
+YouTube video and
+create a human-owned confirmation task with the proposed media link and requested
 fields; they neither insert nor patch media rows. Enabling it requires task
-mappings for Name, Lane, Links and Notes. The journal freezes the TMDB identity
+mappings for Name, Lane, Links and Notes. YouTube confirmation runs before channel
+creation or video writes. The journal freezes the resolved identity
 and policy before writing; retries reuse that plan and the durable task receipt. Media-only gateway captures return `needs_review`
 instead and never gain permission to create tasks. Unresolved identities retain
 the existing cleanup-task behavior. Confirmation tasks are completed through
