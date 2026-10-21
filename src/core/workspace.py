@@ -94,6 +94,11 @@ def _check(overlay: dict, template: dict) -> None:
             or type(stanza["confirm_before_save"]) is not bool
         ):
             raise InvalidOverlay(f"{name}.confirm_before_save must be a movie/TV/YouTube boolean")
+        if "enabled" in (stanza or {}):
+            if type(stanza["enabled"]) is not bool:
+                raise InvalidOverlay(f"{name}.enabled must be boolean")
+            if name == "tasks" and not stanza["enabled"]:
+                raise InvalidOverlay("tasks must remain enabled as the capture fallback")
         props = categories[name].get("properties", {})
         for prop in (stanza or {}).get("properties") or {}:
             if prop not in props:
@@ -107,6 +112,11 @@ def build(
     base = globals()["template"]() if template is None else template
     _check(overlay, base)
     config = merge(base, overlay)
+    config["categories"] = {
+        name: stanza
+        for name, stanza in config.get("categories", {}).items()
+        if stanza.get("enabled", True)
+    }
     if any(
         config.get("categories", {}).get(category, {}).get("confirm_before_save", False)
         for category in ("movies", "tv-shows", "youtube-videos")

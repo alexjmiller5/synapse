@@ -159,3 +159,20 @@ def test_youtube_confirmation_gateway_reports_review_without_writing_rows(
     assert result.state == "needs_review" and result.identity == "abc123"
     assert result.reason == "confirmation_required"
     assert not media_hub.writes
+
+
+def test_disabled_article_route_rejects_gateway_before_extraction_or_writes(monkeypatch, media_hub):
+    from core import workspace
+
+    built = workspace.build("example", {"categories": {"articles": {"enabled": False}}})
+    monkeypatch.setattr(
+        media_resolution, "extract", lambda *_: pytest.fail("disabled route extracted")
+    )
+    with workspace.use(built):
+        _, result = media_resolution.resolve_capture(
+            {**REQUEST, "input": {"url": "https://example.test/story"}}, ["articles"], ["saved"]
+        )
+        resumed = media_resolution.write_resolved("articles", {"URL": "https://example.test/story"})
+    assert result.state == "needs_review" and result.reason == "unsupported_category"
+    assert resumed.state == "needs_review" and resumed.reason == "unsupported_category"
+    assert not media_hub.writes

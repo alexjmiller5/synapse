@@ -4,6 +4,7 @@ import json
 
 from google.genai import types
 
+from core.config import CATEGORIES
 from core.ai_engine import (
     GEMINI_MODEL,
     generate_extraction_prompt,
@@ -54,6 +55,8 @@ def extract(category, text):
 
 
 def write_resolved(category, data, *, checkpoint=None, explicit_properties=()):
+    if category not in CATEGORIES:
+        return SaveReceipt("needs_review", "", reason="unsupported_category")
     handler = (
         handle_url_media
         if category in ("podcasts", "articles")
@@ -88,7 +91,7 @@ def resolve_capture(request, categories, fields, *, checkpoint=None):
         )
     else:
         category = classify(text)
-    if category not in categories or category not in KINDS:
+    if category not in categories or category not in KINDS or category not in CATEGORIES:
         return None, SaveReceipt("needs_review", "", reason="unsupported_category")
     data = extract(category, text)
     if "url" in request["input"]:

@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from core.pipeline import run, run_pipeline
-from core.schemas import CATEGORY_SCHEMA_CLASSIFY
+from core.schemas import classification_schema
 from core.workflow import capture_scope
 from helpers import make_gemini_response
 
@@ -150,7 +150,7 @@ class TestTaskContextPrecheck:
         _run(_item("Add the full x men series to my movies db", "med prior task"))
         assert mock_gemini.models.generate_content.call_count == 1
         first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
-        assert first_cfg.response_json_schema is not CATEGORY_SCHEMA_CLASSIFY
+        assert first_cfg.response_json_schema != classification_schema()
         assert _task(hub)["title"] == "Add the full x men series to my movies db"
 
     def test_date_context_still_calls_classifier(self, hub, mock_gemini):
@@ -167,7 +167,7 @@ class TestTaskContextPrecheck:
         _run(_item("watch Eric Andre's new movie, little brother", "June 26"))
         assert mock_gemini.models.generate_content.call_count == 2
         first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
-        assert first_cfg.response_json_schema is CATEGORY_SCHEMA_CLASSIFY
+        assert first_cfg.response_json_schema == classification_schema()
         assert _task(hub)["due_date"] == "2026-06-26"
 
 
@@ -804,3 +804,27 @@ def test_youtube_confirmation_retry_keeps_frozen_identity_and_review_policy(
     assert "Great Video" in _task(hub)["title"]
     assert not _rows(hub, "youtube_videos") and not _rows(hub, "youtube_channels")
     assert _execution(hub)["created_item"] == f"tasks/{_task(hub)['id']}"
+
+
+def test_disabled_category_response_falls_back_to_task_without_article_write(hub, mock_gemini):
+    from core import workspace
+
+    overlay = {"categories": {"articles": {"enabled": False}}}
+    current = workspace.current()
+    built = workspace.build(current.id, overlay, template=current.config, secrets=current.secrets)
+    _setup_classify_extract(
+        mock_gemini,
+        "articles",
+        {
+            "Name": "Read https://example.test/story",
+            "Tags": ["Chore"],
+            "Priority": "High",
+            "Lane": "Me",
+            "Due Date": "2026-08-03",
+        },
+    )
+    with workspace.use(built):
+        _run(_item("Read https://example.test/story"))
+    assert not _rows(hub, "articles")
+    assert _task(hub)["title"] == "Read https://example.test/story"
+    assert _execution(hub)["category"] == "tasks"

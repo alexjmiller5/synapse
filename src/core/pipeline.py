@@ -22,7 +22,8 @@ from core.ai_engine import (
     generate_extraction_prompt,
     get_gemini_schema,
 )
-from core.schemas import CATEGORY_SCHEMA_CLASSIFY
+from core.config import CATEGORIES
+from core.schemas import classification_schema
 
 from core.external_data import enrich_context
 from core.handlers import Failed
@@ -60,7 +61,7 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
         config=types.GenerateContentConfig(
             system_instruction=cat_prompt,
             response_mime_type="application/json",
-            response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
+            response_json_schema=classification_schema(),
         ),
     )
 
@@ -72,7 +73,10 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
         print("🔍 DEBUG: No candidates returned in response.")
     # --- VERBOSE DEBUGGING END ---
 
-    return json.loads(response.text)
+    classified = json.loads(response.text)
+    if classified.get("category") not in CATEGORIES:
+        classified["category"] = "tasks"
+    return classified
 
 
 # A `$` context of exactly `agent` = "send this task straight to an agent": a task

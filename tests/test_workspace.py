@@ -145,3 +145,27 @@ def test_youtube_confirmation_requires_review_task_mappings():
                 "workflow": {"tasks": {"table": "tasks", "columns": {"Name": "title"}}},
             },
         )
+
+
+def test_disabled_category_is_absent_from_prompt_schema_and_catalog_projection():
+    from core.ai_engine import generate_classification_prompt
+    from core.catalog import _columns
+    from core.schemas import classification_schema
+
+    built = ws.build("example", {"categories": {"articles": {"enabled": False}}})
+    with ws.use(built):
+        assert '"articles"' not in generate_classification_prompt("")
+        assert "articles" not in classification_schema()["properties"]["category"]["enum"]
+        assert "articles" not in _columns(built.config)
+    assert "articles" in ws.build("other").config["categories"]
+
+
+@pytest.mark.parametrize("value", ["false", 0, None])
+def test_category_enabled_setting_must_be_boolean(value):
+    with pytest.raises(ws.InvalidOverlay, match="enabled"):
+        ws.build("example", {"categories": {"articles": {"enabled": value}}})
+
+
+def test_required_task_fallback_cannot_be_disabled():
+    with pytest.raises(ws.InvalidOverlay, match="tasks"):
+        ws.build("example", {"categories": {"tasks": {"enabled": False}}})

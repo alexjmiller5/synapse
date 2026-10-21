@@ -98,6 +98,11 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   merge, lists and scalars replace). The overlay may only touch categories
   and properties the template has (under `categories`), plus its `workflow`
   bindings. `categories.tasks.place_tags` join the Tags allowlist.
+- `categories.<name>.enabled` is a boolean workspace setting (default true).
+  Disabled categories are omitted from the merged runtime categories, classifier
+  prompt/schema, catalog projection and media-gateway routing. Tasks cannot be
+  disabled because they are the general-capture fallback. Unexpected classifier
+  categories fall back to tasks; no route writes a disabled category.
 - `core.config.PROMPTS` / `CATEGORIES` are live views of
   `workspace.current()`; the worker wraps each capture in
   `workspace.use(workspace.load(store, ...))`, so the pipeline code is

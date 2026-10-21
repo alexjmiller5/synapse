@@ -23,3 +23,14 @@ CATEGORY_SCHEMA_CLASSIFY = {
     },
     "required": ["category"],
 }
+
+
+def classification_schema():
+    """Choose from the active workspace's categories at call time."""
+    return {
+        **CATEGORY_SCHEMA_CLASSIFY,
+        "properties": {
+            **CATEGORY_SCHEMA_CLASSIFY["properties"],
+            "category": {"type": "string", "enum": list(CATEGORIES)},
+        },
+    }

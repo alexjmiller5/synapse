@@ -69,6 +69,7 @@ Everything else is code; these are one-time console/dashboard actions:
 | **`capture_columns`** | Media fields the user may edit on an existing row (never forced, no default). |
 | **`constants`**, **`match_on`**, **`review_if_missing`**, **`saved_column`** | Fixed columns, the natural key a repeat capture updates, unfillable fields that flag `needs_review`, the explicit-save flag. |
 | **`properties`** | The fields the extractor fills, in prompt order. |
+| **`enabled`** | Boolean, default `true`. Set `false` in a workspace overlay to remove a category from classification, catalog projection and media-gateway routing. Tasks must remain enabled as the fallback. |
 | **`confirm_before_save`** | Movie/TV/YouTube boolean, default `false`. Create a confirmation task with the resolved media link and requested changes instead of inserting or editing a media row. Gateway-only captures return `needs_review`. |
 
 ### Field level
