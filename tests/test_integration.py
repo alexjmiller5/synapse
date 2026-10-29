@@ -1,125 +1,57 @@
-"""Integration tests — real Gemini AI calls, no writes.
+"""Integration tests — real model calls, no writes.
 
-These tests send actual user inputs through the real Gemini parsing,
+These tests send actual user inputs through the real AI parsing,
 classification, and extraction prompts (built over the fixture Soma catalog),
 then verify the extracted fields (right category, right values).
 
-Nothing is written anywhere. Uses direct REST calls to the same model as
-production (bypasses conftest SDK mocks).
+Nothing is written anywhere. Uses the same HTTP transport as production.
 
 Test inputs are synthetic examples of typical captures.
 
 Run with: just test-integration
-Requires: GEMINI_API_KEY env var or 1Password access
+Requires: AI_API_KEY env var (the just recipe injects it)
 """
 
-import json
 import os
 import re
-import subprocess
 from datetime import date
 
-import time
-
 import pytest
-import requests as _requests
 
-# ---------------------------------------------------------------------------
-# Resolve Gemini API key
-# ---------------------------------------------------------------------------
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("SYNAPSE_GEMINI_API_KEY")
-
-if GEMINI_API_KEY and GEMINI_API_KEY.startswith("fake-"):
-    GEMINI_API_KEY = None  # conftest sentinel, not a real key — fall through to op
-
-if not GEMINI_API_KEY:
-    try:
-        result = subprocess.run(
-            [
-                "op",
-                "read",
-                "op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GEMINI_API_KEY",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            GEMINI_API_KEY = result.stdout.strip()
-    except Exception:
-        pass
-
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(
-        not GEMINI_API_KEY,
-        reason="GEMINI_API_KEY not available — skipping integration tests",
-    ),
-]
-
-# ---------------------------------------------------------------------------
-# Import core modules (conftest handles mock setup)
-# ---------------------------------------------------------------------------
-from core.config import PROMPTS  # noqa: E402
-from core.ai_engine import (  # noqa: E402
-    GEMINI_MODEL,
+from core.config import PROMPTS
+from core.ai_engine import (
+    generate_with_retry,
     generate_classification_prompt,
     generate_extraction_prompt,
-    get_gemini_schema,
+    get_extraction_schema,
 )
-from core.business_logic import apply_business_logic  # noqa: E402
-from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
+from core.business_logic import apply_business_logic
+from core.schemas import CATEGORY_SCHEMA_CLASSIFY
 
-# ---------------------------------------------------------------------------
-# Direct Gemini REST API (bypasses conftest SDK mocks)
-# Uses the same model constant as production (core.ai_engine.GEMINI_MODEL)
-# ---------------------------------------------------------------------------
-GEMINI_URL = (
-    f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-)
+KEY = os.environ.get("AI_API_KEY", "")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not KEY or KEY.startswith("fake-"), reason="AI_API_KEY is not available"),
+]
 
 
-def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5):
-    """Call Gemini REST API directly with retry on rate limit."""
-    body = {
-        "system_instruction": {"parts": [{"text": system_instruction}]},
-        "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-        },
-    }
-    if response_schema:
-        body["generationConfig"]["responseSchema"] = response_schema
+@pytest.fixture(autouse=True)
+def _reset_all_mocks():
+    # Integration calls exercise the real production transport, without hub writes.
+    yield
 
-    for attempt in range(_retries):
-        resp = _requests.post(
-            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
-            json=body,
-            timeout=30,
-        )
-        if resp.status_code == 429:
-            wait = min(2**attempt * 2, 30)
-            print(f"  ⏳ Rate limited, waiting {wait}s (attempt {attempt + 1}/{_retries})")
-            time.sleep(wait)
-            continue
-        resp.raise_for_status()
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
 
-    resp.raise_for_status()  # Will raise on last 429
+def _ai_call(system_instruction, user_text, response_schema):
+    return generate_with_retry(
+        system_instruction=system_instruction,
+        user_text=user_text,
+        schema=response_schema,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Pipeline helpers
 # ---------------------------------------------------------------------------
-@pytest.fixture(autouse=True)
-def _rate_limit_pause():
-    """Small pause between tests to avoid Gemini free tier rate limits."""
-    yield
-    time.sleep(1)
-
-
 ACTIVE_PROJECTS = [
     "Synapse",
     "Blueprint",
@@ -132,18 +64,19 @@ ACTIVE_PROJECTS = [
 
 
 def classify(raw_text, context=""):
-    """Run real Gemini classification."""
+    """Run real AI classification."""
     proj_str = ", ".join(ACTIVE_PROJECTS)
     prompt = generate_classification_prompt(proj_str)
     user_input = f"{raw_text}\n[Context: {context}]" if context else raw_text
-    return _gemini_call(prompt, user_input, CATEGORY_SCHEMA_CLASSIFY)
+    return _ai_call(prompt, user_input, CATEGORY_SCHEMA_CLASSIFY)
 
 
 def extract(category, raw_text, user_context=None):
-    """Run real Gemini extraction."""
+    """Run real AI extraction."""
     prompt = generate_extraction_prompt(category, raw_text, user_context=user_context)
-    schema = get_gemini_schema(category)
-    return _gemini_call(prompt, raw_text, schema)
+    schema = get_extraction_schema(category)
+    user_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+    return _ai_call(prompt, user_input, schema)
 
 
 def full_pipeline(raw_text, context=""):
@@ -162,9 +95,9 @@ def full_pipeline(raw_text, context=""):
 
 
 def parse(raw_text):
-    """Run real Gemini parsing via REST API."""
+    """Run real AI parsing via REST API."""
     system_instruction = PROMPTS.get("parser_instruction", "")
-    return _gemini_call(system_instruction, raw_text, CATEGORY_SCHEMA_CLASSIFY)
+    return _ai_call(system_instruction, raw_text, CATEGORY_SCHEMA_CLASSIFY)
 
 
 # ======================================================================
@@ -500,11 +433,11 @@ class TestPeopleClassification:
 # ======================================================================
 class TestParser:
     def _parse(self, text):
-        """Parse using real Gemini via REST API."""
+        """Parse using real AI via REST API."""
         system_instruction = PROMPTS.get("parser_instruction", "")
         from core.schemas import PARSER_SCHEMA
 
-        return _gemini_call(system_instruction, text, PARSER_SCHEMA)
+        return _ai_call(system_instruction, text, PARSER_SCHEMA)
 
     def test_single_item(self):
         result = self._parse("Buy eggs")

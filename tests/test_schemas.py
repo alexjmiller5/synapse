@@ -53,9 +53,9 @@ class TestPromptGuards:
     otherwise touch (their behavior tests live in the integration suite)."""
 
     def test_fun_activities_location_options_come_from_the_catalog(self):
-        from core.ai_engine import get_gemini_schema
+        from core.ai_engine import get_extraction_schema
 
-        schema = get_gemini_schema("fun-activities")
+        schema = get_extraction_schema("fun-activities")
         assert "Lakeport" in schema["properties"]["Location"]["enum"]
 
     def test_place_tags_substituted_into_instructions(self, monkeypatch):

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Runs in the project env (uv run) so it uses the SAME dependency versions as the
 # deployed service — it imports core.*, so pinning a separate set here just risks
-# drift (an old google-genai once closed the client mid-eval).
-"""Eval the classification prompt against scripts/eval_cases.yaml with real Gemini calls.
+# drift between evaluation and production.
+"""Eval the classification prompt against scripts/eval_cases.yaml with real AI calls.
 
 Measures the PROMPT alone (the deterministic task-context pre-check in
 pipeline.py is unit-tested separately). Each case runs --repeats times and
@@ -15,11 +15,9 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import sys
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -27,10 +25,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-if not os.environ.get("GEMINI_API_KEY"):
-    sys.exit("GEMINI_API_KEY not set — run via `just eval-classifier` (op injects it).")
-
-from google.genai import types  # noqa: E402
+if not os.environ.get("AI_API_KEY"):
+    sys.exit("AI_API_KEY not set — run via `just eval-classifier` (op injects it).")
 
 import core.ai_engine as ai_engine  # noqa: E402
 from core import workspace  # noqa: E402
@@ -39,15 +35,11 @@ from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
 
 def classify_once(prompt: str, classify_input: str) -> str:
     response = ai_engine.generate_with_retry(
-        model=ai_engine.GEMINI_MODEL,
-        contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
-        config=types.GenerateContentConfig(
-            system_instruction=prompt,
-            response_mime_type="application/json",
-            response_json_schema=CATEGORY_SCHEMA_CLASSIFY,
-        ),
+        system_instruction=prompt,
+        user_text=classify_input,
+        schema=CATEGORY_SCHEMA_CLASSIFY,
     )
-    return json.loads(response.text).get("category", "tasks")
+    return response.get("category", "tasks")
 
 
 def eval_case(prompt: str, case: dict, repeats: int) -> tuple[dict, str, bool]:
@@ -60,14 +52,8 @@ def eval_case(prompt: str, case: dict, repeats: int) -> tuple[dict, str, bool]:
 
 
 def run_set(prompt: str, name: str, cases: list[dict], repeats: int) -> float:
-    # Warm the lru_cached Gemini client single-threaded — concurrent first-access
-    # from the pool below races the cache and can create/GC a duplicate client
-    # (httpx then reports "client has been closed"). Production is serialized.
-    from core.clients import get_gemini_client
-
-    get_gemini_client()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(lambda c: eval_case(prompt, c, repeats), cases))
+    # Sequential calls respect small free-tier token budgets.
+    results = [eval_case(prompt, case, repeats) for case in cases]
 
     confusion: dict[str, Counter] = {}
     passed = 0

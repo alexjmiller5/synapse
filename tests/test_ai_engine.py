@@ -1,8 +1,6 @@
 """Tests for ai_engine.py — parsing, classification, extraction, schema generation."""
 
 import pytest
-from google.genai import types
-from google.genai.errors import ClientError
 
 from core import ai_engine
 from core.ai_engine import (
@@ -10,50 +8,8 @@ from core.ai_engine import (
     parse_raw_input,
     generate_classification_prompt,
     generate_extraction_prompt,
-    generate_with_retry,
-    get_gemini_schema,
+    get_extraction_schema,
 )
-from helpers import make_gemini_response
-
-
-# ======================================================================
-# GEMINI_MODEL constant + 404 fallback
-# ======================================================================
-class TestModelFallback:
-    def _config(self):
-        return types.GenerateContentConfig(response_mime_type="application/json")
-
-    def _not_found(self):
-        return ClientError(404, {"error": {"message": "model not found", "status": "NOT_FOUND"}})
-
-    def test_model_constant_exists(self):
-        assert ai_engine.GEMINI_MODEL
-        assert ai_engine.GEMINI_FALLBACK_MODEL
-
-    def test_404_falls_back_to_fallback_model(self, mock_gemini):
-        good = make_gemini_response({"ok": True})
-        mock_gemini.models.generate_content.side_effect = [self._not_found(), good]
-
-        resp = generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
-
-        assert resp is good
-        assert mock_gemini.models.generate_content.call_count == 2
-        second_call = mock_gemini.models.generate_content.call_args_list[1]
-        assert second_call.kwargs["model"] == ai_engine.GEMINI_FALLBACK_MODEL
-
-    def test_404_on_fallback_model_raises(self, mock_gemini):
-        mock_gemini.models.generate_content.side_effect = [self._not_found(), self._not_found()]
-
-        with pytest.raises(ClientError):
-            generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
-
-    def test_non_404_client_error_raises(self, mock_gemini):
-        err = ClientError(400, {"error": {"message": "bad request", "status": "INVALID_ARGUMENT"}})
-        mock_gemini.models.generate_content.side_effect = err
-
-        with pytest.raises(ClientError):
-            generate_with_retry(model=ai_engine.GEMINI_MODEL, contents=[], config=self._config())
-        assert mock_gemini.models.generate_content.call_count == 1
 
 
 # ======================================================================
@@ -75,7 +31,7 @@ class TestSafeJsonLoad:
             safe_json_load("")
 
     def test_none_raises_valueerror_not_typeerror(self):
-        """An empty Gemini response (None) must raise a retryable ValueError,
+        """An empty AI response (None) must raise a retryable ValueError,
         not the un-retryable TypeError from json.loads(None)."""
         with pytest.raises(ValueError):
             safe_json_load(None)
@@ -89,47 +45,47 @@ class TestSafeJsonLoad:
 # parse_raw_input
 # ======================================================================
 class TestParseRawInput:
-    def test_single_item(self, mock_gemini):
+    def test_single_item(self, mock_ai):
         result = parse_raw_input("Buy eggs")
         assert len(result) == 1
         assert result[0]["core_text"] == "Buy eggs"
 
-    def test_no_delimiters_skips_gemini(self, mock_gemini):
+    def test_no_delimiters_skips_ai(self, mock_ai):
         """No '@'/'$' → nothing to split, so the LLM must not see the text at
-        all: round-tripping a bare URL through Gemini mangled repo names
+        all: round-tripping a bare URL through AI mangled repo names
         (github.com/kunchenguid/axi came back as axi_)."""
         result = parse_raw_input("https://github.com/kunchenguid/axi\n")
         assert result == [{"core_text": "https://github.com/kunchenguid/axi", "context_notes": ""}]
-        mock_gemini.models.generate_content.assert_not_called()
+        mock_ai.assert_not_called()
 
-    def test_multiple_items(self, mock_gemini):
+    def test_multiple_items(self, mock_ai):
         items = [
             {"core_text": "Buy eggs", "context_notes": "groceries"},
             {"core_text": "Call John", "context_notes": ""},
         ]
-        response = make_gemini_response(items)
-        mock_gemini.models.generate_content.return_value = response
+        response = items
+        mock_ai.return_value = response
 
         result = parse_raw_input("Buy eggs $ groceries @ Call John")
         assert len(result) == 2
 
-    def test_with_context(self, mock_gemini):
+    def test_with_context(self, mock_ai):
         items = [{"core_text": "Cancel the gym trial", "context_notes": "Jan 1"}]
-        response = make_gemini_response(items)
-        mock_gemini.models.generate_content.return_value = response
+        response = items
+        mock_ai.return_value = response
 
         result = parse_raw_input("Cancel the gym trial $ Jan 1")
         assert result[0]["context_notes"] == "Jan 1"
 
-    def test_fallback_on_error(self, mock_gemini):
-        """On Gemini failure, falls back to raw text as single item."""
-        mock_gemini.models.generate_content.side_effect = Exception("API down")
+    def test_fallback_on_error(self, mock_ai):
+        """On AI failure, falls back to raw text as single item."""
+        mock_ai.side_effect = Exception("API down")
 
         result = parse_raw_input("Some text $ here")
         assert len(result) == 1
         assert result[0]["core_text"] == "Some text $ here"
         assert result[0]["context_notes"] == ""
-        mock_gemini.models.generate_content.assert_called_once()
+        mock_ai.assert_called_once()
 
 
 # ======================================================================
@@ -245,14 +201,14 @@ class TestCatalogDrivenPrompt:
 
         status = CATEGORIES["groceries"]["properties"]["Status"]
         monkeypatch.setitem(status, "allowlist", ["On List", "Gone Forever"])
-        schema = get_gemini_schema("groceries")
+        schema = get_extraction_schema("groceries")
         assert schema["properties"]["Status"]["enum"] == ["On List"]
 
     def test_a_column_the_catalog_does_not_know_keeps_its_allowlist(self, monkeypatch):
         from core import catalog
 
         monkeypatch.setattr(catalog, "table", lambda name: {"columns": {}, "rules": []})
-        assert get_gemini_schema("groceries")["properties"]["Status"]["enum"] == [
+        assert get_extraction_schema("groceries")["properties"]["Status"]["enum"] == [
             "On List",
             "Don't Have",
             "Have",
@@ -266,11 +222,11 @@ class TestCatalogDrivenPrompt:
 
 
 # ======================================================================
-# get_gemini_schema
+# get_extraction_schema
 # ======================================================================
-class TestGetGeminiSchema:
+class TestGetAISchema:
     def test_tasks_schema(self):
-        schema = get_gemini_schema("tasks")
+        schema = get_extraction_schema("tasks")
         assert schema["type"] == "object"
         assert {"Name", "Tags", "Due Date", "Priority", "Lane", "Links"} == set(
             schema["properties"]
@@ -278,12 +234,12 @@ class TestGetGeminiSchema:
         assert set(schema["required"]) == {"Name", "Tags", "Due Date", "Lane"}
 
     def test_multi_select_is_an_array_of_catalog_options(self):
-        tags = get_gemini_schema("ideas")["properties"]["Tags"]
+        tags = get_extraction_schema("ideas")["properties"]["Tags"]
         assert tags["type"] == "array"
         assert "Hobby" in tags["items"]["enum"]
 
     def test_select_options_come_from_the_catalog(self):
-        status = get_gemini_schema("movies")["properties"]["Status"]
+        status = get_extraction_schema("movies")["properties"]["Status"]
         assert status == {
             "type": "string",
             "enum": [
@@ -297,47 +253,45 @@ class TestGetGeminiSchema:
         }
 
     def test_text_columns_are_open(self):
-        props = get_gemini_schema("podcasts")["properties"]
+        props = get_extraction_schema("podcasts")["properties"]
         assert props["Podcast Name"] == {"type": "string"}
         assert props["Producer"] == {"type": "string"}
 
     def test_fields_without_a_column_keep_synapse_vocabulary(self):
-        intent = get_gemini_schema("movies")["properties"]["Capture Intent"]
+        intent = get_extraction_schema("movies")["properties"]["Capture Intent"]
         assert intent["enum"] == ["save", "record_consumption", "none"]
 
     def test_catalog_required_columns_are_required(self):
-        schema = get_gemini_schema("groceries")
+        schema = get_extraction_schema("groceries")
         assert set(schema["required"]) == {"Name", "Category", "Status"}
 
     def test_capture_fields_are_never_forced_even_when_the_column_is_required(self):
-        schema = get_gemini_schema("podcasts")
+        schema = get_extraction_schema("podcasts")
         assert "Status" not in schema["required"]
         assert {"Episode Title", "Podcast Name", "URL"} <= set(schema["required"])
 
     def test_bookmarks_schema(self):
-        schema = get_gemini_schema("bookmarks")
+        schema = get_extraction_schema("bookmarks")
         assert set(schema["properties"]) == {"Description", "Title", "URL", "Tags"}
         assert set(schema["required"]) == {"Description", "Title", "URL"}
 
     def test_tasks_schema_has_no_ai_ready(self):
         """Synapse must never tick 'AI Ready' - only the user sets it, by hand."""
-        schema = get_gemini_schema("tasks")
+        schema = get_extraction_schema("tasks")
         assert "AI Ready" not in schema["properties"]
 
     def test_tasks_schema_always_answers_lane_from_catalog_options(self):
         """Every captured task is triaged: Lane is required, its enum the catalog's."""
-        schema = get_gemini_schema("tasks")
+        schema = get_extraction_schema("tasks")
         assert schema["properties"]["Lane"] == {"type": "string", "enum": ["AI", "Me"]}
         assert "Lane" in schema["required"]
 
 
 # ======================================================================
-# Enum size cap (Gemini 400 INVALID_ARGUMENT on huge enums)
+# Enum size cap for bounded grammar and prompt size
 # ======================================================================
 class TestEnumCap:
-    """Gemini rejects response schemas whose enums exceed its constrained-decoding
-    grammar limit (~150 distinct real-world names); a catalog option list past
-    MAX_ENUM_OPTIONS drops its enum instead of 400ing every capture."""
+    """Large catalog option lists omit constrained enums and prompt option dumps."""
 
     def _genres(self, monkeypatch, values):
         from core import catalog
@@ -356,12 +310,12 @@ class TestEnumCap:
     def test_enum_dropped_above_cap(self, monkeypatch):
         big = [{"v": f"Genre Number {i}"} for i in range(ai_engine.MAX_ENUM_OPTIONS + 1)]
         self._genres(monkeypatch, big)
-        assert "enum" not in get_gemini_schema("podcasts")["properties"]["Genres"]["items"]
+        assert "enum" not in get_extraction_schema("podcasts")["properties"]["Genres"]["items"]
 
     def test_enum_kept_at_cap(self, monkeypatch):
         small = [{"v": f"Genre Number {i}"} for i in range(ai_engine.MAX_ENUM_OPTIONS)]
         self._genres(monkeypatch, small)
-        enum = get_gemini_schema("podcasts")["properties"]["Genres"]["items"]["enum"]
+        enum = get_extraction_schema("podcasts")["properties"]["Genres"]["items"]["enum"]
         assert enum == [o["v"] for o in small]
 
     def test_prompt_omits_oversized_option_lists(self, monkeypatch):

@@ -7,7 +7,6 @@ requires-python = ">=3.13"
 keywords = ["ai", "soma", "automation", "serverless"]
 dependencies = [
     "fastapi>=0.115",
-    "google-genai~=1.49.0",
     "PyYAML~=6.0.3",
     "requests~=2.32.3",
     "inscriptis~=2.7.0",
@@ -32,7 +31,7 @@ dev = [
 pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
-    "integration: tests that call real external APIs (Gemini, YouTube, etc.)",
+    "integration: tests that call real external APIs (AI provider, YouTube, etc.)",
 ]
 
 [tool.ruff]

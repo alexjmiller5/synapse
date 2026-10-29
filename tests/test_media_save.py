@@ -8,7 +8,6 @@ from media_hub import SyntheticHub
 from core import soma_hub
 from core.pipeline import run_pipeline
 from core.workflow import capture_scope
-from helpers import make_gemini_response
 
 
 def existing(status="Finished"):
@@ -27,16 +26,16 @@ def existing(status="Finished"):
 CAPTURE = "5b0bf1f8-8d63-4c43-9a0a-4f7d0fb6a4f2"
 
 
-def test_pipeline_resave_keeps_finished_and_unrequested_fields(mock_gemini, mock_youtube):
+def test_pipeline_resave_keeps_finished_and_unrequested_fields(mock_ai, mock_youtube):
     hub = SyntheticHub(
         {
             "youtube_videos": {"abc123": existing()},
             "youtube_channels": {"channel-1": {"id": "channel-1"}},
         }
     )
-    mock_gemini.models.generate_content.side_effect = [
-        make_gemini_response({"category": "youtube-videos"}),
-        make_gemini_response({"Video URL": "https://youtu.be/abc123", "Capture Intent": "save"}),
+    mock_ai.side_effect = [
+        ({"category": "youtube-videos"}),
+        ({"Video URL": "https://youtu.be/abc123", "Capture Intent": "save"}),
     ]
     mock_youtube.videos.return_value.list.return_value.execute.return_value = {
         "items": [

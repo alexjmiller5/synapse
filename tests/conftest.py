@@ -7,7 +7,7 @@ Mocking strategy:
   product template plus the workflow bindings a real workspace carries
 - The Soma catalog is tests/fixtures/catalog.json (generic values only),
   served by a fake `POST /v1/catalog/projection` (helpers.CatalogHub)
-- core.clients module globals (gemini_client, spotify, youtube) are patched
+- The shared AI generation boundary and external clients are patched
   at the module level
 - All external API calls are intercepted before any real network I/O
 """
@@ -25,7 +25,7 @@ CATALOG = Path(__file__).parent / "fixtures" / "catalog.json"
 # Fake secrets — seeded into the environment before core modules import
 # ---------------------------------------------------------------------------
 FAKE_SECRETS = {
-    "gemini-api-key": "fake-gemini-key",
+    "ai-api-key": "fake-ai-key",
     "spotify-client-id": "fake-spotify-id",
     "spotify-client-secret": "fake-spotify-secret",
     "google-youtube-api-key": "fake-youtube-key",
@@ -41,7 +41,6 @@ os.environ["SYNAPSE_WORKSPACE_DIR"] = os.path.join(
 )
 
 # Patch external client constructors BEFORE core.clients is imported
-patch("google.genai.Client", return_value=MagicMock()).start()
 patch("spotipy.Spotify", return_value=MagicMock()).start()
 patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 
@@ -50,7 +49,7 @@ patch("googleapiclient.discovery.build", return_value=MagicMock()).start()
 # returns the same instance the code-under-test will get.
 import core.clients as _clients_mod  # noqa: E402
 
-_mock_gemini = _clients_mod.get_gemini_client()
+_mock_ai = MagicMock()
 _mock_spotify = _clients_mod.get_spotify()
 _mock_youtube = _clients_mod.get_youtube()
 
@@ -60,10 +59,12 @@ _mock_youtube = _clients_mod.get_youtube()
 
 
 @pytest.fixture(autouse=True)
-def _reset_all_mocks():
-    """Auto-reset all mocks before every test to prevent state bleed."""
-    _mock_gemini.reset_mock()
-    _mock_gemini.models.generate_content.side_effect = None
+def _reset_all_mocks(monkeypatch):
+    from core import ai_engine
+
+    monkeypatch.setattr(ai_engine, "_generate", _mock_ai)
+    _mock_ai.reset_mock()
+    _mock_ai.side_effect = None
     _mock_spotify.reset_mock()
     _mock_youtube.reset_mock()
     yield
@@ -82,17 +83,9 @@ def catalog_hub(monkeypatch):
 
 
 @pytest.fixture
-def mock_gemini():
-    """Provides a mock Gemini client that returns configurable JSON."""
-    return _mock_gemini
-
-
-def make_gemini_response(json_data):
-    """Helper to create a mock Gemini response with .text property."""
-    resp = MagicMock()
-    resp.text = json.dumps(json_data)
-    resp.candidates = [MagicMock(finish_reason="STOP", safety_ratings=[])]
-    return resp
+def mock_ai():
+    """Mock the shared generation boundary with plain JSON values."""
+    return _mock_ai
 
 
 @pytest.fixture
