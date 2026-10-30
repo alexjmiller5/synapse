@@ -256,6 +256,7 @@ def test_explicit_clear_survives_extraction_defaults(monkeypatch, media_hub):
 def test_gateway_url_resolution_preserves_submitted_identity_without_unrestricted_scraping(
     monkeypatch,
 ):
+    from types import SimpleNamespace
     from core import media_resolution
 
     monkeypatch.setattr(
@@ -264,7 +265,7 @@ def test_gateway_url_resolution_preserves_submitted_identity_without_unrestricte
     monkeypatch.setattr(
         media_resolution,
         "generate_with_retry",
-        lambda **kwargs: {"Title": "Example", "URL": "https://other.test/"},
+        lambda **kwargs: SimpleNamespace(text='{"Title":"Example","URL":"https://other.test/"}'),
     )
     written = []
     monkeypatch.setattr(

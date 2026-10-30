@@ -1,4 +1,7 @@
+import json
 import re
+
+from google.genai import types
 
 from core.settings import get_settings
 from core.workflow import (
@@ -12,11 +15,12 @@ from core.workflow import (
     prepare_item,
 )
 from core.ai_engine import (
+    GEMINI_MODEL,
     generate_with_retry,
     parse_raw_input,
     generate_classification_prompt,
     generate_extraction_prompt,
-    get_extraction_schema,
+    get_gemini_schema,
 )
 from core.config import CATEGORIES
 from core.schemas import classification_schema
@@ -52,12 +56,24 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
     classify_input = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
 
     response = generate_with_retry(
-        system_instruction=cat_prompt,
-        user_text=classify_input,
-        schema=classification_schema(),
+        model=GEMINI_MODEL,
+        contents=[types.Content(parts=[types.Part(text=classify_input)], role="user")],
+        config=types.GenerateContentConfig(
+            system_instruction=cat_prompt,
+            response_mime_type="application/json",
+            response_json_schema=classification_schema(),
+        ),
     )
 
-    classified = response
+    # --- VERBOSE DEBUGGING START ---
+    print(f"🔍 DEBUG: response.text value: {repr(response.text)}")
+    if response.candidates and len(response.candidates) > 0:
+        print(f"🔍 DEBUG: Finish Reason: {response.candidates[0].finish_reason}")
+    else:
+        print("🔍 DEBUG: No candidates returned in response.")
+    # --- VERBOSE DEBUGGING END ---
+
+    classified = json.loads(response.text)
     if classified.get("category") not in CATEGORIES:
         classified["category"] = "tasks"
     return classified
@@ -134,13 +150,21 @@ def run_pipeline(
             category, raw_text, url_context, inventory_list, user_context
         )
 
+        # DEBUG: Capture Raw AI Response before JSON Load
         ai_response_obj = generate_with_retry(
-            system_instruction=extract_prompt,
-            user_text=f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text,
-            schema=get_extraction_schema(category),
+            model=GEMINI_MODEL,
+            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
+            config=types.GenerateContentConfig(
+                system_instruction=extract_prompt,
+                response_mime_type="application/json",
+                response_json_schema=get_gemini_schema(category),
+            ),
         )
 
-        extracted = ai_response_obj or {}
+        raw_ai_text = ai_response_obj.text
+        print(f"🔍 DEBUG AI EXTRACT REPR: {repr(raw_ai_text)}")
+
+        extracted = json.loads(raw_ai_text) or {}
 
         # 4. Execute
         if not extracted:
@@ -265,8 +289,8 @@ def _run(payload: dict):
     """Process one capture inside its journal (core.workflow.capture_scope)."""
     active = current_capture()
     print("🧠 Worker awake!")
-    if not get_settings().ai_api_key:
-        raise RuntimeError("Missing AI_API_KEY")
+    if not get_settings().gemini_api_key:
+        raise RuntimeError("Missing GEMINI_API_KEY")
 
     def load_context():
         names, ids = fetch_active_projects()

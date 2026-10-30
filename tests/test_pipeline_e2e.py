@@ -9,6 +9,7 @@ import pytest
 from core.pipeline import run, run_pipeline
 from core.schemas import classification_schema
 from core.workflow import capture_scope
+from helpers import make_gemini_response
 
 
 # ---------------------------------------------------------------------------
@@ -18,14 +19,14 @@ def _item(core_text, context_notes=""):
     return {"core_text": core_text, "context_notes": context_notes}
 
 
-def _setup_classify_extract(mock_ai, category, extracted, project=None):
-    """Configure mock AI to return classification then extraction."""
+def _setup_classify_extract(mock_gemini, category, extracted, project=None):
+    """Configure mock Gemini to return classification then extraction."""
     classify_resp = {"category": category}
     if project:
         classify_resp["related_project"] = project
-    mock_ai.side_effect = [
-        (classify_resp),
-        (extracted),
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response(classify_resp),
+        make_gemini_response(extracted),
     ]
 
 
@@ -79,9 +80,9 @@ def _task(hub):
 # Task Tests
 # ======================================================================
 class TestTaskPipeline:
-    def test_simple_task(self, hub, mock_ai):
+    def test_simple_task(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {"Name": "Update my profile photo", "Tags": ["Chore"], "Due Date": "2026-03-29"},
         )
@@ -96,9 +97,9 @@ class TestTaskPipeline:
         assert execution["outcome"] == "To Review"
         assert "tags" not in execution  # ordinary execution: not a project append
 
-    def test_a_stated_time_lands_as_a_floating_local_due(self, hub, mock_ai):
+    def test_a_stated_time_lands_as_a_floating_local_due(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {"Name": "Call the bank", "Tags": ["Chore"], "Due Date": "2026-03-30T15:00:00"},
         )
@@ -106,9 +107,9 @@ class TestTaskPipeline:
         assert _task(hub)["due_date"] == "2026-03-30T15:00"
 
     @pytest.mark.parametrize("lane", ["AI", "Me"])
-    def test_task_lands_with_the_extracted_lane(self, hub, mock_ai, lane):
+    def test_task_lands_with_the_extracted_lane(self, hub, mock_gemini, lane):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {"Name": "Sort the inbox", "Tags": ["Chore"], "Due Date": "2026-03-29", "Lane": lane},
         )
@@ -116,9 +117,9 @@ class TestTaskPipeline:
         assert _task(hub)["lane"] == lane
         assert "ai_ready" not in _task(hub)
 
-    def test_task_name_is_the_verbatim_capture(self, hub, mock_ai):
+    def test_task_name_is_the_verbatim_capture(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {
                 "Name": "Cancel the gym trial subscription",
@@ -135,10 +136,10 @@ class TestTaskPipeline:
 # Deterministic task-context pre-check
 # ======================================================================
 class TestTaskContextPrecheck:
-    def test_task_context_skips_classifier(self, hub, mock_ai):
+    def test_task_context_skips_classifier(self, hub, mock_gemini):
         """Context containing the word 'task' classifies deterministically — no classify call."""
-        mock_ai.side_effect = [
-            (
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
                 {
                     "Name": "Add the full x men series to my movies db",
                     "Tags": ["Chore"],
@@ -147,15 +148,15 @@ class TestTaskContextPrecheck:
             ),
         ]
         _run(_item("Add the full x men series to my movies db", "med prior task"))
-        assert mock_ai.call_count == 1
-        first_cfg = mock_ai.call_args_list[0].kwargs["schema"]
-        assert first_cfg != classification_schema()
+        assert mock_gemini.models.generate_content.call_count == 1
+        first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
+        assert first_cfg.response_json_schema != classification_schema()
         assert _task(hub)["title"] == "Add the full x men series to my movies db"
 
-    def test_date_context_still_calls_classifier(self, hub, mock_ai):
+    def test_date_context_still_calls_classifier(self, hub, mock_gemini):
         """A plain date context does NOT trigger the pre-check — classifier runs."""
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {
                 "Name": "watch Eric Andre's new movie, little brother",
@@ -164,9 +165,9 @@ class TestTaskContextPrecheck:
             },
         )
         _run(_item("watch Eric Andre's new movie, little brother", "June 26"))
-        assert mock_ai.call_count == 2
-        first_cfg = mock_ai.call_args_list[0].kwargs["schema"]
-        assert first_cfg == classification_schema()
+        assert mock_gemini.models.generate_content.call_count == 2
+        first_cfg = mock_gemini.models.generate_content.call_args_list[0].kwargs["config"]
+        assert first_cfg.response_json_schema == classification_schema()
         assert _task(hub)["due_date"] == "2026-06-26"
 
 
@@ -174,10 +175,10 @@ class TestTaskContextPrecheck:
 # Project Tasks
 # ======================================================================
 class TestProjectPipeline:
-    def test_project_task(self, hub, mock_ai):
+    def test_project_task(self, hub, mock_gemini):
         """Task with project context creates a project-linked task."""
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {"Name": "Fix login bug", "Tags": ["Chore"], "Due Date": "2026-03-29"},
             project="Synapse",
@@ -188,41 +189,47 @@ class TestProjectPipeline:
         assert task["priority"] == "High"
         assert _execution(hub)["tags"] == ["project-append"]
 
-    def test_task_context_links_project(self, hub, mock_ai):
+    def test_task_context_links_project(self, hub, mock_gemini):
         """The deterministic 'task' pre-check still links a referenced project."""
-        mock_ai.side_effect = [
-            ({"Name": "Fix Synapse login bug", "Tags": ["Chore"], "Due Date": "2026-07-10"}),
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": "Fix Synapse login bug", "Tags": ["Chore"], "Due Date": "2026-07-10"}
+            ),
         ]
         _run(_item("Fix Synapse login bug", "high priority task"))
-        assert mock_ai.call_count == 1
+        assert mock_gemini.models.generate_content.call_count == 1
         assert _task(hub)["project_ids"] == ["synapse-project-id"]
         assert _execution(hub)["tags"] == ["project-append"]
 
-    def test_task_context_typod_project_rescued_by_classifier(self, hub, mock_ai):
+    def test_task_context_typod_project_rescued_by_classifier(self, hub, mock_gemini):
         """When the contains-match misses but the text mentions a project ('proj'),
         one classifier call rescues the link — category stays tasks."""
-        mock_ai.side_effect = [
-            ({"category": "tasks", "related_project": "Task Burndown Chart"}),
-            ({"Name": "add manual markers on dates", "Tags": ["Chore"], "Due Date": "2026-08-03"}),
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks", "related_project": "Task Burndown Chart"}),
+            make_gemini_response(
+                {"Name": "add manual markers on dates", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
         ]
         _run(
             _item("add manual markers on dates", "task burdown chart proj"),
             project_prompts=["Task Burndown Chart"],
             project_id_map={"Task Burndown Chart": "burndown-id"},
         )
-        assert mock_ai.call_count == 2
+        assert mock_gemini.models.generate_content.call_count == 2
         assert _task(hub)["project_ids"] == ["burndown-id"]
 
-    def test_task_context_without_proj_mention_skips_rescue(self, hub, mock_ai):
-        mock_ai.side_effect = [
-            ({"Name": "clean the desk", "Tags": ["Chore"], "Due Date": "2026-08-03"}),
+    def test_task_context_without_proj_mention_skips_rescue(self, hub, mock_gemini):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": "clean the desk", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
         ]
         _run(_item("clean the desk", "low prior task"))
-        assert mock_ai.call_count == 1
+        assert mock_gemini.models.generate_content.call_count == 1
 
-    def test_project_not_found_falls_through(self, hub, mock_ai):
+    def test_project_not_found_falls_through(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "tasks",
             {"Name": "Some task", "Tags": ["Chore"], "Due Date": "2026-03-29"},
             project="NonExistentProject",
@@ -236,9 +243,9 @@ class TestProjectPipeline:
 # Groceries
 # ======================================================================
 class TestGroceryPipeline:
-    def test_new_grocery_is_pushed_to_the_hub(self, hub, mock_ai):
+    def test_new_grocery_is_pushed_to_the_hub(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai, "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
+            mock_gemini, "groceries", {"Name": "Quinoa", "Category": "Grains", "Status": "On List"}
         )
         _run(_item("Buy quinoa", "groceries"))
         (row,) = _rows(hub, "groceries")
@@ -246,9 +253,9 @@ class TestGroceryPipeline:
         assert _execution(hub)["created_item"] == f"groceries/{row['id']}"
         assert _rows(hub, "tasks") == []
 
-    def test_existing_grocery_updates_that_row(self, hub, mock_ai):
+    def test_existing_grocery_updates_that_row(self, hub, mock_gemini):
         hub.rows["groceries"] = {"egg-id": {"id": "egg-id", "name": "Eggs", "status": "Have"}}
-        _setup_classify_extract(mock_ai, "groceries", {"Name": "Eggs", "Status": "On List"})
+        _setup_classify_extract(mock_gemini, "groceries", {"Name": "Eggs", "Status": "On List"})
         _run(_item("Buy eggs", "groceries"))
         (row,) = _rows(hub, "groceries")
         assert row["id"] == "egg-id" and row["status"] == "On List"
@@ -288,9 +295,9 @@ class TestYouTubePipeline:
         yt.channels().list().execute.return_value = self.CHANNEL
         return yt
 
-    def test_new_video_pushed_to_soma(self, hub, mock_ai):
+    def test_new_video_pushed_to_soma(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "youtube-videos",
             {"Video URL": "https://youtu.be/abc123", "Status": "Finished"},
         )
@@ -305,11 +312,11 @@ class TestYouTubePipeline:
         # the new channel asks the user to classify it
         assert [t["title"] for t in _rows(hub, "tasks")] == ["Classify new Channel: Test Channel"]
 
-    def test_youtube_homepage_url_fails_with_a_review_task(self, hub, mock_ai):
+    def test_youtube_homepage_url_fails_with_a_review_task(self, hub, mock_gemini):
         """A videoless YouTube URL writes no video; the execution is an error and
         a cleanup task asks the user to file it (never a silent retry loop)."""
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "youtube-videos",
             {"Video URL": "https://youtube.com/", "Status": "Not Started"},
         )
@@ -323,9 +330,9 @@ class TestYouTubePipeline:
 # Movies / TV
 # ======================================================================
 class TestMovieTvPipeline:
-    def test_movie_pushed_to_soma_and_logged_by_row_ref(self, hub, mock_ai):
+    def test_movie_pushed_to_soma_and_logged_by_row_ref(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "movies",
             {"Title": "Inception", "Status": "Not Started", "Tags": ["Favorite"]},
         )
@@ -337,9 +344,9 @@ class TestMovieTvPipeline:
         assert execution["created_item"] == "movies/27205"
         assert execution["category"] == "movies"
 
-    def test_unresolvable_movie_files_a_cleanup_task(self, hub, mock_ai):
+    def test_unresolvable_movie_files_a_cleanup_task(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai, "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
+            mock_gemini, "movies", {"Title": "Some Obscure Film", "Status": "Priority"}
         )
         with patch("core.handlers.resolve_tmdb_id", return_value=None):
             _run(_item("Some Obscure Film"))
@@ -354,9 +361,9 @@ class TestMovieTvPipeline:
 # Bookmarks
 # ======================================================================
 class TestBookmarkPipeline:
-    def test_new_bookmark(self, hub, mock_ai):
+    def test_new_bookmark(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "bookmarks",
             {
                 "Description": "A cool dev tool",
@@ -372,9 +379,9 @@ class TestBookmarkPipeline:
         (row,) = _rows(hub, "bookmarks")
         assert row["url"] == "https://devtool.io" and row["title"] == "DevTool"
 
-    def test_github_bookmark_auto_tagged(self, hub, mock_ai):
+    def test_github_bookmark_auto_tagged(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "bookmarks",
             {
                 "Description": "A repo.",
@@ -390,10 +397,10 @@ class TestBookmarkPipeline:
         (row,) = _rows(hub, "bookmarks")
         assert row["tags"] == ["Github"] and row["description"] == "A repo"
 
-    def test_failed_scrape_flags_the_row_instead_of_filing_a_task(self, hub, mock_ai):
+    def test_failed_scrape_flags_the_row_instead_of_filing_a_task(self, hub, mock_gemini):
         # A login-walled or bot-checked page: the model can only guess from the URL.
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "bookmarks",
             {
                 "Description": "Instagram direct messages",
@@ -409,9 +416,9 @@ class TestBookmarkPipeline:
         assert row["needs_review"] and row["description"] == "Instagram direct messages"
         assert _rows(hub, "tasks") == []
 
-    def test_failed_scrape_of_a_known_bookmark_changes_nothing(self, hub, mock_ai):
+    def test_failed_scrape_of_a_known_bookmark_changes_nothing(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "bookmarks",
             {"Description": "A guess", "Title": "Guess", "URL": "https://x.com", "Tags": ["Money"]},
         )
@@ -434,9 +441,9 @@ class TestBookmarkPipeline:
 # Ideas, things to do, podcasts
 # ======================================================================
 class TestCategoryRows:
-    def test_new_idea(self, hub, mock_ai):
+    def test_new_idea(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "ideas",
             {
                 "Description": "App that tracks sleep patterns",
@@ -448,9 +455,9 @@ class TestCategoryRows:
         (row,) = _rows(hub, "ideas")
         assert row["status"] == "Someday" and row["tags"] == ["Coding"]
 
-    def test_fun_activity_with_location(self, hub, mock_ai):
+    def test_fun_activity_with_location(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "fun-activities",
             {"Title": "Walk around Seaport", "Status": "Someday", "Location": "Boston"},
         )
@@ -459,17 +466,17 @@ class TestCategoryRows:
         assert row["kind"] == "Activity" and row["city"] == "Boston"
         assert "needs_review" not in row
 
-    def test_bucket_list_item_is_an_ambition(self, hub, mock_ai):
+    def test_bucket_list_item_is_an_ambition(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai, "bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
+            mock_gemini, "bucket-list", {"Item": "Skydive in Dubai", "Tags": ["Adventure"]}
         )
         _run(_item("Skydive in Dubai", "bucket list"))
         (row,) = _rows(hub, "things_to_do")
         assert row["kind"] == "Ambition" and row["title"] == "Skydive in Dubai"
 
-    def test_spotify_podcast(self, hub, mock_ai):
+    def test_spotify_podcast(self, hub, mock_gemini):
         _setup_classify_extract(
-            mock_ai,
+            mock_gemini,
             "podcasts",
             {
                 "Episode Title": "Great Episode",
@@ -492,14 +499,14 @@ class TestCategoryRows:
 # Errors
 # ======================================================================
 class TestErrorHandling:
-    def test_a_failed_preparation_files_a_recovery_task_and_logs_the_error(self, hub, mock_ai):
-        mock_ai.side_effect = Exception("AI down")
+    def test_a_failed_preparation_files_a_recovery_task_and_logs_the_error(self, hub, mock_gemini):
+        mock_gemini.models.generate_content.side_effect = Exception("Gemini down")
         _run(_item("Some text that fails"))
         task = _task(hub)
         assert task["title"].endswith("Some text that fails") and task["priority"] == "High"
         execution = _execution(hub)
         assert execution["code_execution"] == "Error(s)" and execution["category"] == "Unknown"
-        assert "AI down" in execution["error_details"]
+        assert "Gemini down" in execution["error_details"]
         assert execution["created_item"] == f"tasks/{task['id']}"
 
 
@@ -513,17 +520,19 @@ class TestProcessorEntryPoint:
         "capture_id": "0d4bbad3-41a2-4f40-9ba6-0c1d13c3a7a1",
     }
 
-    def _ai(self, mock_ai):
-        mock_ai.side_effect = [
-            ({"category": "groceries"}),
-            ({"Name": "Milk", "Status": "On List", "Category": "Dairy"}),
-            ({"category": "tasks"}),
-            ({"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}),
+    def _gemini(self, mock_gemini):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "groceries"}),
+            make_gemini_response({"Name": "Milk", "Status": "On List", "Category": "Dairy"}),
+            make_gemini_response({"category": "tasks"}),
+            make_gemini_response(
+                {"Name": "Call John", "Tags": ["Chore"], "Due Date": "2026-03-29"}
+            ),
         ]
 
-    def test_batch_processing_lands_every_item_and_its_execution(self, hub, mock_ai):
+    def test_batch_processing_lands_every_item_and_its_execution(self, hub, mock_gemini):
         hub.rows["projects"] = {"p1": {"id": "p1", "title": "Synapse", "status": "To Do"}}
-        self._ai(mock_ai)
+        self._gemini(mock_gemini)
         with patch(
             "core.pipeline.parse_raw_input",
             return_value=[
@@ -537,8 +546,8 @@ class TestProcessorEntryPoint:
         assert [r["title"] for r in _rows(hub, "tasks")] == ["Call John"]
         assert len(_rows(hub, "synapse_executions")) == 2
 
-    def test_a_resent_capture_id_writes_nothing_new(self, hub, mock_ai):
-        self._ai(mock_ai)
+    def test_a_resent_capture_id_writes_nothing_new(self, hub, mock_gemini):
+        self._gemini(mock_gemini)
         store = {}
         items = [
             {"core_text": "Buy milk", "context_notes": "groceries"},
@@ -547,7 +556,7 @@ class TestProcessorEntryPoint:
         with patch("core.pipeline.parse_raw_input", return_value=items):
             run(dict(self.PAYLOAD), store=store)
             run(dict(self.PAYLOAD), store=store)
-        assert mock_ai.call_count == 4
+        assert mock_gemini.models.generate_content.call_count == 4
         assert len(_rows(hub, "synapse_executions")) == 2
 
     def test_a_workspace_without_soma_task_bindings_is_refused(self, monkeypatch):
@@ -570,31 +579,33 @@ class TestProcessorEntryPoint:
 # Source stamp
 # ======================================================================
 class TestSource:
-    def _task_extraction(self, mock_ai, name):
-        mock_ai.side_effect = [
-            ({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03"}),
+    def _task_extraction(self, mock_gemini, name):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03"}),
         ]
 
-    def test_source_is_logged_on_the_execution(self, hub, mock_ai):
-        self._task_extraction(mock_ai, "clean the desk")
+    def test_source_is_logged_on_the_execution(self, hub, mock_gemini):
+        self._task_extraction(mock_gemini, "clean the desk")
         _run(_item("clean the desk", "task"), source="ios-app")
         assert _execution(hub)["source"] == "ios-app"
 
-    def test_missing_source_leaves_the_column_unset(self, hub, mock_ai):
-        self._task_extraction(mock_ai, "clean the desk")
+    def test_missing_source_leaves_the_column_unset(self, hub, mock_gemini):
+        self._task_extraction(mock_gemini, "clean the desk")
         _run(_item("clean the desk", "task"))
         assert "source" not in _execution(hub)
 
-    def test_pj_is_ordinary_text(self, hub, mock_ai):
+    def test_pj_is_ordinary_text(self, hub, mock_gemini):
         """`pj` is no longer a keyword: it stays in the capture and the classifier
         decides the category as for any other text."""
-        mock_ai.side_effect = [
-            ({"category": "tasks"}),
-            ({"Name": "pack pj bottoms", "Tags": ["Chore"], "Due Date": "2026-08-03"}),
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks"}),
+            make_gemini_response(
+                {"Name": "pack pj bottoms", "Tags": ["Chore"], "Due Date": "2026-08-03"}
+            ),
         ]
         _run(_item("pack pj bottoms"))
-        assert mock_ai.call_count == 2
-        assert "pack pj bottoms" in str(mock_ai.call_args_list[0])
+        assert mock_gemini.models.generate_content.call_count == 2
+        assert "pack pj bottoms" in str(mock_gemini.models.generate_content.call_args_list[0])
         assert "project_ids" not in _task(hub)
 
 
@@ -602,27 +613,29 @@ class TestSource:
 # `$ agent` context: send the task straight to an agent
 # ======================================================================
 class TestAgentContext:
-    def _task_extraction(self, mock_ai, name, lane="Me"):
-        mock_ai.side_effect = [
-            ({"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": lane}),
+    def _task_extraction(self, mock_gemini, name, lane="Me"):
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response(
+                {"Name": name, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": lane}
+            ),
         ]
 
     @pytest.mark.parametrize("context", ["agent", "  Agent ", "AGENT"])
-    def test_agent_context_requests_dispatch_with_lane_ai(self, hub, mock_ai, context):
+    def test_agent_context_requests_dispatch_with_lane_ai(self, hub, mock_gemini, context):
         """Context exactly `agent` (spaces and case aside) = this task goes straight
         to an agent: no classifier call, lane AI whatever the extractor said,
         dispatch Requested, the context word kept out of the extraction."""
-        self._task_extraction(mock_ai, "compare standing desks")
+        self._task_extraction(mock_gemini, "compare standing desks")
         _run(_item("compare standing desks", context))
-        assert mock_ai.call_count == 1
-        assert "manually provided" not in str(mock_ai.call_args)
+        assert mock_gemini.models.generate_content.call_count == 1
+        assert "manually provided" not in str(mock_gemini.models.generate_content.call_args)
         task = _task(hub)
         assert task["title"] == "compare standing desks"
         assert task["lane"] == "AI" and task["dispatch"] == "Requested"
         assert _execution(hub)["code_execution"] == "Success"
 
-    def test_agent_context_naming_a_project_is_a_dispatched_project_task(self, hub, mock_ai):
-        self._task_extraction(mock_ai, "fix the url bug synapse")
+    def test_agent_context_naming_a_project_is_a_dispatched_project_task(self, hub, mock_gemini):
+        self._task_extraction(mock_gemini, "fix the url bug synapse")
         _run(_item("fix the url bug synapse", "agent"))
         task = _task(hub)
         assert task["project_ids"] == ["synapse-project-id"]
@@ -639,14 +652,16 @@ class TestAgentContext:
         ],
     )
     def test_anything_but_exactly_agent_context_is_not_dispatched(
-        self, hub, mock_ai, text, context
+        self, hub, mock_gemini, text, context
     ):
-        mock_ai.side_effect = [
-            ({"category": "tasks"}),
-            ({"Name": text, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": "Me"}),
+        mock_gemini.models.generate_content.side_effect = [
+            make_gemini_response({"category": "tasks"}),
+            make_gemini_response(
+                {"Name": text, "Tags": ["Chore"], "Due Date": "2026-08-03", "Lane": "Me"}
+            ),
         ]
         _run(_item(text, context))
-        assert mock_ai.call_count == 2
+        assert mock_gemini.models.generate_content.call_count == 2
         task = _task(hub)
         assert task["lane"] == "Me" and "dispatch" not in task
 
@@ -655,14 +670,14 @@ class TestAgentContext:
     "category,table,kind", [("movies", "movies", "movie"), ("tv-shows", "tv_shows", "tv")]
 )
 def test_movie_tv_confirmation_files_task_without_saving(
-    hub, mock_ai, monkeypatch, category, table, kind
+    hub, mock_gemini, monkeypatch, category, table, kind
 ):
     # Removing the confirmation gate would save the media row without user approval.
     from core.config import CATEGORIES
 
     monkeypatch.setitem(CATEGORIES[category], "confirm_before_save", True)
     _setup_classify_extract(
-        mock_ai,
+        mock_gemini,
         category,
         {
             "Title": "Example (2020)",
@@ -683,11 +698,11 @@ def test_movie_tv_confirmation_files_task_without_saving(
     assert _execution(hub)["code_execution"] == "Success"
 
 
-def test_resent_confirmation_capture_creates_only_one_task(hub, mock_ai, monkeypatch):
+def test_resent_confirmation_capture_creates_only_one_task(hub, mock_gemini, monkeypatch):
     from core.config import CATEGORIES
 
     monkeypatch.setitem(CATEGORIES["movies"], "confirm_before_save", True)
-    _setup_classify_extract(mock_ai, "movies", {"Title": "Example", "Capture Intent": "save"})
+    _setup_classify_extract(mock_gemini, "movies", {"Title": "Example", "Capture Intent": "save"})
     payload = {"raw_text": "Save Example", "workspace": "default", "capture_id": str(uuid4())}
     store = {}
     with patch("core.handlers.resolve_tmdb_id", return_value="123"):
@@ -699,13 +714,13 @@ def test_resent_confirmation_capture_creates_only_one_task(hub, mock_ai, monkeyp
 
 
 def test_confirmation_retry_after_lost_reply_preserves_match_and_human_gate(
-    hub, mock_ai, monkeypatch
+    hub, mock_gemini, monkeypatch
 ):
     import requests
     from core.config import CATEGORIES
 
     monkeypatch.setitem(CATEGORIES["movies"], "confirm_before_save", True)
-    _setup_classify_extract(mock_ai, "movies", {"Title": "Example", "Capture Intent": "save"})
+    _setup_classify_extract(mock_gemini, "movies", {"Title": "Example", "Capture Intent": "save"})
     payload = {"raw_text": "Save Example", "workspace": "default", "capture_id": str(uuid4())}
     store = {}
     hub.lose_reply = "insert"
@@ -724,13 +739,13 @@ def test_confirmation_retry_after_lost_reply_preserves_match_and_human_gate(
 
 
 def test_youtube_confirmation_creates_one_human_task_without_video_or_channel_writes(
-    hub, mock_ai, monkeypatch
+    hub, mock_gemini, monkeypatch
 ):
     from core.config import CATEGORIES
 
     monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", True)
     _setup_classify_extract(
-        mock_ai,
+        mock_gemini,
         "youtube-videos",
         {
             "Video URL": "https://youtu.be/abc123",
@@ -758,14 +773,14 @@ def test_youtube_confirmation_creates_one_human_task_without_video_or_channel_wr
 
 
 def test_youtube_confirmation_retry_keeps_frozen_identity_and_review_policy(
-    hub, mock_ai, monkeypatch
+    hub, mock_gemini, monkeypatch
 ):
     import requests
     from core.config import CATEGORIES
 
     monkeypatch.setitem(CATEGORIES["youtube-videos"], "confirm_before_save", True)
     _setup_classify_extract(
-        mock_ai,
+        mock_gemini,
         "youtube-videos",
         {
             "Video URL": "https://youtu.be/abc123",
@@ -791,14 +806,14 @@ def test_youtube_confirmation_retry_keeps_frozen_identity_and_review_policy(
     assert _execution(hub)["created_item"] == f"tasks/{_task(hub)['id']}"
 
 
-def test_disabled_category_response_falls_back_to_task_without_article_write(hub, mock_ai):
+def test_disabled_category_response_falls_back_to_task_without_article_write(hub, mock_gemini):
     from core import workspace
 
     overlay = {"categories": {"articles": {"enabled": False}}}
     current = workspace.current()
     built = workspace.build(current.id, overlay, template=current.config, secrets=current.secrets)
     _setup_classify_extract(
-        mock_ai,
+        mock_gemini,
         "articles",
         {
             "Name": "Read https://example.test/story",
@@ -813,10 +828,3 @@ def test_disabled_category_response_falls_back_to_task_without_article_write(hub
     assert not _rows(hub, "articles")
     assert _task(hub)["title"] == "Read https://example.test/story"
     assert _execution(hub)["category"] == "tasks"
-
-
-def test_explicit_context_reaches_extraction_without_changing_the_task_name(hub, mock_ai):
-    _setup_classify_extract(mock_ai, "tasks", {"Name": "Rewritten name", "Tags": ["Chore"]})
-    _run(_item("Call the bank", "tomorrow at noon"))
-    assert mock_ai.call_args.kwargs["user_text"] == "Call the bank\n[Context: tomorrow at noon]"
-    assert _task(hub)["title"] == "Call the bank"

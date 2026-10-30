@@ -11,7 +11,7 @@ Synapse eliminates the friction of manual data entry. It accepts unstructured, n
 - **[Modal](https://modal.com)** hosts everything. `app.py` is the single deployment shim — image, secrets, endpoints. All business logic lives in `src/core/` as plain Python with **no Modal imports**.
 - **`webhook`** (operator, Modal proxy auth) and **`capture`** (Receptor, per-device bearer token) validate the payload and `spawn()` the worker — **spawn IS the queue** (no Pub/Sub).
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1`: one serialized worker owns the capture journals, and name/url dedupe is query-then-write; retries with backoff). Runs `core.pipeline.run`.
-- **Groq** (`qwen/qwen3.8-27b` by default) does parsing, classification, and extraction with strict JSON output. The OpenAI-compatible endpoint and model are configurable.
+- **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
 - **The Soma catalog is the contract.** Each column's type, required flag, select options and their meanings, defaults and enforced invariants come from the hub's `GET /v1/catalog` at run time (cached per workspace in the `synapse-state` Volume for an hour, revalidated by ETag, dropped when the hub rejects a write). Synapse carries no copy of the schema; `src/core/template/prompts.yaml` only says how to read text into it.
 - **App secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — the app's own provider keys only.
 - **Workspaces** hold everything that belongs to one user: their workflow table bindings, wording overrides, place tags and Soma hub credentials. They live in the `synapse-state` Volume, edited with `just workspace ...`; each device token files its captures into one workspace. The repo carries only the generic template.
@@ -22,7 +22,7 @@ flowchart LR
     O["just recept / agents"] -->|"Modal-Key / Modal-Secret"| W["webhook"]
     C -->|"process.spawn()"| P["process worker<br/>(core.pipeline.run)"]
     W -->|"process.spawn()"| P
-    P -->|"parse / classify / extract"| G["Groq"]
+    P -->|"parse / classify / extract"| G["Gemini"]
     P -->|"enrichment"| X["Spotify · YouTube · TMDB ·<br/>web scrape"]
     P -->|"GET /v1/catalog"| K["Soma catalog"]
     P -->|"rows: tasks, categories,<br/>execution log"| H["Soma hub tables"]
@@ -35,7 +35,7 @@ uv sync              # install everything
 just test            # unit tests (no network)
 just check           # ruff lint + format check
 just dev             # live-reload deploy against real Modal infra (modal serve)
-just test-integration  # real model calls (key via 1Password)
+just test-integration  # real Gemini calls (key via 1Password)
 just recept "Buy eggs $ groceries"   # send one thought to the deployed webhook
 ```
 
@@ -104,7 +104,7 @@ src/core/template/prompts.yaml  # prompts + per-category table wiring and phrasi
 src/core/catalog.py      # the Soma catalog slice prompts are built from
 src/core/workspace.py    # a user's overlay + credentials, the active workspace
 store.py                 # durable key -> JSON store on the synapse-state Volume
-tests/            # pytest suite (unit + test_integration.py for real model)
+tests/            # pytest suite (unit + test_integration.py for real Gemini)
 scripts/          # operator clients: workspaces, device tokens, the webhook
 .env.tpl          # secrets manifest (op:// refs)
 ```
@@ -113,33 +113,16 @@ scripts/          # operator clients: workspaces, device tokens, the webhook
 
 Push to `main` → GitHub Actions runs `pytest -m "not integration"`, syncs the app secrets and runs `modal deploy app.py` (Modal tokens loaded from 1Password).
 
-## AI credentials and configuration
+## Gemini credentials
 
-Create a dedicated API key for this app and supply it as `AI_API_KEY`.
-The committed `.env.tpl` references the app's `GROQ_API_KEY` vault field;
-local development and live tests use `op run --env-file=.env.tpl -- <command>`.
-No Google Cloud project or billing configuration is needed for model calls.
-YouTube enrichment still requires its own Google API key.
-
-The lazy settings surface accepts `AI_BASE_URL` (default
-`https://api.groq.com/openai/v1`), `AI_MODEL` (default
-`qwen/qwen3.8-27b`), and `AI_REASONING_EFFORT` (default `low`). An optional
-`AI_FALLBACK_MODEL` is used once on a missing-model 404; no fallback is enabled
-by default. Choose models that support strict JSON Schema and the selected
-reasoning effort. A future provider switch changes these settings and the key,
-then runs the same live tests before deployment.
-
-Groq's Free plan has per-minute and daily token limits, shared across an
-organization. A capture usually needs classification and extraction calls;
-item/context delimiters add parsing. The transport honors short `Retry-After`
-limits, retries transient errors and incomplete JSON up to four attempts, and
-fails explicitly on a daily-quota wait longer than a minute. The worker stays
-serialized. Free access and model availability can change.
-
-Optional output properties are nullable during strict decoding and removed
-when null, so an absent field does not clear a stored value. Parser arrays are
-wrapped in an object only at the HTTP boundary. Integration tests exercise the
-same production transport with a synthetic workspace and no data writes.
+Synapse uses a dedicated Google Cloud project and a dedicated API key restricted
+to `generativelanguage.googleapis.com`. Enable that API, attach the project
+to the intended billing account, and store the key as `GEMINI_API_KEY` in
+this project's environment. Never copy an API key from another application.
+Gemini request quotas are per project, so separate keys in one project do
+not isolate quota ([Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)).
+Verify a small `generateContent` request with the configured model before
+syncing a replacement key; listing models does not verify billing credits.
 
 ## Workflow capture and retained execution content
 

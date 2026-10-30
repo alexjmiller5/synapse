@@ -7,11 +7,18 @@ at the right time. A missing key returns None, degrading just that integration.
 
 from functools import lru_cache
 
+import google.genai as genai
 import spotipy
 from googleapiclient.discovery import build
 from spotipy.oauth2 import SpotifyClientCredentials
 
 from core.settings import get_settings
+
+
+@lru_cache
+def get_gemini_client():
+    key = get_settings().gemini_api_key
+    return genai.Client(api_key=key) if key else None
 
 
 @lru_cache

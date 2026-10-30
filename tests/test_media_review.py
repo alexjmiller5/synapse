@@ -120,10 +120,11 @@ def test_authorized_note_still_requires_a_text_value(monkeypatch, media_hub, val
     assert not media_hub.writes
 
 
-def test_text_input_is_classified_by_the_real_classifier(mock_ai):
+def test_text_input_is_classified_by_the_real_classifier(mock_gemini):
     """The classifier answers {"category": ...}; the gateway reads that field."""
+    from helpers import make_gemini_response
 
-    mock_ai.return_value = {"category": "movies"}
+    mock_gemini.models.generate_content.return_value = make_gemini_response({"category": "movies"})
     assert media_resolution.classify("need to watch dune") == "movies"
 
 

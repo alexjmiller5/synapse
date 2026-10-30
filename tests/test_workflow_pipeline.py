@@ -7,6 +7,7 @@ import pytest
 import requests
 
 from core import pipeline, workspace
+from helpers import make_gemini_response
 
 
 CAPTURE = "e8bfc1e9-6f0e-4c15-8764-7c98d4b3a2ab"
@@ -54,7 +55,7 @@ def workflow(monkeypatch):
 
 
 def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
-    workflow, monkeypatch, mock_ai
+    workflow, monkeypatch, mock_gemini
 ):
     remote, store = {}, {}
 
@@ -72,7 +73,9 @@ def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
         }
 
     monkeypatch.setattr("core.soma_hub.insert_rows", send)
-    mock_ai.side_effect = [({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})]
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})
+    ]
     payload = {
         "raw_text": "Do a thing",
         "source": "test-client",
@@ -94,14 +97,16 @@ def test_logging_timeout_restarts_with_same_task_and_execution_and_no_reparse(
     assert execution["created_item"] == f"work_items/{task['id']}"
     assert execution["source"] == "test-client"
     assert pipeline.parse_raw_input.call_count == 1
-    assert mock_ai.call_count == 1
+    assert mock_gemini.models.generate_content.call_count == 1
 
 
 def test_capture_lands_task_and_execution_through_the_real_insert_transport(
-    workflow, media_hub, mock_ai
+    workflow, media_hub, mock_gemini
 ):
     """The hub rejects insert rows without an edit clock; every capture must still land."""
-    mock_ai.side_effect = [({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})]
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response({"Name": "Do a thing", "Tags": ["Chore"], "Due Date": "2026-01-01"})
+    ]
     store = {}
     payload = {
         "raw_text": "Do a thing",
@@ -118,17 +123,17 @@ def test_capture_lands_task_and_execution_through_the_real_insert_transport(
     assert next(v for k, v in store.items() if k.startswith("capture:"))["completed"]
 
 
-def test_missing_durable_identity_or_store_fails_before_any_capture_effect(workflow, mock_ai):
+def test_missing_durable_identity_or_store_fails_before_any_capture_effect(workflow, mock_gemini):
     with pytest.raises(ValueError):
         pipeline.run({"raw_text": "One"}, store={})
-    assert not mock_ai.called
+    assert not mock_gemini.models.generate_content.called
 
 
 def test_missing_model_config_does_not_mark_capture_complete(workflow, monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "get_settings",
-        Mock(return_value=type("Settings", (), {"ai_api_key": None})()),
+        Mock(return_value=type("Settings", (), {"gemini_api_key": None})()),
     )
     store = {}
     with pytest.raises(RuntimeError):
@@ -138,10 +143,12 @@ def test_missing_model_config_does_not_mark_capture_complete(workflow, monkeypat
     assert all(not value.get("completed", False) for value in store.values())
 
 
-def test_project_context_is_frozen_across_restart(workflow, monkeypatch, mock_ai):
+def test_project_context_is_frozen_across_restart(workflow, monkeypatch, mock_gemini):
     pipeline.fetch_active_projects.return_value = (["Alpha"], {"Alpha": "project-a"})
     pipeline.parse_raw_input.return_value = [{"core_text": "Alpha task", "context_notes": "task"}]
-    mock_ai.side_effect = [({"Name": "Alpha task", "Tags": ["Chore"]})]
+    mock_gemini.models.generate_content.side_effect = [
+        make_gemini_response({"Name": "Alpha task", "Tags": ["Chore"]})
+    ]
     sent = []
 
     def send(table, rows):
@@ -177,11 +184,13 @@ def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(workflow, m
 
 
 def test_identical_text_with_distinct_capture_ids_remains_two_operations(
-    workflow, monkeypatch, mock_ai
+    workflow, monkeypatch, mock_gemini
 ):
     send = Mock(return_value={})
     monkeypatch.setattr("core.soma_hub.insert_rows", send)
-    mock_ai.return_value = {"Name": "Do a thing", "Tags": ["Chore"]}
+    mock_gemini.models.generate_content.return_value = make_gemini_response(
+        {"Name": "Do a thing", "Tags": ["Chore"]}
+    )
     store = {}
     for identity in [CAPTURE, "12a98ba3-7951-48a2-9712-3a1a28d5de02"]:
         pipeline.run(
@@ -191,10 +200,12 @@ def test_identical_text_with_distinct_capture_ids_remains_two_operations(
     assert len({call.args[1][0]["id"] for call in send.call_args_list}) == 4
 
 
-def test_large_unicode_and_ai_metadata_survive_capture_logging(workflow, monkeypatch, mock_ai):
+def test_large_unicode_and_ai_metadata_survive_capture_logging(workflow, monkeypatch, mock_gemini):
     body = "長い🧪" * 4000
     pipeline.parse_raw_input.return_value = [{"core_text": body, "context_notes": "task"}]
-    mock_ai.return_value = {"Name": body, "Tags": ["Chore"], "Notes": body}
+    mock_gemini.models.generate_content.return_value = make_gemini_response(
+        {"Name": body, "Tags": ["Chore"], "Notes": body}
+    )
     send = Mock(return_value={})
     monkeypatch.setattr("core.soma_hub.insert_rows", send)
     pipeline.run({"raw_text": body, "workspace": workflow.id, "capture_id": CAPTURE}, store={})
@@ -212,7 +223,7 @@ def test_a_workspace_without_a_tasks_binding_is_rejected_before_side_effects(wor
 
 
 def test_preparation_failure_freezes_one_actionable_error_across_logging_retry(
-    workflow, monkeypatch, mock_ai
+    workflow, monkeypatch, mock_gemini
 ):
     remote, store = {}, {}
 

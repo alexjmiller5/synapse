@@ -49,7 +49,7 @@ whatever the extractor said, `Dispatch` Requested (mapped by the workspace's
 tasks binding; Agent Dispatch, a separate project, consumes it), context
 dropped. `agent` anywhere else, or with other context words, is ordinary text. A workspace without a `Dispatch` mapping just gets a lane-AI task.
 
-1. `parse_raw_input` - AI splits `@`-separated items, pulls `$` context;
+1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
    skipped entirely (verbatim pass-through) when the text has no `@`/`$` —
    the LLM round-trip has mangled URLs it was meant to copy
 2. Classify → category (+ optional `related_project`)
@@ -111,7 +111,7 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   endpoint takes it from the token, never the body. The operator webhook takes
   an optional `workspace` field (default `default`). Capture journals are
   per workspace.
-- App credentials (AI, TMDB, Spotify, YouTube) stay in `.env.tpl`; a
+- App credentials (Gemini, TMDB, Spotify, YouTube) stay in `.env.tpl`; a
   workspace's Soma hub URL and token are workspace secrets
   (`just workspace set-secrets <id>`, KEY=VALUE on stdin). Rotating one =
   re-run set-secrets from its 1Password item. The `default` workspace's hub
@@ -149,12 +149,12 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
 - Secrets are env vars ONLY (Modal secret `synapse` in the cloud, `op run`
   locally). `.env.tpl` is the canonical manifest (op:// refs, committed).
   `core/settings.py` is the typed surface: a pydantic-settings `Settings`
-  (field `ai_api_key` from env `AI_API_KEY`) read via the lru_cached
+  (field `gemini_api_key` ← env `GEMINI_API_KEY`) read via the lru_cached
   `get_settings()`. **Only ever call `get_settings()` inside a function, never
   at module import** — Modal injects secrets at container start, so an
   import-time read caches stale `None`s (this bit TMDB once). External clients
   follow the same rule: `core/clients.py` exposes lazy
-  `get_spotify()`, `get_youtube()` (lru_cached, built
+  `get_gemini_client()`, `get_spotify()`, `get_youtube()` (lru_cached, built
   on first use, `None` if the key is absent) — nothing is instantiated at
   import.
 - **Every category is a Soma table.** A stanza's `table` names it; every
@@ -243,18 +243,16 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   soma timestamps are the exception and use `now_utc_iso_ms()`: sync
   ordering there is a lexicographic string compare, so UTC with milliseconds
   and a trailing `Z` is load-bearing.
-- Model calls go through `core.ai_engine.generate_with_retry`, returning plain
-  JSON values. `Settings` owns `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` and
-  `AI_REASONING_EFFORT`; defaults select Groq Qwen3.8-27B with low reasoning.
-  `AI_FALLBACK_MODEL` is optional and disabled by default; a configured fallback
-  runs once on a 404. Short 429 Retry-After waits, transient network/5xx errors,
-  malformed JSON and incomplete completions retry up to four attempts. Daily
-  quota waits longer than a minute fail instead of holding the worker.
-- The transport uses strict JSON Schema: optional fields are nullable and nulls
-  are omitted from the returned values, preserving absent-field semantics.
-  Parser arrays are wrapped/unwrapped at the HTTP boundary. Catalog schema enums
-  stay capped at `ai_engine.MAX_ENUM_OPTIONS` (100) to bound grammar and prompt
-  size; larger fields remain unconstrained strings.
+- Gemini calls go through `core.ai_engine.generate_with_retry` (tenacity on
+  5xx/bad JSON, one-shot fallback to `GEMINI_FALLBACK_MODEL` on 404). The
+  model name lives in ONE place: `core.ai_engine.GEMINI_MODEL`
+  (env-overridable).
+- Response-schema enums are capped at `ai_engine.MAX_ENUM_OPTIONS` (100):
+  Gemini 400s (INVALID_ARGUMENT) when an enum of distinct real-world names
+  compiles to too large a constrained-decoding grammar (~150+). Past the cap
+  a field silently loses its enum + prompt options dump. Open-world fields
+  (e.g. podcasts `Podcast Name` / `Producer`) are catalog `text` columns, so
+  they never enum at all.
 
 ## Commands
 
@@ -265,8 +263,8 @@ The justfile is the interface, not a script catalog; one-offs go in
 |---|---|
 | `just dev` | Live-reload dev against real Modal infra (`modal serve`) |
 | `just test` / `just check` / `just fmt` | pytest (unit) / ruff read-only / ruff fix |
-| `just test-integration` | Real-provider suite (key via 1Password) |
-| `just eval-classifier` | Classifier-prompt eval vs `scripts/eval_cases.yaml` (real provider) |
+| `just test-integration` | Real-Gemini suite (key via 1Password) |
+| `just eval-classifier` | Classifier-prompt eval vs `scripts/eval_cases.yaml` (real Gemini) |
 | `just logs` | Stream deployed-app logs |
 | `just sync-secrets` | Push `.env.tpl` → Modal secret store |
 | `just deploy` | test + sync-secrets + `modal deploy` — CI's job, not yours (below) |
@@ -288,7 +286,8 @@ functions stay thin enough to not need tests (webhook validation is the pure
 `core.pipeline.payload_error`, tested in `tests/test_webhook.py`).
 `tests/conftest.py` seeds fake secrets as env vars, serves
 `tests/fixtures/catalog.json` through `helpers.CatalogHub` (the projection
-route, refusing an uncataloged column as the hub does) and mocks the AI generation boundary and external clients — no test touches the network.
+route, refusing an uncataloged column as the hub does) and swaps all external
+clients (`core.clients` globals) for MagicMocks — no test touches the network.
 `tests/media_hub.py`'s `SyntheticHub` stands in for the hub's row routes;
 end-to-end tests run captures through the real journal and assert on its rows.
 
@@ -328,15 +327,13 @@ Configure saved_column only after its cataloged field exists; explicit saves
 without that mapping require review. Consumer/provider credentials remain outside
 the capture result and never enter native apps.
 
-## AI provider isolation
+## Gemini isolation
 
-The model credential is dedicated to Synapse and stored in its ENV item;
-`.env.tpl` maps the `GROQ_API_KEY` field to runtime `AI_API_KEY`. Never reuse
-another app's key. Provider quotas may remain organization-scoped even with a
-dedicated key. A credential/model cutover requires authenticated generation and
-the classifier, parser and extraction tests before deployment. YouTube remains
-an independent Google API integration; retiring a model credential does not
-retire its project or credentials.
+Use a dedicated Google Cloud project and API key restricted to
+`generativelanguage.googleapis.com`. Request quota is per project, not per
+key; billing account credit or spending controls may still be shared.
+A credential cutover requires a successful `generateContent` request with
+the configured model before deployment. Never reuse another app's key.
 
 ## Media gateway contract
 

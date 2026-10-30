@@ -56,8 +56,8 @@ def test_store_round_trip_keeps_secrets_out_of_the_summary():
 
 
 def test_unknown_secret_names_are_refused():
-    with pytest.raises(ws.InvalidOverlay, match="AI"):
-        ws.save({}, "alpha", secrets={"AI_API_KEY": "x"})
+    with pytest.raises(ws.InvalidOverlay, match="GEMINI"):
+        ws.save({}, "alpha", secrets={"GEMINI_API_KEY": "x"})
     with pytest.raises(ws.InvalidOverlay, match="notion_integration_token"):
         ws.save({}, "alpha", secrets={"notion_integration_token": "x"})
 

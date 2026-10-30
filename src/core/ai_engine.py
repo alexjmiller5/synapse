@@ -1,26 +1,31 @@
 import json
-import copy
-import time
-from email.utils import parsedate_to_datetime
-from math import isfinite
+import os
 
-import requests
-
+from google.genai import types
+from google.genai.errors import ClientError, ServerError
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception,
+    retry_if_exception_type,
 )
 
 from core import catalog
 from core.config import CATEGORIES, PROMPTS
-from core.settings import get_settings
+from core.clients import get_gemini_client
 from core.schemas import PARSER_SCHEMA
 from core.timeutils import today_eastern
 from core.workflow import binding_for, task_day
 
-# Bound schema grammar size and prompt length for catalog option lists.
+# The ONE place the model names live — overridable via env.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-latest")
+
+# Gemini 400s (INVALID_ARGUMENT) when a response-schema enum compiles to too
+# large a constrained-decoding grammar — empirically ~150+ distinct real-world
+# names (2026-07: movies 'Director' hit 425, 'Famous Cast Members' 1987).
+# Past this cap a field loses its enum (and its prompt options dump) instead
+# of failing every capture in the category.
 MAX_ENUM_OPTIONS = 100
 
 # The value shapes of a catalog date_or_datetime column Synapse writes: a date,
@@ -37,7 +42,7 @@ DATE_OR_DATETIME_FORMAT = (
 def safe_json_load(text):
     """Helper to parse JSON and raise specific error if it fails.
 
-    An empty/None model response
+    An empty/None response (Gemini sometimes returns nothing on a safety block)
     raises ValueError — the retry predicate catches it — instead of letting
     json.loads(None) throw an un-retryable TypeError.
     """
@@ -49,126 +54,48 @@ def safe_json_load(text):
         raise ValueError("Malformed JSON from AI")
 
 
-def _strict_schema(schema):
-    """Strict decoding represents optional values as null; callers still see absence."""
-    out = copy.deepcopy(schema)
-    if out.get("type") == "object":
-        required = set(out.get("required", []))
-        props = out.get("properties", {})
-        out["properties"] = {
-            name: _strict_schema(spec)
-            if name in required
-            else {"anyOf": [_strict_schema(spec), {"type": "null"}]}
-            for name, spec in props.items()
-        }
-        out["required"] = list(props)
-        out["additionalProperties"] = False
-    elif out.get("type") == "array":
-        out["items"] = _strict_schema(out["items"])
-    return out
-
-
-def _omit_nulls(value):
-    if isinstance(value, dict):
-        return {k: _omit_nulls(v) for k, v in value.items() if v is not None}
-    if isinstance(value, list):
-        return [_omit_nulls(v) for v in value]
-    return value
-
-
-def _retry_after(error):
-    try:
-        value = error.response.headers.get("Retry-After", "0")
-    except AttributeError:
-        return 0
-    try:
-        delay = float(value)
-    except (TypeError, ValueError):
-        try:
-            delay = parsedate_to_datetime(value).timestamp() - time.time()
-        except (TypeError, ValueError, OverflowError):
-            return 0
-    return max(0, delay) if isfinite(delay) else 0
-
-
-def _retryable(error):
-    if isinstance(error, requests.HTTPError):
-        status = error.response.status_code
-        return (status >= 500 or status == 429) and _retry_after(error) <= 60
-    return isinstance(error, (requests.ConnectionError, requests.Timeout, ValueError))
-
-
-def _wait(state):
-    return max(
-        wait_exponential(multiplier=1, min=2, max=60)(state),
-        _retry_after(state.outcome.exception()),
+@retry(
+    # Retry on 500s (Server Errors) OR ValueError (Bad JSON)
+    retry=retry_if_exception_type((ServerError, ValueError)),
+    # Wait 2s, 4s, 8s... up to 60s
+    wait=wait_exponential(multiplier=1, min=2, max=60),
+    # Stop after 4 attempts (approx 30s total wait)
+    stop=stop_after_attempt(4),
+)
+def _generate(model, contents, config):
+    response = get_gemini_client().models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
     )
 
+    # We validate JSON immediately to force a retry if it's bad
+    # This works because we are using structured outputs (response_mime_type="application/json")
+    if config.response_mime_type == "application/json":
+        # Check if response.text is valid JSON. If not, raise ValueError to trigger retry.
+        safe_json_load(response.text)
 
-@retry(retry=retry_if_exception(_retryable), wait=_wait, stop=stop_after_attempt(4), reraise=True)
-def _generate(*, model, system_instruction, user_text, schema):
-    settings = get_settings()
-    if not settings.ai_api_key:
-        raise RuntimeError("Missing AI_API_KEY")
-    wrapped = schema.get("type") == "array"
-    if wrapped:
-        schema = {"type": "object", "properties": {"items": schema}, "required": ["items"]}
-        system_instruction += '\nReturn the result array in the object field "items".'
-    response = requests.post(
-        f"{settings.ai_base_url.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {settings.ai_api_key}"},
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_text},
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "synapse",
-                    "strict": True,
-                    "schema": _strict_schema(schema),
-                },
-            },
-            "temperature": 0,
-            "max_completion_tokens": 1000,
-            "reasoning_effort": settings.ai_reasoning_effort,
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    choice = response.json()["choices"][0]
-    if choice.get("finish_reason") != "stop":
-        raise ValueError("Incomplete AI response")
-    parsed = safe_json_load(choice["message"]["content"])
-    if not isinstance(parsed, dict):
-        raise ValueError("Expected an AI response object")
-    if wrapped:
-        parsed = parsed.get("items")
-        if not isinstance(parsed, list):
-            raise ValueError("Expected parsed items")
-    return _omit_nulls(parsed)
+    return response
 
 
-def generate_with_retry(*, system_instruction, user_text, schema):
-    settings = get_settings()
-    kwargs = dict(system_instruction=system_instruction, user_text=user_text, schema=schema)
+def generate_with_retry(model, contents, config):
+    """
+    Robust wrapper for Gemini API calls.
+    Catches 503s and Bad JSON, retrying automatically.
+    On a 404 (model retired/not found), retries ONCE with GEMINI_FALLBACK_MODEL.
+    """
     try:
-        return _generate(model=settings.ai_model, **kwargs)
-    except requests.HTTPError as error:
-        if (
-            error.response.status_code == 404
-            and settings.ai_fallback_model
-            and settings.ai_model != settings.ai_fallback_model
-        ):
-            return _generate(model=settings.ai_fallback_model, **kwargs)
+        return _generate(model, contents, config)
+    except ClientError as e:
+        if getattr(e, "code", None) == 404 and model != GEMINI_FALLBACK_MODEL:
+            print(f"   ⚠️ Model '{model}' not found. Retrying with '{GEMINI_FALLBACK_MODEL}'.")
+            return _generate(GEMINI_FALLBACK_MODEL, contents, config)
         raise
 
 
 def parse_raw_input(raw_text):
     """
-    Uses the model to intelligently split valid delimiters.
+    Uses Gemini to intelligently split valid delimiters.
     """
     # No '@' item separator and no '$' context separator → nothing to split.
     # Skip the LLM entirely: it exists only to split, and round-tripping text
@@ -182,11 +109,18 @@ def parse_raw_input(raw_text):
     system_instruction = PROMPTS.get("parser_instruction")
 
     try:
-        parsed = generate_with_retry(
-            system_instruction=system_instruction,
-            user_text=raw_text,
-            schema=PARSER_SCHEMA,
+        response = generate_with_retry(
+            model=GEMINI_MODEL,
+            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_json_schema=PARSER_SCHEMA,
+            ),
         )
+
+        print(f"🔍 RAW PARSER RESPONSE: {repr(response.text)}")
+        parsed = json.loads(response.text)
         print(f"   ✅ Parsed {len(parsed)} item(s).")
         return parsed
     except Exception as e:
@@ -335,7 +269,7 @@ def generate_extraction_prompt(
     )
 
 
-def get_extraction_schema(category):
+def get_gemini_schema(category):
     """The extraction's JSON Schema: catalog types and options per field."""
     schema_props, required_fields = {}, []
     for f in fields(category)[1]:

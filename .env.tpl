@@ -6,7 +6,7 @@
 # config overlay are workspace data (src/core/workspace.py), set with
 # `just workspace set-secrets <id>` / `just workspace push <id> <dir>`.
 
-AI_API_KEY=op://Synapse/Synapse ENV/GROQ_API_KEY
+GEMINI_API_KEY=op://Synapse/Synapse ENV/GEMINI_API_KEY
 SPOTIFY_CLIENT_ID=op://Synapse/Synapse ENV/SPOTIFY_CLIENT_ID
 SPOTIFY_CLIENT_SECRET=op://Synapse/Synapse ENV/SPOTIFY_CLIENT_SECRET
 GOOGLE_YOUTUBE_API_KEY=op://Synapse/Synapse ENV/GOOGLE_YOUTUBE_API_KEY

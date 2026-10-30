@@ -1,10 +1,15 @@
 """Resolve a capture within the credential's media allowlist, never general fan-out."""
 
+import json
+
+from google.genai import types
+
 from core.config import CATEGORIES
 from core.ai_engine import (
+    GEMINI_MODEL,
     generate_extraction_prompt,
     generate_with_retry,
-    get_extraction_schema,
+    get_gemini_schema,
 )
 from core.external_data import enrich_context
 from core.handlers import (
@@ -35,11 +40,15 @@ def extract(category, text):
     context = enrich_context(category, text) if category == "youtube-videos" else None
     prompt = generate_extraction_prompt(category, text, context, [], "")
     response = generate_with_retry(
-        system_instruction=prompt,
-        user_text=text,
-        schema=get_extraction_schema(category),
+        model=GEMINI_MODEL,
+        contents=[types.Content(parts=[types.Part(text=text)], role="user")],
+        config=types.GenerateContentConfig(
+            system_instruction=prompt,
+            response_mime_type="application/json",
+            response_json_schema=get_gemini_schema(category),
+        ),
     )
-    data = response
+    data = json.loads(response.text)
     if not isinstance(data, dict):
         raise ValueError("invalid extraction")
     return data

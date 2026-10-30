@@ -36,7 +36,7 @@ TEMPLATE_DIR = Path(__file__).parent / "template"
 ID = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 DEFAULT_ID = "default"
 # A workspace's credentials: its own Soma hub.
-# The app's own provider keys (AI, TMDB, Spotify, YouTube) stay in env.
+# The app's own provider keys (Gemini, TMDB, Spotify, YouTube) stay in env.
 SECRET_NAMES = ("soma_hub_url", "soma_hub_token")
 # Workspaces saved before the hub was named Soma hold its credentials under
 # these keys; they are read as the current names and rewritten on the next save.
