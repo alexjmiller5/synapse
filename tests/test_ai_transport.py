@@ -49,6 +49,7 @@ def test_optional_fields_stay_absent_and_key_is_only_in_header():
     body = json.loads(request.body)
     assert body["model"] == "primary"
     assert body["temperature"] == 0
+    assert body["max_completion_tokens"] <= 1000
     schema = body["response_format"]["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert schema["required"] == ["category", "project"]

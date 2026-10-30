@@ -132,7 +132,7 @@ def _generate(*, model, system_instruction, user_text, schema):
                 },
             },
             "temperature": 0,
-            "max_completion_tokens": 4096,
+            "max_completion_tokens": 1000,
             "reasoning_effort": settings.ai_reasoning_effort,
         },
         timeout=60,
