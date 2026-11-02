@@ -27,6 +27,7 @@ def workflow(monkeypatch):
                 "Tags": "tags",
                 "Notes": "notes",
                 "Project": "project_ids",
+                "Lane": "lane",
             },
         },
         "executions": {
@@ -180,7 +181,8 @@ def test_cleanup_tasks_follow_selected_backend_and_keep_stable_roles(workflow, m
             create_cleanup_task("Review metadata")
             create_high_priority_task("Review capture")
     assert send.call_count == 2
-    assert {c.args[1][0]["priority"] for c in send.call_args_list} == {"Low", "High"}
+    assert {c.args[1][0]["priority"] for c in send.call_args_list} == {"High"}
+    assert {c.args[1][0]["lane"] for c in send.call_args_list} == {"AI"}
 
 
 def test_identical_text_with_distinct_capture_ids_remains_two_operations(

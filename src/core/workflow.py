@@ -377,6 +377,7 @@ def _followup(name, priority, link_url, role):
         "Tags": ["Chore"],
         "Due Date": task_day() or today_eastern().isoformat(),
         "Priority": priority,
+        "Lane": "AI",
     }
     if link_url:
         values["Links"] = link_url
@@ -384,9 +385,9 @@ def _followup(name, priority, link_url, role):
 
 
 def create_cleanup_task(desc, link_url=None):
-    """A low-priority task asking the user to finish what Synapse could not."""
+    """An agent-triaged task for work Synapse could not finish."""
     print(f"🧹 Creating cleanup task: {desc}")
-    return _followup(desc, "Low", link_url, "cleanup")
+    return _followup(desc, "High", link_url, "cleanup")
 
 
 def create_high_priority_task(desc, link_url=None):

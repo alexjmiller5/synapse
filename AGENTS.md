@@ -222,6 +222,8 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
   conditional file create, then byte-verify readback before inserting its row
   reference. The workspace credential has only the configured file prefix;
   no provider storage credentials belong in workspace configuration.
+- Generated cleanup and failed-capture tasks carry High priority and lane AI.
+  Their IDs and original task calendar remain frozen across capture retries.
 - `core.workflow.WorkflowWriter` journals a mapped output before its checked
   insert, keyed by workspace, persisted capture identity, and item/role path.
   One serialized worker owns its operational store. Retries reuse the original
