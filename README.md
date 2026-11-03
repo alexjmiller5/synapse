@@ -11,8 +11,8 @@ Synapse eliminates the friction of manual data entry. It accepts unstructured, n
 - **[Modal](https://modal.com)** hosts everything. `app.py` is the single deployment shim — image, secrets, endpoints. All business logic lives in `src/core/` as plain Python with **no Modal imports**.
 - **`webhook`** (operator, Modal proxy auth) and **`capture`** (Receptor, per-device bearer token) validate the payload and `spawn()` the worker — **spawn IS the queue** (no Pub/Sub).
 - **`process`** — the background worker (`timeout=600`, `memory=512`, `max_containers=1`: one serialized worker owns the capture journals, and name/url dedupe is query-then-write; retries with backoff). Runs `core.pipeline.run`.
-- **Gemini** (`gemini-3-flash-preview`, env-overridable via `GEMINI_MODEL`, with automatic fallback to `GEMINI_FALLBACK_MODEL` on a 404) does parsing, classification, and extraction with structured JSON output.
-- **The Soma catalog is the contract.** Each column's type, required flag, select options and their meanings, defaults and enforced invariants come from the hub's `GET /v1/catalog` at run time (cached per workspace in the `synapse-state` Volume for an hour, revalidated by ETag, dropped when the hub rejects a write). Synapse carries no copy of the schema; `src/core/template/prompts.yaml` only says how to read text into it.
+- **Inference** uses structured JSON for parsing, classification and extraction. `AI_PROVIDER` defaults to `gemini`; `cloudflare` selects Workers AI with `@cf/google/gemma-4-26b-a4b-it` by default. Gemini model names remain configurable through `GEMINI_MODEL` and `GEMINI_FALLBACK_MODEL`.
+- **The Soma catalog is the contract.** Each column's type, required flag, select options and their meanings, defaults and enforced invariants come from the hub's `POST /v1/catalog/projection` at run time (cached per workspace in the `synapse-state` Volume for an hour, reprojected after expiry, dropped when the hub rejects a write). Synapse carries no copy of the schema; `src/core/template/prompts.yaml` only says how to read text into it.
 - **App secrets** are env vars only: the Modal secret `synapse` in the cloud, `op run` locally. `.env.tpl` is the canonical manifest (op:// refs, committed) — the app's own provider keys only.
 - **Workspaces** hold everything that belongs to one user: their workflow table bindings, wording overrides, place tags and Soma hub credentials. They live in the `synapse-state` Volume, edited with `just workspace ...`; each device token files its captures into one workspace. The repo carries only the generic template.
 
@@ -22,9 +22,9 @@ flowchart LR
     O["just recept / agents"] -->|"Modal-Key / Modal-Secret"| W["webhook"]
     C -->|"process.spawn()"| P["process worker<br/>(core.pipeline.run)"]
     W -->|"process.spawn()"| P
-    P -->|"parse / classify / extract"| G["Gemini"]
+    P -->|"parse / classify / extract"| G["Selected inference provider"]
     P -->|"enrichment"| X["Spotify · YouTube · TMDB ·<br/>web scrape"]
-    P -->|"GET /v1/catalog"| K["Soma catalog"]
+    P -->|"POST /v1/catalog/projection"| K["Soma catalog"]
     P -->|"rows: tasks, categories,<br/>execution log"| H["Soma hub tables"]
 ```
 
@@ -35,7 +35,7 @@ uv sync              # install everything
 just test            # unit tests (no network)
 just check           # ruff lint + format check
 just dev             # live-reload deploy against real Modal infra (modal serve)
-just test-integration  # real Gemini calls (key via 1Password)
+just test-integration  # real selected-provider calls (keys via 1Password)
 just recept "Buy eggs $ groceries"   # send one thought to the deployed webhook
 ```
 
@@ -44,6 +44,26 @@ Local runs against real services use 1Password injection — never plaintext on 
 ```bash
 op run --env-file=.env.tpl -- uv run <cmd>
 ```
+
+## Cloudflare inference
+
+Server operators select `AI_PROVIDER=cloudflare` and supply
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` through the app secret
+manifest. `CLOUDFLARE_MODEL` optionally overrides the default Gemma model;
+validate any replacement before using it. Device enrollment is unchanged:
+Receptor holds only its Synapse URL and app-issued credential.
+
+Cloudflare requests use temperature zero, thinking disabled, and a 2048-token
+completion limit. Incomplete responses and provider errors fail explicitly;
+Cloudflare errors never invoke Gemini. The selected provider's daily allowance
+still applies. Workers Free rejects requests beyond its allocation instead of
+billing overages; see the [provider pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+
+`just test-integration` exercises the selected provider's semantic cases.
+`SYNAPSE_CLOUDFLARE_LIVE=1` additionally enables
+`tests/test_cloudflare_live.py`, which runs real inference through the complete
+journal into a synthetic hub and verifies duplicate delivery. It writes no
+production rows.
 
 ## Manual setup steps (cannot be codified)
 
@@ -104,7 +124,7 @@ src/core/template/prompts.yaml  # prompts + per-category table wiring and phrasi
 src/core/catalog.py      # the Soma catalog slice prompts are built from
 src/core/workspace.py    # a user's overlay + credentials, the active workspace
 store.py                 # durable key -> JSON store on the synapse-state Volume
-tests/            # pytest suite (unit + test_integration.py for real Gemini)
+tests/            # pytest suite (unit + test_integration.py for real inference)
 scripts/          # operator clients: workspaces, device tokens, the webhook
 .env.tpl          # secrets manifest (op:// refs)
 ```

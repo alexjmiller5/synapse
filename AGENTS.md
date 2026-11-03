@@ -333,12 +333,11 @@ the capture result and never enter native apps.
 
 ## Inference provider selection
 
-Gemini remains the default. `AI_PROVIDER=cloudflare` selects the Workers AI
+`AI_PROVIDER` defaults to `gemini`. `AI_PROVIDER=cloudflare` selects the Workers AI
 REST transport using server-side `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`. `CLOUDFLARE_MODEL` selects the model, defaulting to
-`@cf/qwen/qwen3-30b-a3b-fp8` with reasoning enabled and a 2048-token output
-limit. The transport also supports `@cf/qwen/qwen3.8-27b` with low reasoning
-and a 1024-token output limit. Neither selection falls back to a paid provider.
+`CLOUDFLARE_ACCOUNT_ID`. `CLOUDFLARE_MODEL` defaults to
+`@cf/google/gemma-4-26b-a4b-it`, with thinking disabled and a 2048-token output
+limit. Other model selections require their own validation. Cloudflare errors never invoke Gemini.
 Unknown providers, failed HTTP responses and truncated outputs fail explicitly.
 A provider cutover requires the full semantic suite through the selected
 production transport plus measured free-allowance capacity. Credentials and

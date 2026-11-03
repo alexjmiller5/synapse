@@ -26,7 +26,7 @@ def responses():
 def test_schema_request_and_usage(monkeypatch, responses):
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
-    url = "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/qwen/qwen3-30b-a3b-fp8"
+    url = "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/google/gemma-4-26b-a4b-it"
     responses.post(
         url,
         json={
@@ -47,10 +47,11 @@ def test_schema_request_and_usage(monkeypatch, responses):
     body = json.loads(responses.calls[0].request.body)
     assert body["messages"] == [
         {"role": "system", "content": "JSON only"},
-        {"role": "user", "content": "hello\n/think"},
+        {"role": "user", "content": "hello"},
     ]
-    assert body["response_format"]["json_schema"] == {"type": "object"}
-    assert body["max_tokens"] == 2048
+    assert body["response_format"]["json_schema"]["schema"] == {"type": "object"}
+    assert body["max_completion_tokens"] == 2048
+    assert body["chat_template_kwargs"] == {"enable_thinking": False}
     assert body["temperature"] == 0
     assert result.usage_metadata["neurons"] == 1
 
@@ -73,7 +74,7 @@ def test_failure_never_returns_success(monkeypatch, responses, status, payload):
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
     responses.post(
-        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/qwen/qwen3-30b-a3b-fp8",
+        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/google/gemma-4-26b-a4b-it",
         json=payload,
         status=status,
     )
@@ -101,34 +102,11 @@ def test_unknown_provider_is_rejected(monkeypatch, mock_gemini):
     mock_gemini.models.generate_content.assert_not_called()
 
 
-def test_new_qwen_uses_documented_reasoning_and_schema(monkeypatch, responses):
-    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
-    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
-    monkeypatch.setenv("CLOUDFLARE_MODEL", "@cf/qwen/qwen3.8-27b")
-    responses.post(
-        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/qwen/qwen3.8-27b",
-        json={
-            "success": True,
-            "result": {"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]},
-        },
-    )
-    result = cloudflare.generate(
-        [types.Content(role="user", parts=[types.Part(text="hello")])],
-        types.GenerateContentConfig(response_json_schema={"type": "object"}),
-    )
-    body = json.loads(responses.calls[0].request.body)
-    assert body["reasoning_effort"] == "low"
-    assert body["max_completion_tokens"] == 1024
-    assert body["response_format"]["json_schema"]["schema"] == {"type": "object"}
-    assert body["messages"][-1]["content"] == "hello"
-    assert result.candidates is None
-
-
 def test_parser_does_not_spend_output_budget_on_reasoning(monkeypatch, responses):
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
     responses.post(
-        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/qwen/qwen3-30b-a3b-fp8",
+        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/google/gemma-4-26b-a4b-it",
         json={
             "success": True,
             "result": {"choices": [{"finish_reason": "stop", "message": {"content": "[]"}}]},
@@ -141,14 +119,14 @@ def test_parser_does_not_spend_output_budget_on_reasoning(monkeypatch, responses
         ),
     )
     body = json.loads(responses.calls[0].request.body)
-    assert body["messages"][-1]["content"] == "Split this\n/no_think"
+    assert body["messages"][-1]["content"] == "Split this"
 
 
 def test_quota_diagnostics_preserve_reset_without_exposing_token(monkeypatch, responses):
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
     responses.post(
-        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/qwen/qwen3-30b-a3b-fp8",
+        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/run/@cf/google/gemma-4-26b-a4b-it",
         status=429,
         headers={"Retry-After": "3600"},
         json={"errors": [{"code": 3041, "message": "daily neuron limit for test-token"}]},
@@ -159,3 +137,48 @@ def test_quota_diagnostics_preserve_reset_without_exposing_token(monkeypatch, re
     assert "3600" in str(error.value)
     assert "test-token" not in str(error.value)
     assert len(responses.calls) == 1
+
+
+def test_live_suite_uses_selected_production_provider_and_context(monkeypatch, responses):
+    import runpy
+    from types import SimpleNamespace
+    from core import ai_engine
+
+    monkeypatch.setenv("AI_PROVIDER", "cloudflare")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
+    monkeypatch.setenv("GEMINI_API_KEY", "unused-test-sentinel")
+    calls = []
+
+    def generate(model, contents, config):
+        calls.append((contents, config))
+        return SimpleNamespace(text="{}")
+
+    monkeypatch.setattr(ai_engine, "generate_with_retry", generate)
+    suite = runpy.run_path("tests/test_integration.py")
+    suite["extract"]("tasks", "Learn a skill", "medium priority")
+    assert calls[-1][0][0].parts[0].text == "Learn a skill\n[Context: medium priority]"
+    suite["parse"]("One @ Two")
+    assert calls[-1][1].response_json_schema["type"] == "array"
+    assert len(responses.calls) == 0
+
+
+def test_classifier_eval_accepts_cloudflare_without_gemini(monkeypatch):
+    import runpy
+    from types import SimpleNamespace
+    from core import ai_engine
+
+    monkeypatch.setenv("AI_PROVIDER", "cloudflare")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        ai_engine,
+        "generate_with_retry",
+        lambda *args, **kwargs: SimpleNamespace(text='{"category":"tasks"}'),
+    )
+    script = runpy.run_path("scripts/eval_classifier.py")
+    assert (
+        script["run_set"]("prompt", "fixture", [{"text": "Do something", "expected": "tasks"}], 1)
+        == 1
+    )

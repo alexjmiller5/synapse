@@ -34,11 +34,11 @@ deploy: test sync-secrets
 
 # --- project-specific recipes below (one-offs live in scripts/, run directly) ---
 
-# Classifier prompt eval — real Gemini calls against scripts/eval_cases.yaml
+# Classifier prompt eval - selected-provider calls against scripts/eval_cases.yaml
 eval-classifier ws="default":
     MODAL_TOKEN_ID=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_id MODAL_TOKEN_SECRET=op://4eeyrkqibibn7k4j6rz2fbzvxm/2sfxybjpv3c3ohzxhf5qeken4a/token_secret SYNAPSE_WORKSPACE={{ws}} op run --env-file=.env.tpl -- uv run scripts/eval_classifier.py
 
-# Integration suite — real Gemini calls (key injected via op)
+# Integration suite - selected-provider calls (keys injected via op)
 test-integration:
     op run --env-file=.env.tpl -- uv run pytest tests/test_integration.py -v --timeout=120
 

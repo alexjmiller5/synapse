@@ -1,11 +1,11 @@
-"""Integration tests — real Gemini AI calls, no writes.
+"""Integration tests: real selected-provider inference, no writes.
 
 These tests send actual user inputs through the real Gemini parsing,
 classification, and extraction prompts (built over the fixture Soma catalog),
 then verify the extracted fields (right category, right values).
 
-Nothing is written anywhere. Uses direct REST calls to the same model as
-production (bypasses conftest SDK mocks).
+Nothing is written anywhere. Cloudflare uses the production transport; Gemini
+uses direct REST calls to bypass conftest SDK mocks.
 
 Test inputs are synthetic examples of typical captures.
 
@@ -32,7 +32,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("SYNAPSE_GEM
 if GEMINI_API_KEY and GEMINI_API_KEY.startswith("fake-"):
     GEMINI_API_KEY = None  # conftest sentinel, not a real key — fall through to op
 
-if not GEMINI_API_KEY:
+if not GEMINI_API_KEY and os.environ.get("AI_PROVIDER", "gemini") != "cloudflare":
     try:
         result = subprocess.run(
             [
@@ -52,8 +52,12 @@ if not GEMINI_API_KEY:
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
-        not GEMINI_API_KEY,
-        reason="GEMINI_API_KEY not available — skipping integration tests",
+        not (
+            os.environ.get("CLOUDFLARE_API_TOKEN") and os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+            if os.environ.get("AI_PROVIDER", "gemini") == "cloudflare"
+            else GEMINI_API_KEY
+        ),
+        reason="Selected inference provider credentials are unavailable",
     ),
 ]
 
@@ -61,6 +65,8 @@ pytestmark = [
 # Import core modules (conftest handles mock setup)
 # ---------------------------------------------------------------------------
 from core.config import PROMPTS  # noqa: E402
+from core import ai_engine  # noqa: E402
+from google.genai import types  # noqa: E402
 from core.ai_engine import (  # noqa: E402
     GEMINI_MODEL,
     generate_classification_prompt,
@@ -68,7 +74,7 @@ from core.ai_engine import (  # noqa: E402
     get_gemini_schema,
 )
 from core.business_logic import apply_business_logic  # noqa: E402
-from core.schemas import CATEGORY_SCHEMA_CLASSIFY  # noqa: E402
+from core.schemas import CATEGORY_SCHEMA_CLASSIFY, PARSER_SCHEMA  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Direct Gemini REST API (bypasses conftest SDK mocks)
@@ -81,6 +87,17 @@ GEMINI_URL = (
 
 def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5):
     """Call Gemini REST API directly with retry on rate limit."""
+    if os.environ.get("AI_PROVIDER", "gemini") == "cloudflare":
+        response = ai_engine.generate_with_retry(
+            GEMINI_MODEL,
+            [types.Content(role="user", parts=[types.Part(text=user_text)])],
+            types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_json_schema=response_schema,
+            ),
+        )
+        return json.loads(response.text)
     body = {
         "system_instruction": {"parts": [{"text": system_instruction}]},
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
@@ -143,7 +160,8 @@ def extract(category, raw_text, user_context=None):
     """Run real Gemini extraction."""
     prompt = generate_extraction_prompt(category, raw_text, user_context=user_context)
     schema = get_gemini_schema(category)
-    return _gemini_call(prompt, raw_text, schema)
+    user_text = f"{raw_text}\n[Context: {user_context}]" if user_context else raw_text
+    return _gemini_call(prompt, user_text, schema)
 
 
 def full_pipeline(raw_text, context=""):
@@ -164,7 +182,7 @@ def full_pipeline(raw_text, context=""):
 def parse(raw_text):
     """Run real Gemini parsing via REST API."""
     system_instruction = PROMPTS.get("parser_instruction", "")
-    return _gemini_call(system_instruction, raw_text, CATEGORY_SCHEMA_CLASSIFY)
+    return _gemini_call(system_instruction, raw_text, PARSER_SCHEMA)
 
 
 # ======================================================================

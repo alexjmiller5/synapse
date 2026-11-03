@@ -19,7 +19,6 @@ import json
 import os
 import sys
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -27,8 +26,14 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-if not os.environ.get("GEMINI_API_KEY"):
-    sys.exit("GEMINI_API_KEY not set — run via `just eval-classifier` (op injects it).")
+provider = os.environ.get("AI_PROVIDER", "gemini")
+required = (
+    ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID")
+    if provider == "cloudflare"
+    else ("GEMINI_API_KEY",)
+)
+if any(not os.environ.get(name) for name in required):
+    sys.exit("Selected inference provider credentials are missing; run via just eval-classifier.")
 
 from google.genai import types  # noqa: E402
 
@@ -60,14 +65,8 @@ def eval_case(prompt: str, case: dict, repeats: int) -> tuple[dict, str, bool]:
 
 
 def run_set(prompt: str, name: str, cases: list[dict], repeats: int) -> float:
-    # Warm the lru_cached Gemini client single-threaded — concurrent first-access
-    # from the pool below races the cache and can create/GC a duplicate client
-    # (httpx then reports "client has been closed"). Production is serialized.
-    from core.clients import get_gemini_client
-
-    get_gemini_client()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(lambda c: eval_case(prompt, c, repeats), cases))
+    # Match the serialized production worker and avoid benchmark request bursts.
+    results = [eval_case(prompt, case, repeats) for case in cases]
 
     confusion: dict[str, Counter] = {}
     passed = 0

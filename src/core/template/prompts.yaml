@@ -20,12 +20,18 @@ categorize_template: |
      (movie, show, venue, trip destination) inside a sentence does NOT choose the
      category — the category is what the user wants to HAPPEN. Classify as "tasks" if
      ANY hold:
-       a. The Context contains "task" or a priority marker ("med prior task", "Task may 1").
+       a. The Context explicitly identifies a task ("med prior task", "Task may 1").
+          A priority word alone does NOT imply a task: in a movie/show context it
+          ranks that media entry, even if the priority word is misspelled.
        b. The Context or text contains a date/deadline ("June 26", "aug 1", "2 weeks
           from now", "before Croatia"). ONLY "tasks" stores a Due Date — routing a
           dated item elsewhere silently loses the deadline.
        c. The text directs an action or decision (watch + a date, "go to", "look up",
           "consider", "plan", "rewatch", "spend a day", "do a", "make", "add").
+          Exception: simple food/drink acquisition wording (get, go get, buy,
+          pick up) is a grocery-list entry unless another task rule applies.
+          Conditional choices, store logistics or other specific instructions
+          are tasks; merely asking for a food item is groceries.
        d. The text asks to modify a database or list ("Add the full x men series to my
           movies db") — that is a task to EDIT the db, not an entry in it.
   3. URL HANDLING (highest priority UNLESS task precedence applies). If the input
@@ -221,7 +227,7 @@ categories:
         instruction: "Only notes explicitly requested by the user; leave empty otherwise."
       Title:
         required: true
-        instruction: "The official TV show title, EXACTLY as TMDB lists it, so an automated metadata lookup finds the right show. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Fix any typos, capitalization, or missing punctuation (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus'). If the user clearly means a specific remake/version of a title with multiple shows, append the release year in parentheses to disambiguate."
+        instruction: "The official TV show title, EXACTLY as TMDB lists it, so an automated metadata lookup finds the right show. Try to extract from the user text if necessary -- like if user says 'billy joel series' the title is 'Billy Joel: And So It Goes'. Resolve the intended show before writing its title; do not merely copy or title-case the input. Correct misspellings and sound-alike words to the known official title when the identity is clear; preserve unfamiliar titles rather than inventing a show. Fix capitalization and missing punctuation (e.g. 'love is blnd habibi' -> 'Love Is Blind: Habibi'), DO NOT include the word 'show', 'series', or 'season' unless it is actually part of the official name (e.g., 'The Morning Show' is okay, but 'Pluribus Show' should just be 'Pluribus'). If the user clearly means a specific remake/version of a title with multiple shows, append the release year in parentheses to disambiguate."
       Tags:
         instruction: "Add 'Favorite' if the user says the show is a favorite or an all-time favorite (there is ONE favorite tier). Add 'Sequel' or 'Prequel' only when the user says so. Add a curated tag only when the user's words or a fact you are sure of calls for it -- these are the user's own labels, NOT genres (genres are filled in automatically). Leave empty if none applies."
       Status:

@@ -18,36 +18,21 @@ def generate(contents, config):
     messages = [{"role": "system", "content": config.system_instruction or ""}]
     for content in contents:
         messages.append(
-            {
-                "role": "user",
-                "content": "".join(part.text or "" for part in content.parts) + "\n/think",
-            }
+            {"role": "user", "content": "".join(part.text or "" for part in content.parts)}
         )
     body = {
         "messages": messages,
         "temperature": 0,
-        "max_tokens": 2048,
+        "max_completion_tokens": 2048,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "response_format": {"type": "json_object"},
     }
-    schema = config.response_json_schema
-    if schema:
+    if config.response_json_schema:
         body["response_format"] = {
             "type": "json_schema",
-            "json_schema": schema,
+            "json_schema": {"name": "synapse", "schema": config.response_json_schema},
         }
-    else:
-        body["response_format"] = {"type": "json_object"}
-    if schema and schema.get("type") == "array":
-        for message in messages[1:]:
-            message["content"] = message["content"].removesuffix("\n/think") + "\n/no_think"
-    model = os.environ.get("CLOUDFLARE_MODEL", "@cf/qwen/qwen3-30b-a3b-fp8")
-    if model == "@cf/qwen/qwen3.8-27b":
-        body.pop("max_tokens")
-        body["max_completion_tokens"] = 1024
-        body["reasoning_effort"] = "low"
-        for message in messages[1:]:
-            message["content"] = message["content"].removesuffix("\n/think")
-        if schema:
-            body["response_format"]["json_schema"] = {"name": "synapse", "schema": schema}
+    model = os.environ.get("CLOUDFLARE_MODEL", "@cf/google/gemma-4-26b-a4b-it")
     response = requests.post(
         f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}",
         headers={"Authorization": f"Bearer {token}"},
