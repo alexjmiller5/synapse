@@ -110,7 +110,8 @@ def _gemini_call(system_instruction, user_text, response_schema=None, _retries=5
 
     for attempt in range(_retries):
         resp = _requests.post(
-            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+            GEMINI_URL,
+            headers={"x-goog-api-key": GEMINI_API_KEY},
             json=body,
             timeout=30,
         )

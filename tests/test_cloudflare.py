@@ -182,3 +182,18 @@ def test_classifier_eval_accepts_cloudflare_without_gemini(monkeypatch):
         script["run_set"]("prompt", "fixture", [{"text": "Do something", "expected": "tasks"}], 1)
         == 1
     )
+
+
+def test_gemini_comparison_keeps_credentials_out_of_urls(monkeypatch, responses):
+    import runpy
+
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-secret-key")
+    suite = runpy.run_path("tests/test_integration.py")
+    responses.post(
+        suite["GEMINI_URL"], json={"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+    )
+    assert suite["_gemini_call"]("JSON only", "hello") == {}
+    request = responses.calls[0].request
+    assert "test-secret-key" not in request.url
+    assert request.headers["x-goog-api-key"] == "test-secret-key"
