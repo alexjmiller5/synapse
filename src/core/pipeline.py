@@ -1,3 +1,4 @@
+import os
 import json
 import re
 
@@ -153,7 +154,18 @@ def run_pipeline(
         # DEBUG: Capture Raw AI Response before JSON Load
         ai_response_obj = generate_with_retry(
             model=GEMINI_MODEL,
-            contents=[types.Content(parts=[types.Part(text=raw_text)], role="user")],
+            contents=[
+                types.Content(
+                    parts=[
+                        types.Part(
+                            text=f"{raw_text}\n[Context: {user_context}]"
+                            if user_context
+                            else raw_text
+                        )
+                    ],
+                    role="user",
+                )
+            ],
             config=types.GenerateContentConfig(
                 system_instruction=extract_prompt,
                 response_mime_type="application/json",
@@ -289,8 +301,17 @@ def _run(payload: dict):
     """Process one capture inside its journal (core.workflow.capture_scope)."""
     active = current_capture()
     print("🧠 Worker awake!")
-    if not get_settings().gemini_api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY")
+    provider = os.environ.get("AI_PROVIDER", "gemini")
+    if provider == "gemini":
+        if not get_settings().gemini_api_key:
+            raise RuntimeError("Missing GEMINI_API_KEY")
+    elif provider == "cloudflare":
+        if not os.environ.get("CLOUDFLARE_API_TOKEN") or not os.environ.get(
+            "CLOUDFLARE_ACCOUNT_ID"
+        ):
+            raise RuntimeError("Missing Cloudflare credentials")
+    else:
+        raise RuntimeError("Unknown AI_PROVIDER")
 
     def load_context():
         names, ids = fetch_active_projects()

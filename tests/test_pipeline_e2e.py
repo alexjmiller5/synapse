@@ -828,3 +828,16 @@ def test_disabled_category_response_falls_back_to_task_without_article_write(hub
     assert not _rows(hub, "articles")
     assert _task(hub)["title"] == "Read https://example.test/story"
     assert _execution(hub)["category"] == "tasks"
+
+
+def test_extractor_receives_explicit_context_in_user_message(hub, mock_gemini):
+    _setup_classify_extract(
+        mock_gemini,
+        "tasks",
+        {"Name": "Learn dance styles", "Priority": "Medium", "Tags": ["Learning"]},
+    )
+    _run(_item("Learn dance styles", "medium priority"))
+    extraction = mock_gemini.models.generate_content.call_args_list[-1].kwargs
+    assert (
+        extraction["contents"][0].parts[0].text == "Learn dance styles\n[Context: medium priority]"
+    )

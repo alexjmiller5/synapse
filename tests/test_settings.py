@@ -12,3 +12,13 @@ def test_reads_env_vars():
 
 def test_get_settings_is_cached():
     assert get_settings() is get_settings()
+
+
+def test_cloudflare_credentials_are_typed_settings(monkeypatch):
+    from core.settings import Settings
+
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
+    settings = Settings()
+    assert settings.cloudflare_api_token == "test-token"
+    assert settings.cloudflare_account_id == "test-account"

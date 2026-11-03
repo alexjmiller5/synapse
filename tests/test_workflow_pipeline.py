@@ -265,3 +265,33 @@ def test_followup_refuses_to_drop_required_lane_mapping(workflow, monkeypatch):
     with capture_scope({}, payload), pytest.raises(ValueError, match="Lane"):
         create_cleanup_task("Review metadata")
     send.assert_not_called()
+
+
+def test_cloudflare_capture_does_not_require_gemini(workflow, media_hub, mock_gemini, monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "cloudflare")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
+    monkeypatch.setattr(
+        pipeline,
+        "get_settings",
+        Mock(return_value=type("Settings", (), {"gemini_api_key": None})()),
+    )
+    from core import cloudflare
+
+    monkeypatch.setattr(
+        cloudflare,
+        "generate",
+        Mock(
+            return_value=make_gemini_response(
+                {"Name": "Do a thing", "Priority": "High", "Tags": ["Chore"]}
+            )
+        ),
+    )
+    payload = {"raw_text": "Do a thing", "workspace": workflow.id, "capture_id": CAPTURE}
+    store = {}
+    pipeline.run(payload, store=store)
+    pipeline.run(payload, store=store)
+    assert len(media_hub.rows["work_items"]) == 1
+    assert len(media_hub.rows["capture_logs"]) == 1
+    assert cloudflare.generate.call_count == 1
+    mock_gemini.models.generate_content.assert_not_called()

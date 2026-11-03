@@ -84,6 +84,13 @@ def generate_with_retry(model, contents, config):
     Catches 503s and Bad JSON, retrying automatically.
     On a 404 (model retired/not found), retries ONCE with GEMINI_FALLBACK_MODEL.
     """
+    provider = os.environ.get("AI_PROVIDER", "gemini")
+    if provider not in {"gemini", "cloudflare"}:
+        raise ValueError("Unknown AI_PROVIDER")
+    if provider == "cloudflare":
+        from core.cloudflare import generate
+
+        return generate(contents, config)
     try:
         return _generate(model, contents, config)
     except ClientError as e:

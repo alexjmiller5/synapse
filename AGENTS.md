@@ -49,7 +49,7 @@ whatever the extractor said, `Dispatch` Requested (mapped by the workspace's
 tasks binding; Agent Dispatch, a separate project, consumes it), context
 dropped. `agent` anywhere else, or with other context words, is ordinary text. A workspace without a `Dispatch` mapping just gets a lane-AI task.
 
-1. `parse_raw_input` — Gemini splits `@`-separated items, pulls `$` context;
+1. `parse_raw_input` — the selected model splits `@`-separated items, pulls `$` context;
    skipped entirely (verbatim pass-through) when the text has no `@`/`$` —
    the LLM round-trip has mangled URLs it was meant to copy
 2. Classify → category (+ optional `related_project`)
@@ -330,6 +330,24 @@ workspace overlay may set.
 Configure saved_column only after its cataloged field exists; explicit saves
 without that mapping require review. Consumer/provider credentials remain outside
 the capture result and never enter native apps.
+
+## Inference provider selection
+
+Gemini remains the default. `AI_PROVIDER=cloudflare` selects the Workers AI
+REST transport using server-side `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`. `CLOUDFLARE_MODEL` selects the model, defaulting to
+`@cf/qwen/qwen3-30b-a3b-fp8` with reasoning enabled and a 2048-token output
+limit. The transport also supports `@cf/qwen/qwen3.8-27b` with low reasoning
+and a 1024-token output limit. Neither selection falls back to a paid provider.
+Unknown providers, failed HTTP responses and truncated outputs fail explicitly.
+A provider cutover requires the full semantic suite through the selected
+production transport plus measured free-allowance capacity. Credentials and
+selection belong in the project ENV item; workspace clients never hold them.
+
+`tests/test_cloudflare_live.py` is opt-in via `SYNAPSE_CLOUDFLARE_LIVE=1`:
+it makes real inference calls through the journal into an isolated synthetic
+hub, then verifies duplicate delivery performs no further inference or writes.
+It never writes production rows. Generic transport and journal tests run offline.
 
 ## Gemini isolation
 
