@@ -326,6 +326,16 @@ def create_task(data, project_id=None, *, role="task"):
     active = current_capture()
     if active is None:
         raise ValueError("Workflow tasks require a durable capture context")
+    properties = current().config.get("categories", {}).get("tasks", {}).get("properties", {})
+    missing = {
+        name
+        for name in data
+        if properties.get(name, {}).get("required") and name not in binding["columns"]
+    }
+    if missing:
+        raise ValueError(
+            "Required task properties lack workflow mappings: " + ", ".join(sorted(missing))
+        )
     values = {
         name: copy.deepcopy(value) for name, value in data.items() if name in binding["columns"]
     }

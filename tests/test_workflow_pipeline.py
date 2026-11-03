@@ -253,3 +253,15 @@ def test_preparation_failure_freezes_one_actionable_error_across_logging_retry(
     assert log["code_execution"] == "Error(s)"
     assert "Invalid model output" in log["error_details"]
     assert log["created_item"] == f"work_items/{task['id']}"
+
+
+def test_followup_refuses_to_drop_required_lane_mapping(workflow, monkeypatch):
+    from core.workflow import capture_scope, create_cleanup_task
+
+    del workflow.config["workflow"]["tasks"]["columns"]["Lane"]
+    send = Mock()
+    monkeypatch.setattr("core.soma_hub.insert_rows", send)
+    payload = {"raw_text": "One", "workspace": workflow.id, "capture_id": CAPTURE}
+    with capture_scope({}, payload), pytest.raises(ValueError, match="Lane"):
+        create_cleanup_task("Review metadata")
+    send.assert_not_called()
