@@ -10,13 +10,12 @@ uses direct REST calls to bypass conftest SDK mocks.
 Test inputs are synthetic examples of typical captures.
 
 Run with: just test-integration
-Requires: GEMINI_API_KEY env var or 1Password access
+Requires selected-provider credentials in env (just test-integration injects them).
 """
 
 import json
 import os
 import re
-import subprocess
 from datetime import date
 
 import time
@@ -30,24 +29,7 @@ import requests as _requests
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("SYNAPSE_GEMINI_API_KEY")
 
 if GEMINI_API_KEY and GEMINI_API_KEY.startswith("fake-"):
-    GEMINI_API_KEY = None  # conftest sentinel, not a real key — fall through to op
-
-if not GEMINI_API_KEY and os.environ.get("AI_PROVIDER", "gemini") != "cloudflare":
-    try:
-        result = subprocess.run(
-            [
-                "op",
-                "read",
-                "op://skkfhuuqegdpyzuobf6h6dyoly/4klx766p6v7noej5226raa6pby/GEMINI_API_KEY",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            GEMINI_API_KEY = result.stdout.strip()
-    except Exception:
-        pass
+    GEMINI_API_KEY = None  # conftest sentinel, not a real key
 
 pytestmark = [
     pytest.mark.integration,
