@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Synapse: AI middleware that captures natural-language text and files it as
-Soma rows: a task or a category row per item, plus one execution log row.
+Synapse captures natural-language text as a verbatim Soma task, requests agent
+dispatch and writes an execution log. Workspaces can select recognition instead.
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
 ## Architecture rule (the one that matters)
@@ -39,6 +39,21 @@ tests or on any future platform.
 ## The pipeline (`core/pipeline.py: run`)
 
 Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
+General captures default to `workflow.capture_mode: dispatch`. Each submission
+creates one task with a deterministic title (up to 120 characters), the complete
+original in Notes, Status To Do, Priority High, Tags Chore, the workspace task
+day, Lane AI and Dispatch Requested. Those properties must all be mapped or
+the capture fails before writing. No parser, inference, context lookup or
+enrichment runs; `$` and `@` text stays intact for the dispatched agent.
+The selected route and task values are journaled; retrying cannot switch routes,
+duplicate a task or overwrite its user edits. Recognition journals with existing
+context checkpoints finish their original route. The authenticated media gateway
+uses its separate processing path and does not enter general dispatch.
+
+`workflow.capture_mode: recognition` selects the pipeline below. Unknown modes
+fail explicitly. The repo's recognition fixtures select that mode; direct-capture
+tests omit it to exercise the product default.
+
 `source` is a free-form caller label naming the surface that captured it
 (Receptor's table is in its AGENTS.md: `ios-app`, `macos-panel`,
 `share-send`, `app-shortcut`, `hammerspoon-hyper-r`, ...; plus `agent`,

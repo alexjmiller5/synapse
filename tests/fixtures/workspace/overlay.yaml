@@ -12,6 +12,7 @@ categories:
   youtube-videos:
     saved_column: saved
 workflow:
+  capture_mode: recognition
   tasks:
     table: tasks
     columns:

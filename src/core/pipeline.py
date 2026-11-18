@@ -14,7 +14,9 @@ from core.workflow import (
     current_capture,
     log_execution,
     prepare_item,
+    task_day,
 )
+from core.timeutils import today_eastern
 from core.ai_engine import (
     GEMINI_MODEL,
     generate_with_retry,
@@ -297,9 +299,47 @@ WORKSPACE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 MAX_SOURCE_LEN = 64
 
 
+def _dispatch_capture(payload):
+    active = current_capture()
+    columns = binding_for("tasks")["columns"]
+    required = {"Name", "Notes", "Status", "Priority", "Due Date", "Tags", "Lane", "Dispatch"}
+    if missing := required - columns.keys():
+        raise ValueError("Direct capture requires mappings for " + ", ".join(sorted(missing)))
+    text = payload["raw_text"]
+    values = active.journal.checkpoint(
+        "direct_task",
+        lambda: {
+            "Name": " ".join(text.split())[:120],
+            "Notes": text,
+            "Status": "To Do",
+            "Priority": "High",
+            "Due Date": task_day() or today_eastern().isoformat(),
+            "Tags": ["Chore"],
+            "Lane": "AI",
+            "Dispatch": "Requested",
+        },
+    )
+    item = create_task(values)
+    log_execution(text, "tasks", "Success", created_url=item, source=payload.get("source"))
+
+
 def _run(payload: dict):
     """Process one capture inside its journal (core.workflow.capture_scope)."""
     active = current_capture()
+    mode = active.journal.checkpoint(
+        "capture_mode",
+        # Old recognition journals must finish their original output plan.
+        lambda: (
+            "recognition"
+            if "context" in active.journal.store[active.journal.key]["checkpoints"]
+            else active.bindings.get("capture_mode", "dispatch")
+        ),
+    )
+    if mode == "dispatch":
+        _dispatch_capture(payload)
+        return
+    if mode != "recognition":
+        raise ValueError("workflow.capture_mode must be dispatch or recognition")
     print("🧠 Worker awake!")
     provider = os.environ.get("AI_PROVIDER", "gemini")
     if provider == "gemini":

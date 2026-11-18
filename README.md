@@ -1,8 +1,16 @@
 # Project Synapse 🧠
 
-> An intelligent middleware for capturing thoughts and filing them as Soma rows.
+> Capture thoughts as durable tasks and hand them to an agent.
 
-Synapse eliminates the friction of manual data entry. It accepts unstructured, natural-language text, uses a multi-step AI chain (parse → classify → extract) to understand and structure the content, and then writes it to the right Soma table: tasks, groceries, media, bookmarks, ideas, things to do. Every capture also writes an execution log row. The entire project is written in **Python** and deployed on **Modal**.
+Synapse accepts natural-language text and creates one Soma task per submission,
+preserving the full original and requesting agent dispatch. The agent interprets
+project/date hints, reconciles existing data and does the work. No `$ agent`
+marker is required. Every capture also writes an execution log row. The service
+is written in **Python** and deployed on **Modal**.
+
+Workspaces can explicitly select `workflow.capture_mode: recognition` for the
+parse, classify and extract pipeline that writes category rows directly. The
+separately authenticated media gateway retains its media-only behavior.
 
 ---
 
@@ -22,10 +30,11 @@ flowchart LR
     O["just recept / agents"] -->|"Modal-Key / Modal-Secret"| W["webhook"]
     C -->|"process.spawn()"| P["process worker<br/>(core.pipeline.run)"]
     W -->|"process.spawn()"| P
-    P -->|"parse / classify / extract"| G["Selected inference provider"]
-    P -->|"enrichment"| X["Spotify · YouTube · TMDB ·<br/>web scrape"]
-    P -->|"POST /v1/catalog/projection"| K["Soma catalog"]
-    P -->|"rows: tasks, categories,<br/>execution log"| H["Soma hub tables"]
+    P -->|"verbatim task + execution log"| H["Soma hub tables"]
+    H -->|"dispatch Requested"| D["Agent Dispatch"]
+    D --> A["Agent session"]
+    P -->|"recognition mode only"| G["Parse / classify / extract"]
+    G --> H
 ```
 
 ## Development
@@ -101,6 +110,20 @@ Everything else is code; these are one-time console/dashboard actions:
 Type, catalog `required`, options with their meanings and defaults come from the catalog; the store's enforced invariants are stated in the prompt.
 
 ## Synapse Prompting Guide
+
+The default dispatch mode keeps the entire submission together, including `@`
+and `$` hints, URLs and line breaks. Its task has Status `To Do`, Priority `High`,
+Tag `Chore`, the workspace's task day, Lane `AI` and Dispatch `Requested`.
+The short title is only a preview; Notes contains the complete capture.
+The dispatched agent can create child tasks for distinct actions and interpret
+explicit project/date hints without losing the original wording.
+
+Set `workflow.capture_mode: recognition` in a workspace overlay to use the
+recognition syntax below. The default is `dispatch`; other values fail.
+Dispatch requires task mappings for Name, Notes, Status, Priority, Due Date,
+Tags, Lane and Dispatch, plus the ordinary execution binding. The route and
+write plan are frozen per capture identity, including across configuration
+changes and retries. Existing recognition journals keep their original route.
 
 - **Core Syntax**
   - **`@` splitter:** separate multiple distinct items in one message.

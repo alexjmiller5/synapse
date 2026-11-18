@@ -17,6 +17,7 @@ CAPTURE = "e8bfc1e9-6f0e-4c15-8764-7c98d4b3a2ab"
 def workflow(monkeypatch):
     base = copy.deepcopy(workspace.current())
     base.config["workflow"] = {
+        "capture_mode": "recognition",
         "tasks": {
             "table": "work_items",
             "columns": {
