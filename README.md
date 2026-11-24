@@ -8,6 +8,12 @@ project/date hints, reconciles existing data and does the work. No `$ agent`
 marker is required. Every capture also writes an execution log row. The service
 is written in **Python** and deployed on **Modal**.
 
+A capture containing only a general web URL saves directly to bookmarks using
+the existing metadata, tagging and deduplication flow. It creates no agent
+session. A request to do work with a URL, a batch or an explicit `$ agent`
+request still creates a task. Special media and Maps URLs retain their separate
+classification boundary. Workspaces that disable bookmarks retain task routing.
+
 Workspaces can explicitly select `workflow.capture_mode: recognition` for the
 parse, classify and extract pipeline that writes category rows directly. The
 separately authenticated media gateway retains its media-only behavior.
@@ -111,7 +117,7 @@ Type, catalog `required`, options with their meanings and defaults come from the
 
 ## Synapse Prompting Guide
 
-The default dispatch mode keeps the entire submission together, including `@`
+Except for standalone bookmark URLs, the default dispatch mode keeps the entire submission together, including `@`
 and `$` hints, URLs and line breaks. Its task has Status `To Do`, Priority `High`,
 Tag `Chore`, the workspace's task day, Lane `AI` and Dispatch `Requested`.
 The short title is only a preview; Notes contains the complete capture.

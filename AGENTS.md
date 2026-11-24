@@ -62,11 +62,19 @@ tests or on any future platform.
 ## The pipeline (`core/pipeline.py: run`)
 
 Payload: `{"raw_text": str, "source": str | null, "capture_id": uuid}`.
-General captures default to `workflow.capture_mode: dispatch`. Each submission
+General captures default to `workflow.capture_mode: dispatch`. A standalone
+general web URL goes directly through bookmark enrichment, extraction and the
+existing URL-deduplicating handler, with an execution log and no dispatched task.
+The submitted URL is authoritative even if extraction returns a different one.
+YouTube, Spotify, This American Life and Google Maps URLs keep their specialized
+classification boundary; URLs inside action requests, batches or `$ agent`
+requests remain agent tasks. Disabled bookmark categories are respected.
+The bookmark/task choice is journaled; pending direct tasks keep their plan.
+Every other submission
 creates one task with a deterministic title (up to 120 characters), the complete
 original in Notes, Status To Do, Priority High, Tags Chore, the workspace task
 day, Lane AI and Dispatch Requested. Those properties must all be mapped or
-the capture fails before writing. No parser, inference, context lookup or
+the capture fails before writing. For dispatched tasks, no parser, inference, context lookup or
 enrichment runs; `$` and `@` text stays intact for the dispatched agent.
 The selected route and task values are journaled; retrying cannot switch routes,
 duplicate a task or overwrite its user edits. Recognition journals with existing

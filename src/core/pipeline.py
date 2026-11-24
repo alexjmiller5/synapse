@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from urllib.parse import urlsplit
 
 from google.genai import types
 
@@ -28,7 +29,7 @@ from core.ai_engine import (
 from core.config import CATEGORIES
 from core.schemas import classification_schema
 
-from core.external_data import enrich_context
+from core.external_data import enrich_context, extract_url
 from core.handlers import Failed
 from core.business_logic import (
     fetch_active_projects,
@@ -88,6 +89,33 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
 AGENT_CONTEXT = "agent"
 
 
+def _bookmark_url(text):
+    """Only a standalone general web URL bypasses task dispatch."""
+    if "bookmarks" not in CATEGORIES:
+        return None
+    text = text.strip()
+    url = extract_url(text)
+    if url is None or url not in (text, "https://" + text):
+        return None
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in ("http", "https") or not host or parsed.username or parsed.password:
+        return None
+    media_hosts = (
+        "youtube.com",
+        "youtu.be",
+        "spotify.com",
+        "thisamericanlife.org",
+        "maps.google.com",
+        "maps.app.goo.gl",
+    )
+    if any(host == name or host.endswith("." + name) for name in media_hosts):
+        return None
+    if host in ("google.com", "www.google.com", "goo.gl") and parsed.path.startswith("/maps"):
+        return None
+    return url
+
+
 def run_pipeline(
     item_data,
     project_prompts,
@@ -95,6 +123,8 @@ def run_pipeline(
     inventory_map,
     inventory_list,
     source=None,
+    *,
+    bookmark_url=None,
 ):
     raw_text = item_data.get("core_text", "")
     user_context = item_data.get("context_notes", "")
@@ -113,7 +143,9 @@ def run_pipeline(
         # Deterministic pre-check: if the user's context says "task", it IS a task —
         # skip the classifier entirely so a movie/venue name can't hijack the category.
         # ponytail: word-match on 'task' only; widen if the prompt fix doesn't hold
-        if dispatch or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
+        if bookmark_url is not None:
+            category, project = "bookmarks", None
+        elif dispatch or re.search(r"\btasks?\b", user_context or "", re.IGNORECASE):
             print("⚡ Context mentions 'task' — deterministic classification: tasks")
             category = "tasks"
             # Still link a referenced project so the deterministic path doesn't drop
@@ -187,6 +219,8 @@ def run_pipeline(
 
         # source_text grounds the tasks Name back to the user's verbatim input
         # (apply_business_logic overrides only for the tasks category).
+        if bookmark_url is not None:
+            extracted["URL"] = bookmark_url
         extracted = apply_business_logic(category, extracted, project, raw_text)
         if dispatch:
             extracted.update({"Lane": "AI", "Dispatch": "Requested"})
@@ -336,7 +370,27 @@ def _run(payload: dict):
         ),
     )
     if mode == "dispatch":
-        _dispatch_capture(payload)
+        route = active.journal.checkpoint(
+            "dispatch_route",
+            # Pending tasks retain their original plan across the bookmark cutover.
+            lambda: (
+                {"bookmark_url": None}
+                if "direct_task" in active.journal.store[active.journal.key]["checkpoints"]
+                else {"bookmark_url": _bookmark_url(payload["raw_text"])}
+            ),
+        )
+        if route["bookmark_url"] is not None:
+            run_pipeline(
+                {"core_text": payload["raw_text"], "context_notes": ""},
+                [],
+                {},
+                {},
+                [],
+                source=payload.get("source"),
+                bookmark_url=route["bookmark_url"],
+            )
+        else:
+            _dispatch_capture(payload)
         return
     if mode != "recognition":
         raise ValueError("workflow.capture_mode must be dispatch or recognition")
