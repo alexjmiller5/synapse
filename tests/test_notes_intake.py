@@ -59,6 +59,7 @@ def test_capture_persists_full_source_before_send_and_dedupes_restart(tmp_path):
         result = run_once(policy(), [note()], journal, upload, now=NOW)
     assert result["accepted"] == 1
     assert "Build a useful thing" in sent[0]["raw_text"]
+    assert sent[0]["raw_text"].startswith("An idea\n")
     assert "note-1" in sent[0]["raw_text"]
     assert sent[0]["source"] == "apple-notes"
     with Journal(tmp_path) as journal:
