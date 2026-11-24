@@ -60,6 +60,10 @@ def process(payload: dict):
 
     store = _state()
     with workspace.use(workspace.load(store, payload.get("workspace") or workspace.DEFAULT_ID)):
+        from core import filing
+
+        if "filing_operation" in payload:
+            return filing.finalize(store, payload["filing_operation"])
         media = payload.get("media_operation")
         if media:
             from core import media_capture
@@ -69,6 +73,8 @@ def process(payload: dict):
             if media["action"] == "process":
                 return media_capture.process_capture(store, media["caller"], media["request_id"])
             raise ValueError("unsupported media operation")
+        if "capture_client_id" in payload:
+            filing.bind_client(store, payload["capture_client_id"], payload)
         return run(payload, store=store)
 
 
@@ -111,12 +117,31 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
 
     try:
         client = capture_clients.authenticate(_state(), authorization)
-        if client.get("purpose"):
-            raise capture_clients.Unauthorized()
     except capture_clients.Unauthorized:
         return JSONResponse(
             {"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"}
         )
+    if isinstance(payload, dict) and payload.get("action") == "finalize":
+        if client.get("purpose") != "filing-operator":
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        if set(payload) != {"action", "request"}:
+            return JSONResponse({"error": "invalid filing request"}, status_code=422)
+        return process.remote(
+            {"workspace": client["workspace"], "filing_operation": payload["request"]}
+        )
+    if client.get("purpose"):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if isinstance(payload, dict) and payload.get("action") == "receipt":
+        from core import filing
+
+        if set(payload) != {"action", "capture_id"}:
+            return JSONResponse({"error": "invalid receipt request"}, status_code=422)
+        try:
+            return filing.receipt(_state(), client, payload["capture_id"])
+        except capture_clients.Unauthorized:
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        except ValueError:
+            return JSONResponse({"error": "invalid receipt request"}, status_code=422)
     error = payload_error(payload)
     if error:
         return JSONResponse({"error": error}, status_code=422)
@@ -125,7 +150,7 @@ def capture(payload: dict, authorization: Annotated[str | None, Header()] = None
         accepted = _accepted_payload(payload, client["workspace"])
     except ValueError as error:
         return JSONResponse({"error": str(error)}, status_code=422)
-    call = process.spawn(accepted)
+    call = process.spawn({**accepted, "capture_client_id": client["client_id"]})
     return {"status": "accepted", "call_id": call.object_id, "capture_id": accepted["capture_id"]}
 
 

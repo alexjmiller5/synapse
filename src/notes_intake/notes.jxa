@@ -1,7 +1,10 @@
-// No mutations. Exclude protected IDs before reading any of their content.
+// Exclude protected IDs before content access; deletion requires an exact fresh snapshot.
 function run(args) {
     const app = Application('Notes');
     const policy = JSON.parse(args[1] || '{}');
+    if (!['folders', 'read', 'delete'].includes(args[0])) throw Error('Unsupported action');
+    if (args[0] === 'delete' && (!policy.note_id || !policy.expected ||
+        policy.expected.id !== policy.note_id)) throw Error('Exact deletion identity required');
     const folders = app.folders();
     if (args[0] === 'folders') {
         return JSON.stringify(folders.map(f => ({id: f.id(), name: f.name(), shared: f.shared()})));
@@ -11,6 +14,7 @@ function run(args) {
     const result = {notes: [], held: 0};
     const excluded = new Set(policy.exclude_ids);
     const titleKept = title => /(^|[^\w#])#keep(?![\w-])/i.test(title);
+    let deletionAttempted = false;
     for (const note of folder.notes()) {
         try {
             const id = note.id();
@@ -36,8 +40,21 @@ function run(args) {
                 !folder.notes.id().includes(id) || titleKept(value.title)) {
                 result.held++; continue;
             }
+            if (args[0] === 'delete') {
+                const same = Object.keys(value).every(key =>
+                    JSON.stringify(value[key]) === JSON.stringify(policy.expected[key]));
+                if (!same) return JSON.stringify({state: 'held', note_id: id});
+                deletionAttempted = true;
+                app.delete(note);
+                if (folder.notes.id().includes(id)) throw Error('Deletion was not confirmed');
+                return JSON.stringify({state: 'deleted', note_id: id});
+            }
             result.notes.push(value);
-        } catch (error) { result.held++; }
+        } catch (error) {
+            if (deletionAttempted) throw error;
+            result.held++;
+        }
     }
+    if (args[0] === 'delete') return JSON.stringify({state: 'held', note_id: policy.note_id});
     return JSON.stringify(result);
 }

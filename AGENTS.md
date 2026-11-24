@@ -21,8 +21,33 @@ required and refreshed per note immediately before delivery. Full plaintext
 and HTML are journaled in SQLite before upload;
 retries use the same capture UUID and payload. Current eligible revisions only
 are retried. Edits include prior capture identity and a plaintext diff so agents
-reconcile existing work. Originals are retained without modification. An HTTP
-acceptance is a queued capture receipt, not proof that an agent finished work.
+reconcile existing work. Originals are retained by default. Optional cleanup
+requires an explicit service-verified filing receipt, a matching payload digest,
+and a fresh eligible source with the same title/plaintext/HTML fingerprint.
+`cleanup-preview` never deletes; `cleanup-configure --enable` admits the scheduled
+cleanup stage. Reconfiguring intake pauses cleanup. A deleting intent is committed
+before native mutation; lost/unknown outcomes stay uncertain without automatic
+replay. `cleanup-reconcile` records an explicitly checked outcome through the
+installed interface. Snapshots and receipts are retained after source deletion.
+Native deletion compares a fresh full snapshot and verifies inbox absence; it is
+not an atomic conditional-delete API. Synthetic adapter tests do not replace
+admitted native verification and a concrete current-candidate review.
+
+`core/filing.py` owns device/capture binding and immutable filing receipts in the
+existing service store. Normal capture tokens can read only their own capture
+receipts through `capture` with action `receipt`; they cannot finalize. A separate
+app-issued `filing-operator` token may attest verified source filing through action
+`finalize`, but cannot create captures. All finalization writes use the serialized
+worker. Service checks the original live task/execution text and target IDs before
+recording the operator's semantic-completion attestation. Old captures without
+device binding require explicit verified source-client identity. Missing narrow
+read grants, tombstones, changed source or archived-only inline text fail closed.
+HTTP acceptance, agent startup and task status never imply filing completion.
+
+The installed `finalize` and `operator-enroll` commands use separate app-scoped
+operator credentials (`NOTES_FILING_TOKEN` / `NOTES_FILING_TOKEN_COMMAND`, or the
+supported native Keychain account). Background intake/cleanup uses only its own
+capture credential; never a provider, operator or machine credential.
 
 Test the client with `just test` (including synthetic native-reader objects and
 a local HTTP server); runtime state and real captures never belong in fixtures.
@@ -50,7 +75,9 @@ tests or on any future platform.
   - `capture` (label `synapse-capture`): the CLIENT path (Receptor) -
     `Authorization: Bearer <token>`, a per-device token Synapse itself issues
     (`core/capture_clients.py`, hashes only, in the `synapse-state`
-    Volume through `store.VolumeStore`). A client app never holds workspace credentials.
+    Volume through `store.VolumeStore`). Device receipt reads and separately
+    authorized filing finalization share this authenticated endpoint. A client
+    app never holds workspace credentials.
   - `media_capture_endpoint` (label `synapse-media-capture`): the delegated
     service path, restricted to media categories and fields by its dedicated token.
   - `just clients issue "<device>"` mints a token and prints an enrollment

@@ -1,6 +1,7 @@
 """Issue, list and revoke Synapse's per-device capture tokens (operator tool).
 
     uv run scripts/capture_clients.py issue "<device label>" [workspace]   # prints the enrollment link
+    uv run scripts/capture_clients.py issue-filing "<operator label>" [workspace]
     uv run scripts/capture_clients.py list
     uv run scripts/capture_clients.py revoke <client_id>
 
@@ -32,6 +33,14 @@ def main(argv: list[str]) -> int:
             enroll = modal.Function.from_name(APP_NAME, "enroll").get_web_url()
             capture = modal.Function.from_name(APP_NAME, "capture").get_web_url()
             print(f"client_id: {issued['client_id']}  label: {issued['label']}  workspace: {wid}")
+            print(capture_clients.enrollment_link(enroll, capture, issued["token"]))
+        case ["issue-filing", label, *rest] if len(rest) <= 1:
+            wid = rest[0] if rest else workspace.DEFAULT_ID
+            workspace.summary(store, wid)
+            issued = capture_clients.issue_filing_operator(store, label, wid)
+            enroll = modal.Function.from_name(APP_NAME, "enroll").get_web_url()
+            capture = modal.Function.from_name(APP_NAME, "capture").get_web_url()
+            print(f"client_id: {issued['client_id']}  purpose: filing-operator  workspace: {wid}")
             print(capture_clients.enrollment_link(enroll, capture, issued["token"]))
         case ["list"]:
             for c in capture_clients.list_clients(store):

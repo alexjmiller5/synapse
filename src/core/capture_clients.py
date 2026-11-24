@@ -77,6 +77,13 @@ def revoke(store, client_id: str) -> bool:
     return True
 
 
+def issue_filing_operator(store, label, workspace="default"):
+    issued = issue(store, label, workspace)
+    key = f"client:{issued['client_id']}"
+    store[key] = {**store[key], "purpose": "filing-operator"}
+    return issued
+
+
 def list_clients(store) -> list[dict]:
     return sorted(
         (

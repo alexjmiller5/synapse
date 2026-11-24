@@ -18,6 +18,12 @@ Workspaces can explicitly select `workflow.capture_mode: recognition` for the
 parse, classify and extract pipeline that writes category rows directly. The
 separately authenticated media gateway retains its media-only behavior.
 
+The optional native Notes cleanup stage is off by default. It requires a
+separately authorized filing attestation, durable source/target verification and
+a fresh unchanged eligible note. Upload acceptance alone never permits deletion.
+See [the installed client workflow](docs/notes-intake.md) for enrollment, preview,
+activation and uncertain-outcome reconciliation.
+
 ---
 
 ## Architecture

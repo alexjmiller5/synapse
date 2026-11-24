@@ -1,1 +1,1 @@
-"""Native Notes capture client for Synapse; source notes are never modified."""
+"""Native Notes capture client with explicit, verified-filing source cleanup."""
