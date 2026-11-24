@@ -33,6 +33,7 @@ def direct(monkeypatch):
         "fetch_active_projects",
         "fetch_inventory_map",
         "get_settings",
+        "enrich_context",
     ):
         monkeypatch.setattr(pipeline, name, forbidden)
     with workspace.use(selected):
@@ -123,6 +124,27 @@ def test_invalid_capture_mode_fails_before_writes(direct, media_hub):
 
 
 @pytest.mark.parametrize(
+    "text",
+    [
+        "https://github.com/example/parser",
+        "www.example.com",
+        "example.com/a?email=a@b&price=$10",
+    ],
+)
+def test_new_bookmark_capture_dispatches_agent_without_cloud_recognition(direct, media_hub, text):
+    _, payload = direct
+    store = {}
+    pipeline.run({**payload, "raw_text": text}, store)
+    pipeline.run({**payload, "raw_text": text}, store)
+    (task,) = media_hub.rows["tasks"].values()
+    assert task["notes"] == text
+    assert task["dispatch"] == "Requested"
+    assert not media_hub.rows.get("bookmarks")
+    (execution,) = media_hub.rows["synapse_executions"].values()
+    assert execution["created_item"] == f"tasks/{task['id']}"
+
+
+@pytest.mark.parametrize(
     "text,url",
     [
         ("https://github.com/example/parser", "https://github.com/example/parser"),
@@ -130,7 +152,9 @@ def test_invalid_capture_mode_fails_before_writes(direct, media_hub):
         ("example.com/a?email=a@b&price=$10", "https://example.com/a?email=a@b&price=$10"),
     ],
 )
-def test_link_only_capture_saves_bookmark_without_task(direct, media_hub, monkeypatch, text, url):
+def test_frozen_bookmark_capture_finishes_without_new_agent(
+    direct, media_hub, monkeypatch, text, url
+):
     _, payload = direct
     payload = {**payload, "raw_text": text}
     monkeypatch.setattr(pipeline, "enrich_context", lambda *args: "HTML Title: Example parser")
@@ -147,6 +171,9 @@ def test_link_only_capture_saves_bookmark_without_task(direct, media_hub, monkey
         ),
     )
     store = {}
+    with capture_scope(store, payload) as active:
+        active.journal.checkpoint("capture_mode", lambda: "dispatch")
+        active.journal.checkpoint("dispatch_route", lambda: {"bookmark_url": url})
     pipeline.run(payload, store)
     pipeline.run(payload, store)
     (bookmark,) = media_hub.rows["bookmarks"].values()
@@ -246,7 +273,12 @@ def test_unavailable_bookmark_metadata_preserves_existing_title_without_agent(
             }
         ),
     )
-    pipeline.run({**payload, "raw_text": url}, {})
+    payload = {**payload, "raw_text": url}
+    store = {}
+    with capture_scope(store, payload) as active:
+        active.journal.checkpoint("capture_mode", lambda: "dispatch")
+        active.journal.checkpoint("dispatch_route", lambda: {"bookmark_url": url})
+    pipeline.run(payload, store)
     (bookmark,) = media_hub.rows["bookmarks"].values()
     assert bookmark["title"] == "User title"
     assert bookmark["description"] == "User summary"

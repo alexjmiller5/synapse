@@ -1,7 +1,6 @@
 import os
 import json
 import re
-from urllib.parse import urlsplit
 
 from google.genai import types
 
@@ -29,7 +28,7 @@ from core.ai_engine import (
 from core.config import CATEGORIES
 from core.schemas import classification_schema
 
-from core.external_data import enrich_context, extract_url
+from core.external_data import enrich_context
 from core.handlers import Failed
 from core.business_logic import (
     fetch_active_projects,
@@ -87,33 +86,6 @@ def _classify_with_ai(raw_text, user_context, project_prompts):
 # with lane AI and dispatch Requested, which the workspace's Agent Dispatch picks up.
 # The word is the whole context, so it never reaches the extractor or the name.
 AGENT_CONTEXT = "agent"
-
-
-def _bookmark_url(text):
-    """Only a standalone general web URL bypasses task dispatch."""
-    if "bookmarks" not in CATEGORIES:
-        return None
-    text = text.strip()
-    url = extract_url(text)
-    if url is None or url not in (text, "https://" + text):
-        return None
-    parsed = urlsplit(url)
-    host = (parsed.hostname or "").lower()
-    if parsed.scheme not in ("http", "https") or not host or parsed.username or parsed.password:
-        return None
-    media_hosts = (
-        "youtube.com",
-        "youtu.be",
-        "spotify.com",
-        "thisamericanlife.org",
-        "maps.google.com",
-        "maps.app.goo.gl",
-    )
-    if any(host == name or host.endswith("." + name) for name in media_hosts):
-        return None
-    if host in ("google.com", "www.google.com", "goo.gl") and parsed.path.startswith("/maps"):
-        return None
-    return url
 
 
 def run_pipeline(
@@ -372,12 +344,8 @@ def _run(payload: dict):
     if mode == "dispatch":
         route = active.journal.checkpoint(
             "dispatch_route",
-            # Pending tasks retain their original plan across the bookmark cutover.
-            lambda: (
-                {"bookmark_url": None}
-                if "direct_task" in active.journal.store[active.journal.key]["checkpoints"]
-                else {"bookmark_url": _bookmark_url(payload["raw_text"])}
-            ),
+            # New captures always dispatch; previously frozen bookmark writes finish in place.
+            lambda: {"bookmark_url": None},
         )
         if route["bookmark_url"] is not None:
             run_pipeline(
