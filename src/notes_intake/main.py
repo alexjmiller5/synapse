@@ -238,7 +238,23 @@ def save_config(path, config):
     temporary.replace(path)
 
 
-def enroll(config):
+def keychain_command(argv):
+    subprocess.run(
+        ["/usr/bin/security", "-i"],
+        input=shlex.join(argv) + "\n",
+        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=True,
+        timeout=30,
+    )
+
+
+def enroll(config, capture_url=None):
+    if capture_url:
+        token()  # Recover endpoint setup only when this client already has its credential.
+        config["capture_url"] = valid_url(capture_url)
+        return
     link = getpass.getpass("Service-issued enrollment link (hidden): ")
     fields = parse_qs(urlsplit(link).fragment)
     url = valid_url(fields["url"][0])
@@ -246,27 +262,17 @@ def enroll(config):
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", credential):
         raise ValueError("Invalid service-issued credential")
     # security's interactive stdin avoids the secret appearing in process argv.
-    command = shlex.join(
-        [
-            "add-generic-password",
-            "-U",
-            "-s",
-            "synapse-notes-intake",
-            "-a",
-            "capture",
-            "-w",
-            credential,
-        ]
-    )
-    subprocess.run(
-        ["/usr/bin/security", "-i"],
-        input=command + "\nquit\n",
-        text=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        check=True,
-        timeout=30,
-    )
+    command = [
+        "add-generic-password",
+        "-U",
+        "-s",
+        "synapse-notes-intake",
+        "-a",
+        "capture",
+        "-w",
+        credential,
+    ]
+    keychain_command(command)
     # Verify storage before retaining the endpoint; a shell outside the login session may fail.
     stored = subprocess.run(
         [
@@ -309,8 +315,11 @@ def cli():
     configure.add_argument("--inbox-id", required=True)
     configure.add_argument("--exclude-id", action="append", default=[])
     configure.add_argument("--enable", action="store_true")
-    commands.add_parser(
+    enrollment = commands.add_parser(
         "enroll", help="Store this client's own service-issued credential in Keychain"
+    )
+    enrollment.add_argument(
+        "--capture-url", help="Reconnect an already enrolled credential to its service URL"
     )
     commands.add_parser("folders", help="List native folder metadata, without reading note bodies")
     commands.add_parser("status", help="Show policy and capture receipts, without source bodies")
@@ -336,7 +345,7 @@ def cli():
             save_config(path, config)
             print("Intake configuration saved")
         elif args.command == "enroll":
-            enroll(config)
+            enroll(config, args.capture_url)
             save_config(path, config)
             print("Capture client enrolled")
         elif args.command == "folders":

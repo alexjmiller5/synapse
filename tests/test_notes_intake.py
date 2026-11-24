@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import shutil
+import sys
 
 import pytest
 
@@ -284,6 +285,31 @@ def test_unsafe_capture_urls_are_refused(url):
 
     with pytest.raises(ValueError):
         valid_url(url)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Native Keychain CLI contract")
+def test_keychain_interactive_command_finishes_successfully_at_eof():
+    from notes_intake.main import keychain_command
+
+    # help is read-only; this catches an invalid trailing command after a successful write.
+    keychain_command(["help"])
+
+
+def test_reconnect_preserves_policy_and_requires_existing_credential(monkeypatch):
+    from notes_intake import main
+
+    config = policy()
+    monkeypatch.setattr(main, "token", lambda: "existing-client-token")
+    main.enroll(config, "https://capture.example.invalid")
+    assert config == {**policy(), "capture_url": "https://capture.example.invalid"}
+
+    def missing():
+        raise ValueError("not enrolled")
+
+    monkeypatch.setattr(main, "token", missing)
+    with pytest.raises(ValueError):
+        main.enroll(config, "https://other.example.invalid")
+    assert config["capture_url"] == "https://capture.example.invalid"
 
 
 def test_native_reader_excludes_before_body_and_holds_races_and_attachments():

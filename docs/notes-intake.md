@@ -42,6 +42,10 @@ account `capture`. No provider credentials or machine-vault supplier is used.
 Reenroll replacement Macs with a newly issued credential. Revoke only that
 client through `just clients revoke <client-id>` when retiring it.
 
+If a credential is already stored but endpoint setup was interrupted, use
+`notes-intake enroll --capture-url '<service capture URL>'` from the native
+login session to finish connecting without minting another credential.
+
 A custom secure credential supplier can set `NOTES_INTAKE_TOKEN_COMMAND` to a
 JSON argv; `NOTES_INTAKE_TOKEN` is also accepted. The Darwin module exposes
 `credentialCommand`. Each supplier must return this client's own service token.
