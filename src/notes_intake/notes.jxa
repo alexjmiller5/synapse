@@ -1,0 +1,43 @@
+// No mutations. Exclude protected IDs before reading any of their content.
+function run(args) {
+    const app = Application('Notes');
+    const policy = JSON.parse(args[1] || '{}');
+    const folders = app.folders();
+    if (args[0] === 'folders') {
+        return JSON.stringify(folders.map(f => ({id: f.id(), name: f.name(), shared: f.shared()})));
+    }
+    const folder = folders.find(f => f.id() === policy.inbox_id);
+    if (!folder || folder.shared() !== false) throw Error('Selected inbox unavailable or shared');
+    const result = {notes: [], held: 0};
+    const excluded = new Set(policy.exclude_ids);
+    const titleKept = title => /(^|[^\w#])#keep(?![\w-])/i.test(title);
+    for (const note of folder.notes()) {
+        try {
+            const id = note.id();
+            if (policy.note_id && id !== policy.note_id) continue;
+            if (excluded.has(id)) { result.held++; continue; }
+            const before = note.modificationDate().toISOString();
+            if (note.passwordProtected() !== false || note.shared() !== false ||
+                Date.now() - Date.parse(before) < policy.quiet_seconds * 1000 ||
+                note.attachments.id().length !== 0 || titleKept(note.name())) {
+                result.held++; continue;
+            }
+            const plaintext = note.plaintext();
+            if (plaintext.split(/\r?\n/).some(line => line.trim().toLowerCase() === '#keep')) {
+                result.held++; continue;
+            }
+            const value = {id, folder_id: policy.inbox_id, title: note.name(), plaintext,
+                html: note.body(), created_at: note.creationDate().toISOString(),
+                modified_at: before, locked: false, shared: false, attachments: []};
+            // Check membership and every safety flag again after the content read.
+            if (note.modificationDate().toISOString() !== before ||
+                note.passwordProtected() !== false || note.shared() !== false ||
+                note.attachments.id().length !== 0 || folder.shared() !== false ||
+                !folder.notes.id().includes(id) || titleKept(value.title)) {
+                result.held++; continue;
+            }
+            result.notes.push(value);
+        } catch (error) { result.held++; }
+    }
+    return JSON.stringify(result);
+}

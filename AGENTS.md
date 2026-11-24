@@ -4,6 +4,29 @@ Synapse captures natural-language text as a verbatim Soma task, requests agent
 dispatch and writes an execution log. Workspaces can select recognition instead.
 Python service deployed on Modal: HTTP webhook + spawned background worker. No cron in this app.
 
+## Native Notes capture client
+
+`src/notes_intake/` is the standard-library-only macOS client, packaged as
+`notes-intake` by this repo's flake and `darwinModules.notes-intake`. It runs
+every five minutes on one selected Mac. User choices (exact inbox/excluded
+IDs and enabled state) live in its private state directory through the installed
+CLI. Enrollment stores its separately issued capture credential in the login
+Keychain, never operator/provider credentials. Native sign-in/reenrollment and
+receipt meanings are documented in `docs/notes-intake.md`.
+
+The native bridge skips excluded IDs, locked/shared notes and attachments before
+reading bodies. A standalone case-insensitive `#keep` in a title or its own body
+line exempts a note. A quiet fifteen minutes and stable metadata/membership are
+required and refreshed per note immediately before delivery. Full plaintext
+and HTML are journaled in SQLite before upload;
+retries use the same capture UUID and payload. Current eligible revisions only
+are retried. Edits include prior capture identity and a plaintext diff so agents
+reconcile existing work. Originals are retained without modification. An HTTP
+acceptance is a queued capture receipt, not proof that an agent finished work.
+
+Test the client with `just test` (including synthetic native-reader objects and
+a local HTTP server); runtime state and real captures never belong in fixtures.
+
 ## Architecture rule (the one that matters)
 
 **Business logic lives in `src/core/` as plain Python with NO Modal imports.**
