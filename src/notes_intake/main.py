@@ -16,6 +16,7 @@ import sqlite3
 import subprocess
 import sys
 from urllib.parse import parse_qs, urlsplit
+from urllib.error import HTTPError
 from urllib.request import Request
 import uuid
 
@@ -186,7 +187,15 @@ def cleanup_once(policy, journal, refresh, verify, remove, *, preview=False, now
             result["uncertain"] += 1
             continue
         try:
-            proof = verify(capture_id)
+            try:
+                proof = verify(capture_id)
+            except HTTPError as error:
+                if error.code != 403:
+                    raise
+                # Legacy captures have no device binding until verified filing.
+                # An inaccessible receipt retains the source without reading it.
+                result["held"] += 1
+                continue
             payload = json.loads(row["payload"])
             items = proof.get("items")
             if (

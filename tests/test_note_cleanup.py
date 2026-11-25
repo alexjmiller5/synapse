@@ -191,6 +191,29 @@ def test_lost_delete_response_is_uncertain_and_never_replayed(tmp_path):
     assert calls == ["note-1"]
 
 
+@pytest.mark.parametrize("status", [401, 403, 500])
+def test_unavailable_receipts_never_read_sources_and_only_unbound_ones_are_held(tmp_path, status):
+    from urllib.error import HTTPError
+
+    with main.Journal(tmp_path) as journal:
+        accepted(journal)
+
+        def unavailable(_):
+            raise HTTPError("https://capture.invalid", status, "Unavailable", {}, None)
+
+        result = main.cleanup_once(
+            policy(cleanup_enabled=True),
+            journal,
+            lambda _: pytest.fail("Unverified source was read"),
+            unavailable,
+            lambda _: pytest.fail("Unverified source was deleted"),
+            now=NOW,
+        )
+    assert result["deleted"] == 0
+    assert result["held"] == (1 if status == 403 else 0)
+    assert result["failed"] == (0 if status == 403 else 1)
+
+
 def test_old_revision_receipt_cannot_delete_new_current_revision(tmp_path):
     with main.Journal(tmp_path) as journal:
         old = accepted(journal)

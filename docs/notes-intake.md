@@ -118,6 +118,10 @@ from task status. Existing captures without device ownership metadata require
 an explicit verified `--source-client <client-id>` binding. Do not infer that
 binding from a mutable device label.
 
+Before that binding exists, a legacy capture's receipt request is forbidden.
+The client counts it as held without reading its source; authentication and
+server failures still count as errors. A held source never qualifies for deletion.
+
 The service's workspace credential must permit the exact source and target
 reads, including the standard identity/revision/tombstone columns. Missing grants
 or source text retained only as a remote file reference fail closed. They require
