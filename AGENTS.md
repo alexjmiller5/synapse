@@ -195,6 +195,14 @@ its entries expire after 7 idle days) and edited with `just workspace ...`.
     and the row read of each column; Soma requires the `id` read beside them).
     A config change that maps a new prompt column needs that grant added in
     a new profile revision, or its table loses its prompt contract.
+  - Filing verification also reads `tasks.notes`, `tasks.updated_at`,
+    `tasks.hub_at`, `tasks.deleted_at`, and `synapse_executions.id`,
+    `synapse_executions.updated_at`, `synapse_executions.hub_at`,
+    `synapse_executions.deleted_at`, `synapse_executions.raw_input`,
+    `synapse_executions.code_execution`, `synapse_executions.created_item`
+    through exact `tables:read:<table>:<column>` grants. These prove durable
+    source content and live references; they authorize no source cleanup.
+    Existing enrolled credentials retain their original profile revision.
   - `tables:write:<t>` for the twelve tables it creates or edits rows in
     (every table above but `projects`, plus `tasks`, `synapse_executions`,
     `ideas`, `things_to_do`).
