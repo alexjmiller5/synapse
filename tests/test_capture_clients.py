@@ -1,6 +1,7 @@
 """App-issued capture tokens: issue, authenticate, revoke, list, enrollment link."""
 
 from urllib.parse import parse_qs, urlsplit
+from collections.abc import Mapping
 
 import pytest
 
@@ -54,6 +55,29 @@ def test_list_shows_labels_and_state_without_secrets():
     assert set(listed) == {"phone", "laptop"}
     assert listed["phone"]["revoked"] is True and listed["laptop"]["revoked"] is False
     assert all("hash" not in key for c in listed.values() for key in c)
+
+
+def test_client_inventory_never_downloads_capture_or_workspace_values():
+    values = {}
+    issued = cc.issue(values, "fixture phone")
+    values.update({"capture:fixture": {}, "workspace:fixture": {}})
+    reads = []
+
+    class Inventory(Mapping):
+        def __iter__(self):
+            return iter(values)
+
+        def __len__(self):
+            return len(values)
+
+        def __getitem__(self, key):
+            reads.append(key)
+            assert key.startswith("client:"), "Inventory downloaded unrelated private state"
+            return values[key]
+
+    listed = cc.list_clients(Inventory())
+    assert [c["client_id"] for c in listed] == [issued["client_id"]]
+    assert reads == [f"client:{issued['client_id']}"]
 
 
 @pytest.mark.parametrize("label", ["", "   ", None, 7, "x" * 81])

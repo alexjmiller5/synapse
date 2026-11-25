@@ -87,8 +87,8 @@ def issue_filing_operator(store, label, workspace="default"):
 def list_clients(store) -> list[dict]:
     return sorted(
         (
-            {k: v for k, v in value.items() if k != "token_hash"}
-            for key, value in store.items()
+            {k: v for k, v in store[key].items() if k != "token_hash"}
+            for key in store
             if key.startswith("client:")
         ),
         key=lambda c: c["created_at"],
